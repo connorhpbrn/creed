@@ -1,0 +1,767 @@
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+
+@source "./";
+@source "../components";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: 0.625rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1rem;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+  --font-hero-heading: var(--font-gambarino);
+}
+
+:root {
+  --background: #f9f9f8;
+  --foreground: #1f1f1a;
+  --card: #ffffff;
+  --card-foreground: #1f1f1a;
+  --popover: #ffffff;
+  --popover-foreground: #1f1f1a;
+  --primary: #1f1f1a;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f1;
+  --secondary-foreground: #2d2c27;
+  --muted: #f3f3f1;
+  --muted-foreground: #636360;
+  --accent: #f3f3f1;
+  --accent-foreground: #1f1f1a;
+  --destructive: #b5483d;
+  --border: #e6e6e2;
+  --input: #e6e6e2;
+  --ring: rgba(31, 31, 26, 0.15);
+  --radius: 0.875rem;
+
+  --creed-background: #f9f9f8;
+  --creed-surface: #ffffff;
+  --creed-surface-raised: #f3f3f1;
+  --creed-border: #e6e6e2;
+  --creed-border-strong: #d6d6d0;
+  --creed-text-primary: #1f1f1a;
+  --creed-text-secondary: #636360;
+  --creed-text-tertiary: #9a9a96;
+  --creed-button-primary-fg: #ffffff;
+  --creed-button-primary-hover: #2b2b28;
+  --creed-ring-track: rgba(17, 17, 13, 0.12);
+  /* Brand action / accent — used by primary CTAs (dialog confirm buttons,
+     accept-all, push/pull, etc.). Constant across both themes so the brand
+     blue reads identically in light and dark mode. */
+  --creed-accent: #2563eb;
+  --creed-accent-hover: #1d4ed8;
+
+  /* Numeric stat / status colours. Brightened so `+57 -304`-style stats stay
+     legible everywhere; the dark-mode block below picks even brighter shades. */
+  --creed-success: #16a34a;
+  --creed-danger: #dc2626;
+  --creed-score-good: #16a34a;
+  --creed-score-mid: #d97706;
+  --creed-score-bad: #dc2626;
+
+  --accent-tint-identity: #f3e8ff;
+  --accent-tint-stack: #dbeafe;
+  --accent-tint-operating-principles: #d1fae5;
+  --accent-tint-decisions: #fef3c7;
+  --accent-tint-preferences: #cffafe;
+  --accent-tint-workflows: #e0e7ff;
+  --accent-tint-tools: #e0f2fe;
+  --accent-tint-boundaries: #fee2e2;
+  --accent-tint-questions: #f3e8ff;
+  --accent-tint-skills: #fce7f3;
+  --accent-tint-mini-skills: #ecfccb;
+  --accent-tint-projects: #ffedd5;
+  --accent-tint-output: #ccfbf1;
+  --accent-tint-rose: #ffe4e6;
+  --accent-tint-yellow: #fef9c3;
+  /* Mono — theme-aware accent. Light mode: near-black foreground with a
+     soft warm grey tint. Dark mode definitions below flip these so the
+     same `accent: "mono"` value reads white on a dark grey tint. */
+  --accent-color-mono: #1c1c1a;
+  --accent-tint-mono: #ebebe6;
+  --accent-tint-custom: #ebebe6;
+  --font-heading: var(--font-geist-sans);
+  --font-hero-heading: var(--font-gambarino);
+}
+
+/* Notion × Obsidian × Cursor inspired dark mode. Designed around a near-black
+   canvas with two slightly-raised surface tints, hairline borders, and reduced
+   text contrast so prose stays comfortable for long-form reading. */
+.dark {
+  --background: #0e0e0d;
+  --foreground: #e7e7e2;
+  --card: #161615;
+  --card-foreground: #e7e7e2;
+  --popover: #1a1a19;
+  --popover-foreground: #e7e7e2;
+  --primary: #e7e7e2;
+  --primary-foreground: #0e0e0d;
+  --secondary: #1f1f1d;
+  --secondary-foreground: #d3d3cd;
+  --muted: #1f1f1d;
+  --muted-foreground: #9c9c95;
+  --accent: #1f1f1d;
+  --accent-foreground: #e7e7e2;
+  --destructive: #f87171;
+  --border: #262624;
+  --input: #262624;
+  --ring: rgba(231, 231, 226, 0.18);
+
+  --creed-background: #0e0e0d;
+  --creed-surface: #161615;
+  --creed-surface-raised: #1f1f1d;
+  --creed-border: #262624;
+  --creed-border-strong: #34342f;
+  --creed-text-primary: #e7e7e2;
+  --creed-text-secondary: #9c9c95;
+  --creed-text-tertiary: #6b6b65;
+  --creed-button-primary-fg: #0e0e0d;
+  --creed-button-primary-hover: #cfcfc8;
+  --creed-ring-track: rgba(231, 231, 226, 0.16);
+  --creed-success: #4ade80;
+  --creed-danger: #f87171;
+  --creed-score-good: #4ade80;
+  --creed-score-mid: #fbbf24;
+  --creed-score-bad: #f87171;
+
+  /* Same hue, dropped saturation + lifted off the canvas just enough to hint
+     the colour family without flashing pastel against the dark surface. */
+  --accent-tint-identity: rgba(192, 132, 252, 0.18);
+  --accent-tint-stack: rgba(96, 165, 250, 0.18);
+  --accent-tint-operating-principles: rgba(74, 222, 128, 0.16);
+  --accent-tint-decisions: rgba(251, 191, 36, 0.18);
+  --accent-tint-preferences: rgba(34, 211, 238, 0.16);
+  --accent-tint-workflows: rgba(129, 140, 248, 0.20);
+  --accent-tint-tools: rgba(56, 189, 248, 0.18);
+  --accent-tint-boundaries: rgba(248, 113, 113, 0.18);
+  --accent-tint-questions: rgba(192, 132, 252, 0.18);
+  --accent-tint-skills: rgba(244, 114, 182, 0.18);
+  --accent-tint-mini-skills: rgba(190, 242, 100, 0.20);
+  --accent-tint-projects: rgba(251, 146, 60, 0.20);
+  --accent-tint-output: rgba(94, 234, 212, 0.18);
+  --accent-tint-rose: rgba(251, 113, 133, 0.18);
+  --accent-tint-yellow: rgba(250, 204, 21, 0.20);
+  /* Mono in dark mode: white on a near-canvas grey tint so it still reads
+     as a distinct accent without flashing. */
+  --accent-color-mono: #e7e7e2;
+  --accent-tint-mono: rgba(231, 231, 226, 0.10);
+  --accent-tint-custom: rgba(231, 231, 226, 0.10);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    @apply font-sans;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    min-height: 100%;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+}
+
+.creed-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--creed-border-strong) transparent;
+}
+
+.creed-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.creed-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.creed-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--creed-border-strong);
+  background-clip: padding-box;
+}
+
+.editor-command-item:hover,
+.editor-command-item[data-active="true"] {
+  background: var(--creed-surface-raised);
+}
+
+.font-hero-heading {
+  font-family: var(--font-hero-heading), serif;
+}
+
+.t-hero {
+  font-family: var(--font-hero-heading), serif;
+  font-weight: 400;
+  font-size: clamp(2.4rem, 12vw, 6.6rem);
+  line-height: 1;
+  letter-spacing: 0;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (min-width: 768px) {
+  .t-hero {
+    font-size: clamp(4.4rem, 9vw, 6.6rem);
+  }
+}
+
+.t-section {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: clamp(1.75rem, 7.5vw, 3.4rem);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  font-feature-settings: "kern" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (min-width: 768px) {
+  .t-section {
+    font-size: clamp(2.25rem, 4.6vw, 3.4rem);
+  }
+}
+
+.t-step {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 1.35rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-feature-settings: "kern" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.t-lede {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.6;
+  letter-spacing: -0.005em;
+}
+
+@media (min-width: 768px) {
+  .t-lede {
+    font-size: 19px;
+    line-height: 1.55;
+  }
+}
+
+.t-lede-hero {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+}
+
+@media (min-width: 768px) {
+  .t-lede-hero {
+    font-size: 22px;
+    line-height: 1.5;
+  }
+}
+
+.t-body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.7;
+  letter-spacing: -0.005em;
+}
+
+.t-body-lg {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: -0.005em;
+}
+
+.t-meta {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: 0;
+}
+
+.t-eyebrow {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+.hero-subtext-sheen {
+  color: rgba(255, 255, 255, 0.95);
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0.94) 38%,
+    #ffffff 47%,
+    #ffffff 50%,
+    rgba(255, 255, 255, 0.94) 60%,
+    rgba(255, 255, 255, 0.92) 100%
+  );
+  background-size: 320% 100%;
+  background-position: 120% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: hero-subtext-sheen 5.8s ease-in-out infinite alternate;
+}
+
+@keyframes hero-subtext-sheen {
+  0% {
+    background-position: 120% 50%;
+  }
+
+  100% {
+    background-position: -20% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-subtext-sheen {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
+.ProseMirror {
+  min-height: 56px;
+  font-family: var(--font-geist-sans), sans-serif;
+  color: var(--creed-text-primary);
+  font-size: 16px;
+  line-height: 1.75;
+  outline: none;
+}
+
+.ProseMirror.continuation-editor {
+  min-height: 56px;
+}
+
+.ProseMirror.continuation-editor > * + * {
+  margin-top: 0.85rem;
+}
+
+.ProseMirror > * + * {
+  margin-top: 1rem;
+}
+
+.ProseMirror h2,
+.ProseMirror h3 {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--creed-text-primary);
+}
+
+.ProseMirror h2 {
+  font-size: 1.35rem;
+}
+
+.ProseMirror h3 {
+  font-size: 1.05rem;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 14px;
+  line-height: 1.75;
+  padding-left: 1.45rem;
+  color: var(--creed-text-primary);
+}
+
+.ProseMirror .creed-list {
+  margin: 0;
+}
+
+.ProseMirror .creed-list-bullet {
+  list-style-type: disc;
+}
+
+.ProseMirror .creed-list-ordered {
+  list-style-type: decimal;
+}
+
+.ProseMirror .creed-list-item > p {
+  margin: 0;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.ProseMirror > :not(.creed-list) + .creed-list {
+  margin-top: 1.4rem;
+}
+
+.ProseMirror > .creed-list + :not(.creed-list) {
+  margin-top: 1.2rem;
+}
+
+.ProseMirror li::marker {
+  color: var(--section-accent-bar, var(--creed-text-secondary));
+  font-weight: 500;
+}
+
+.ProseMirror li + li {
+  margin-top: 0.4rem;
+}
+
+.ProseMirror .creed-callout {
+  position: relative;
+  border: none;
+  border-radius: 0 0.75rem 0.75rem 0;
+  background: var(--section-accent-tint, #faf9f6);
+  padding: 0.7rem 0.95rem 0.7rem 1.35rem;
+  font-family: var(--font-geist-sans), sans-serif;
+  color: var(--creed-text-primary);
+}
+
+.ProseMirror .creed-callout::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  border-radius: 0;
+  background: var(--section-accent-bar, #d2a35b);
+  content: "";
+}
+
+.ProseMirror .creed-callout p {
+  margin: 0;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.ProseMirror code {
+  border-radius: 0.45rem;
+  background: var(--creed-surface-raised);
+  padding: 0.15rem 0.35rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.92em;
+}
+
+.ProseMirror .creed-code-block {
+  overflow-x: auto;
+  border: none;
+  border-radius: 0.75rem;
+  background: var(--creed-surface-raised);
+  padding: 0.7rem 0.95rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.92em;
+  line-height: 1.5;
+  color: var(--creed-text-primary);
+  tab-size: 2;
+  font-variant-ligatures: none;
+  box-shadow: none;
+}
+
+.ProseMirror .creed-code-block code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Syntax highlighting (lowlight / highlight.js classes). The token palette
+   reads as a calm "GitHub-light" style so colour stays subtle in long blocks;
+   the .dark block below adapts each hue for the dark canvas. */
+.creed-code-block .hljs-comment,
+.creed-code-block .hljs-quote {
+  color: #6a737d;
+  font-style: italic;
+}
+.creed-code-block .hljs-keyword,
+.creed-code-block .hljs-selector-tag,
+.creed-code-block .hljs-literal,
+.creed-code-block .hljs-section,
+.creed-code-block .hljs-link {
+  color: #d73a49;
+}
+.creed-code-block .hljs-string,
+.creed-code-block .hljs-attr,
+.creed-code-block .hljs-template-tag,
+.creed-code-block .hljs-template-variable,
+.creed-code-block .hljs-meta-string,
+.creed-code-block .hljs-regexp {
+  color: #032f62;
+}
+.creed-code-block .hljs-number,
+.creed-code-block .hljs-symbol,
+.creed-code-block .hljs-bullet,
+.creed-code-block .hljs-meta {
+  color: #005cc5;
+}
+.creed-code-block .hljs-title,
+.creed-code-block .hljs-name,
+.creed-code-block .hljs-class .hljs-title,
+.creed-code-block .hljs-type {
+  color: #6f42c1;
+}
+.creed-code-block .hljs-built_in,
+.creed-code-block .hljs-builtin-name {
+  color: #005cc5;
+}
+.creed-code-block .hljs-variable,
+.creed-code-block .hljs-template-variable,
+.creed-code-block .hljs-attribute {
+  color: #e36209;
+}
+.creed-code-block .hljs-tag {
+  color: #22863a;
+}
+.creed-code-block .hljs-deletion {
+  color: #b31d28;
+  background: #ffeef0;
+}
+.creed-code-block .hljs-addition {
+  color: #22863a;
+  background: #f0fff4;
+}
+.creed-code-block .hljs-emphasis { font-style: italic; }
+.creed-code-block .hljs-strong { font-weight: 600; }
+
+.dark .creed-code-block .hljs-comment,
+.dark .creed-code-block .hljs-quote {
+  color: #7a7a72;
+}
+.dark .creed-code-block .hljs-keyword,
+.dark .creed-code-block .hljs-selector-tag,
+.dark .creed-code-block .hljs-literal,
+.dark .creed-code-block .hljs-section,
+.dark .creed-code-block .hljs-link {
+  color: #ff7b72;
+}
+.dark .creed-code-block .hljs-string,
+.dark .creed-code-block .hljs-attr,
+.dark .creed-code-block .hljs-template-tag,
+.dark .creed-code-block .hljs-template-variable,
+.dark .creed-code-block .hljs-meta-string,
+.dark .creed-code-block .hljs-regexp {
+  color: #a5d6ff;
+}
+.dark .creed-code-block .hljs-number,
+.dark .creed-code-block .hljs-symbol,
+.dark .creed-code-block .hljs-bullet,
+.dark .creed-code-block .hljs-meta,
+.dark .creed-code-block .hljs-built_in,
+.dark .creed-code-block .hljs-builtin-name {
+  color: #79c0ff;
+}
+.dark .creed-code-block .hljs-title,
+.dark .creed-code-block .hljs-name,
+.dark .creed-code-block .hljs-class .hljs-title,
+.dark .creed-code-block .hljs-type {
+  color: #d2a8ff;
+}
+.dark .creed-code-block .hljs-variable,
+.dark .creed-code-block .hljs-attribute {
+  color: #ffa657;
+}
+.dark .creed-code-block .hljs-tag {
+  color: #7ee787;
+}
+.dark .creed-code-block .hljs-deletion {
+  color: #ffdcd7;
+  background: rgba(248, 81, 73, 0.15);
+}
+.dark .creed-code-block .hljs-addition {
+  color: #aff5b4;
+  background: rgba(46, 160, 67, 0.15);
+}
+
+.ProseMirror > :not(.creed-code-block) + .creed-code-block,
+.ProseMirror > :not(.creed-callout) + .creed-callout {
+  margin-top: 1.35rem;
+}
+
+.ProseMirror > .creed-code-block + *,
+.ProseMirror > .creed-callout + * {
+  margin-top: 1.2rem;
+}
+
+.ProseMirror a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition:
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.ProseMirror a:hover {
+  color: #1d4ed8;
+  opacity: 0.82;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  float: left;
+  height: 0;
+  color: var(--creed-text-tertiary);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+/* Inline tag pill — Obsidian-style #tags. Renders inside any rich-text
+ * paragraph via the creedInlineTag mark. */
+.creed-inline-tag {
+  display: inline;
+  padding: 1px 6px;
+  margin: 0 1px;
+  border-radius: 6px;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 0.92em;
+  font-weight: 500;
+  background: var(--section-accent-tint, rgba(37, 99, 235, 0.08));
+  color: var(--section-accent-bar, #2563eb);
+  white-space: nowrap;
+  text-decoration: none;
+  vertical-align: baseline;
+}
+
+.creed-inline-tag::before {
+  content: "#";
+  opacity: 0.5;
+  margin-right: 1px;
+}
+
+.ProseMirror .creed-inline-tag {
+  cursor: text;
+}
+
+/* Cursor-style inline diff for proposal review. */
+.creed-diff-block {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--creed-text-primary);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.creed-diff-add {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+  padding: 1px 2px;
+  border-radius: 3px;
+}
+
+.creed-diff-remove {
+  background: rgba(220, 38, 38, 0.10);
+  color: #b91c1c;
+  text-decoration: line-through;
+  text-decoration-color: rgba(185, 28, 28, 0.5);
+  padding: 1px 2px;
+  border-radius: 3px;
+}
+
+/* Dark-canvas diff tones: lower the surface opacity so the highlighted
+   words stay readable against the dark surface without flashing a fully
+   saturated red/green block behind every span. */
+.dark .creed-diff-add {
+  background: rgba(34, 197, 94, 0.10);
+  color: #4ade80;
+}
+
+.dark .creed-diff-remove {
+  background: rgba(248, 113, 113, 0.10);
+  color: #f87171;
+  text-decoration-color: rgba(248, 113, 113, 0.5);
+}
+
+/* View Transition API hooks for the circular theme reveal (see
+   components/creed/theme-provider.tsx). The default cross-fade is killed so
+   only the new layer animates; the JS animation drives the clip-path. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 0;
+}
+::view-transition-new(root) {
+  z-index: 1;
+}
+
+/* Flip pure-black-on-white SVGs (brandmark, logo, GitHub mark, etc.) in dark
+   mode so they read against the dark surface. Use sparingly — coloured brand
+   assets shouldn't get this class. */
+.dark .creed-invert-on-dark {
+  filter: invert(1);
+}
+
+/* Inline tag in dark mode: lift the tint a touch so it sits well on the
+   darker canvas. */
+.dark .creed-inline-tag {
+  background: var(--section-accent-tint, rgba(96, 165, 250, 0.18));
+  color: var(--section-accent-bar, #93c5fd);
+}
+
+.dark .creed-inline-tag::before {
+  opacity: 0.7;
+}
+
+/* Dark-canvas tweak for the code block surface only. Callouts intentionally
+   keep their `--section-accent-tint` background so the section's colour
+   identity reads in both modes — overriding it with the neutral surface
+   stripped the callout of its accent in dark mode. */
+.dark .creed-code-block {
+  background: var(--creed-surface-raised);
+  color: var(--creed-text-primary);
+  border-color: var(--creed-border);
+}
+
+/* Selection highlight reads better against the dark canvas. */
+.dark ::selection {
+  background: rgba(96, 165, 250, 0.28);
+  color: #f5f5f0;
+}
