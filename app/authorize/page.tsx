@@ -179,8 +179,8 @@ export default async function AuthorizePage({
         Connect {client.clientName} to your Creed
       </h1>
       <p className="mt-3 text-[14px] leading-7 text-[var(--creed-text-secondary)]">
-        {client.clientName} can read your Creed and propose updates. It edits
-        directly only while your approval setting is off.
+        {client.clientName} can read your Creed and propose updates, and edits a
+        section directly only where you allow direct edits.
       </p>
       <p className="mt-2 text-[13px] text-[var(--creed-text-tertiary)]">
         Signed in as {user.email}
@@ -191,6 +191,7 @@ export default async function AuthorizePage({
         <input type="hidden" name="redirect_uri" value={redirectUri} />
         <input type="hidden" name="code_challenge" value={codeChallenge} />
         {params.state ? <input type="hidden" name="state" value={params.state} /> : null}
+        {params.scope ? <input type="hidden" name="scope" value={params.scope} /> : null}
         <Button
           type="submit"
           name="decision"

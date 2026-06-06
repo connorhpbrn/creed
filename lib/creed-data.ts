@@ -616,12 +616,16 @@ export type ConnectionItem = {
 
 export type AgentIconKind =
   | "claude"
+  | "claudecode"
   | "codex"
+  | "chatgpt"
+  | "cursor"
+  | "devin"
+  | "grok"
+  | "v0"
+  | "opencode"
   | "openclaw"
   | "hermes"
-  | "cursor"
-  | "windsurf"
-  | "opencode"
   | "mcp"
   | "custom";
 
@@ -1472,7 +1476,7 @@ export function buildHiddenAgentGuidanceMarkdown(
       '  "reason": "One sentence explaining why this should be stored.",',
       '  "impact": "future-responses | code-generation | project-context",',
       '  "confidence": "tentative | repeated | durable",',
-      '  "integration": "codex | claude | openclaw | hermes | cursor | windsurf | opencode | custom",',
+      '  "integration": "chatgpt | claude | codex | claudecode | grok | opencode | cursor | devin | openclaw | hermes | v0 | custom",',
       '  "draft": {',
       `    "kind": "${proposalDraftKinds.join(" | ")}"`,
     );
@@ -1624,7 +1628,7 @@ export function buildHiddenAgentGuidanceMarkdown(
         '  "operation": "update_section",',
         '  "sectionId": "identity | beliefs | goals | work | preferences | constraints | people | health | routines | context | any editable section id",',
         '  "agentName": "Your agent name",',
-        '  "integration": "codex | claude | openclaw | hermes | cursor | windsurf | opencode | custom",',
+        '  "integration": "chatgpt | claude | codex | claudecode | grok | opencode | cursor | devin | openclaw | hermes | v0 | custom",',
         '  "section": {',
         '    "kind": "rich-text | rules | chips | focus | decisions",',
         '    "contentMarkdown": "## Stack they live in\\n#nextjs #typescript #tailwind #supabase #vercel\\n\\n### How they like to work\\n1. Plan in prose first, code second.\\n2. Small focused commits, never WIP.\\n3. Review their own diff before opening a PR.\\n\\n> Never auto-format on save. They prefer running the formatter manually."',
@@ -1635,7 +1639,7 @@ export function buildHiddenAgentGuidanceMarkdown(
         "{",
         '  "operation": "create_section",',
         '  "agentName": "Your agent name",',
-        '  "integration": "codex | claude | openclaw | hermes | cursor | windsurf | opencode | custom",',
+        '  "integration": "chatgpt | claude | codex | claudecode | grok | opencode | cursor | devin | openclaw | hermes | v0 | custom",',
         '  "section": {',
         '    "name": "Travel",',
         '    "kind": "rich-text",',
@@ -2102,13 +2106,22 @@ export const initialCreedState: CreedState = {
   },
   connections: [
     {
+      id: "chatgpt",
+      name: "ChatGPT",
+      icon: "chatgpt",
+      status: "not-connected",
+      description: "Add Creed as a connector so ChatGPT starts from your context.",
+      connectHint:
+        "In ChatGPT, open Settings > Apps & Connectors, turn on Developer mode, then Create a connector with the URL. (Plus, Pro, or Business.)",
+    },
+    {
       id: "claude",
-      name: "Claude Code",
+      name: "Claude",
       icon: "claude",
       status: "not-connected",
-      description: "Connect Creed so every Claude Code session starts with your context.",
-      connectHint: "Run the command, then /mcp in Claude Code to authorize in the browser.",
-      command: "claude mcp add -t http creed https://creed.md/mcp",
+      description: "Connect Creed as a custom connector in Claude.",
+      connectHint:
+        "In Claude, open Settings > Connectors > Add custom connector, paste the URL above, then Connect to authorize in the browser.",
     },
     {
       id: "codex",
@@ -2120,6 +2133,51 @@ export const initialCreedState: CreedState = {
       command: "codex mcp add creed --url https://creed.md/mcp",
     },
     {
+      id: "claudecode",
+      name: "Claude Code",
+      icon: "claudecode",
+      status: "not-connected",
+      description: "Connect Creed so every Claude Code session starts with your context.",
+      connectHint: "Run the command, then /mcp in Claude Code to authorize in the browser.",
+      command: "claude mcp add -t http creed https://creed.md/mcp",
+    },
+    {
+      id: "openclaw",
+      name: "OpenClaw",
+      icon: "openclaw",
+      status: "not-connected",
+      description: "Add Creed to OpenClaw as a remote MCP server.",
+      connectHint:
+        "Add a custom MCP server pointing at the URL above, then authorize Creed in the browser window your client opens.",
+    },
+    {
+      id: "hermes",
+      name: "Hermes",
+      icon: "hermes",
+      status: "not-connected",
+      description: "Add Creed to Hermes as a remote MCP server.",
+      connectHint:
+        "Add a custom MCP server pointing at the URL above, then authorize Creed in the browser window your client opens.",
+    },
+    {
+      id: "grok",
+      name: "Grok",
+      icon: "grok",
+      status: "not-connected",
+      description: "Add Creed to Grok as a custom connector.",
+      connectHint:
+        "In Grok, go to grok.com/connectors, create a New Connector > Custom, paste the URL above, and authorize.",
+    },
+    {
+      id: "opencode",
+      name: "OpenCode",
+      icon: "opencode",
+      status: "not-connected",
+      description: "Add Creed to OpenCode as a remote MCP server.",
+      connectHint:
+        "Add the URL to opencode.json as a remote server, then run opencode mcp auth creed to authorize in the browser.",
+    },
+    {
       id: "cursor",
       name: "Cursor",
       icon: "cursor",
@@ -2127,6 +2185,24 @@ export const initialCreedState: CreedState = {
       description: "One-click install Creed into Cursor, then authorize.",
       connectHint:
         "Use the one-click button to add Creed to Cursor as a remote MCP server, then authorize Creed in the browser window Cursor opens.",
+    },
+    {
+      id: "devin",
+      name: "Devin",
+      icon: "devin",
+      status: "not-connected",
+      description: "Add Creed to Devin from the MCP Marketplace.",
+      connectHint:
+        "In Devin, open Settings > MCP Marketplace, add your own MCP with Transport HTTP and the URL above, set Authentication to OAuth, then authorize.",
+    },
+    {
+      id: "v0",
+      name: "v0",
+      icon: "v0",
+      status: "not-connected",
+      description: "Add Creed to v0 as a custom MCP connection.",
+      connectHint:
+        "In v0, open MCP Connections (or Add MCP in the prompt bar), add a custom server with the URL above, and choose OAuth.",
     },
     {
       id: "custom",

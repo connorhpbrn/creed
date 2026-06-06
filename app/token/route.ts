@@ -74,6 +74,26 @@ async function readParams(request: Request): Promise<Record<string, string>> {
   return out;
 }
 
+// OAuth 2.1 lets a client send its credentials in an HTTP Basic header instead
+// of the form body, and ChatGPT does exactly that on the token exchange. We're
+// a public client (no secret), so only the client_id is read from it.
+function parseBasicAuthClientId(authHeader: string | null): string {
+  if (!authHeader || !authHeader.toLowerCase().startsWith("basic ")) {
+    return "";
+  }
+  try {
+    const decoded = Buffer.from(authHeader.slice(6).trim(), "base64").toString("utf8");
+    const rawClientId = decoded.split(":")[0] ?? "";
+    try {
+      return decodeURIComponent(rawClientId);
+    } catch {
+      return rawClientId;
+    }
+  } catch {
+    return "";
+  }
+}
+
 export async function POST(request: Request) {
   if (!isSupabaseAdminConfigured()) {
     return oauthError("server_error", 503);
@@ -87,7 +107,9 @@ export async function POST(request: Request) {
   }
 
   const grantType = params.grant_type;
-  const clientId = params.client_id;
+  // Prefer the form-body client_id; fall back to the Basic-auth header so
+  // clients like ChatGPT that authenticate the token request that way work.
+  const clientId = params.client_id || parseBasicAuthClientId(request.headers.get("authorization"));
 
   if (!clientId) {
     return oauthError("invalid_client", 400, "client_id is required.");

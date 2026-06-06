@@ -78,7 +78,7 @@ const sections: DocsSection[] = [
       "Connect from the Connections page: copy the server URL, or use the per-agent command or one-click button.",
       "The first time the agent calls Creed it runs the OAuth flow and opens a browser. Approve while signed in to creed.md. Tokens refresh automatically after that.",
       "Verify by listing the MCP tools and calling read_creed once. Do not claim connected unless read_creed succeeds.",
-      "Update sections with the flat creed_* tools. The server applies the edit directly or as a proposal based on your approval setting; get_write_policy reports the current mode.",
+      "Update sections with the flat creed_* tools. The server applies the edit directly or as a proposal based on each section's permission; get_write_policy reports what's allowed.",
       "If anything is unclear during setup, read https://creed.md/docs once and follow it.",
     ],
   },

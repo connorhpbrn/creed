@@ -26,6 +26,7 @@ import {
   type Proposal,
   type SectionTemplate,
 } from "@/lib/creed-data";
+import { getAgentIconKind } from "@/lib/agent-icon";
 import { getSiteUrl } from "@/lib/supabase/env";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { decryptSecret, encryptSecret, hashSecret } from "@/lib/secret-crypto";
@@ -163,12 +164,16 @@ type PersistResult = {
 
 const KNOWN_CONNECTIONS = [
   "claude",
+  "claudecode",
   "codex",
+  "chatgpt",
+  "cursor",
+  "devin",
+  "grok",
+  "v0",
+  "opencode",
   "openclaw",
   "hermes",
-  "cursor",
-  "windsurf",
-  "opencode",
   "custom",
   "mcp",
 ] as const;
@@ -565,46 +570,16 @@ function normalizeIntegrationId(value?: string | null) {
     : "custom";
 }
 
-function inferIntegrationId(agentName?: string | null) {
-  const normalized = agentName?.toLowerCase() ?? "";
-
-  if (normalized.includes("claude")) {
-    return "claude";
-  }
-  if (normalized.includes("codex")) {
-    return "codex";
-  }
-  if (
-    normalized.includes("openclaw") ||
-    normalized.includes("open claw") ||
-    normalized.includes("open-claw") ||
-    normalized.includes("clawdius") ||
-    normalized === "claw"
-  ) {
-    return "openclaw";
-  }
-  if (normalized.includes("hermes")) {
-    return "hermes";
-  }
-  if (normalized.includes("cursor")) {
-    return "cursor";
-  }
-  if (normalized.includes("windsurf")) {
-    return "windsurf";
-  }
-  if (
-    normalized.includes("opencode") ||
-    normalized.includes("open code") ||
-    normalized.includes("open-code")
-  ) {
-    return "opencode";
-  }
-
-  return "custom";
+// A connecting client's id and its brand icon are the same vocabulary, so both
+// resolve through the single alias table in lib/agent-icon. Keeping one source
+// of truth means a new agent can't get an icon without also being a known
+// connection id (which is what drives its connected/not-connected status).
+function inferIntegrationId(agentName?: string | null): AgentIconKind {
+  return getAgentIconKind(agentName);
 }
 
 export function inferAgentIconKind(agentName?: string | null): AgentIconKind {
-  return inferIntegrationId(agentName);
+  return getAgentIconKind(agentName);
 }
 
 export function normalizeMcpClientId(clientName?: string | null) {
@@ -659,12 +634,20 @@ function buildConnectionDefinitions() {
   return {
     definitions: [
       {
+        id: "chatgpt",
+        name: "ChatGPT",
+        icon: "chatgpt",
+        description: "Add Creed as a connector so ChatGPT starts from your context.",
+        connectHint:
+          "In ChatGPT, open Settings > Apps & Connectors, turn on Developer mode, then Create a connector with the URL. (Plus, Pro, or Business.)",
+      },
+      {
         id: "claude",
-        name: "Claude Code",
+        name: "Claude",
         icon: "claude",
-        description: "Connect Creed so every Claude Code session starts with your context.",
-        connectHint: "Run the command, then /mcp in Claude Code to authorize in the browser.",
-        command: `claude mcp add -t http creed ${mcpUrl}`,
+        description: "Connect Creed as a custom connector in Claude.",
+        connectHint:
+          "In Claude, open Settings > Connectors > Add custom connector, paste the URL above, then Connect to authorize in the browser.",
       },
       {
         id: "codex",
@@ -673,6 +656,14 @@ function buildConnectionDefinitions() {
         description: "Add Creed as a remote MCP server for agentic coding runs.",
         connectHint: "Run the command, then codex mcp login creed to authorize in the browser.",
         command: `codex mcp add creed --url ${mcpUrl}`,
+      },
+      {
+        id: "claudecode",
+        name: "Claude Code",
+        icon: "claudecode",
+        description: "Connect Creed so every Claude Code session starts with your context.",
+        connectHint: "Run the command, then /mcp in Claude Code to authorize in the browser.",
+        command: `claude mcp add -t http creed ${mcpUrl}`,
       },
       {
         id: "openclaw",
@@ -689,6 +680,22 @@ function buildConnectionDefinitions() {
         connectHint: remoteHint,
       },
       {
+        id: "grok",
+        name: "Grok",
+        icon: "grok",
+        description: "Add Creed to Grok as a custom connector.",
+        connectHint:
+          "In Grok, go to grok.com/connectors, create a New Connector > Custom, paste the URL above, and authorize.",
+      },
+      {
+        id: "opencode",
+        name: "OpenCode",
+        icon: "opencode",
+        description: "Add Creed to OpenCode as a remote MCP server.",
+        connectHint:
+          "Add the URL to opencode.json as a remote server, then run opencode mcp auth creed to authorize in the browser.",
+      },
+      {
         id: "cursor",
         name: "Cursor",
         icon: "cursor",
@@ -698,19 +705,20 @@ function buildConnectionDefinitions() {
         deepLink: cursorDeepLink,
       },
       {
-        id: "windsurf",
-        name: "Windsurf",
-        icon: "windsurf",
-        description: "Add Creed to Windsurf as a remote MCP server.",
-        connectHint: remoteHint,
+        id: "devin",
+        name: "Devin",
+        icon: "devin",
+        description: "Add Creed to Devin from the MCP Marketplace.",
+        connectHint:
+          "In Devin, open Settings > MCP Marketplace, add your own MCP with Transport HTTP and the URL above, set Authentication to OAuth, then authorize.",
       },
       {
-        id: "opencode",
-        name: "OpenCode",
-        icon: "opencode",
-        description: "Add Creed to OpenCode as a remote MCP server.",
+        id: "v0",
+        name: "v0",
+        icon: "v0",
+        description: "Add Creed to v0 as a custom MCP connection.",
         connectHint:
-          "Add the URL to opencode.json as a remote server, then run opencode mcp auth creed to authorize in the browser.",
+          "In v0, open MCP Connections (or Add MCP in the prompt bar), add a custom server with the URL above, and choose OAuth.",
       },
       {
         id: "custom",

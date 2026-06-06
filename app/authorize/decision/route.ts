@@ -25,7 +25,13 @@ function redirectWith(redirectUri: string, params: Record<string, string>) {
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
-  return NextResponse.redirect(url.toString());
+  // 303 See Other, not the NextResponse.redirect default of 307. This handler
+  // runs on the consent form POST, but the OAuth callback must be reached with
+  // a GET (?code=...&state=...). 307 preserves the method, so browsers were
+  // POSTing to the client's callback (claude.ai / chatgpt.com), which only
+  // accept GET - they returned "Method Not Allowed" / bad request right after
+  // the user clicked Allow.
+  return NextResponse.redirect(url.toString(), 303);
 }
 
 export async function POST(request: Request) {
@@ -55,8 +61,9 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) {
     // Session expired between render and submit. Send them home to sign in
-    // again rather than leaking anything to the redirect URI.
-    return NextResponse.redirect(new URL("/", request.url).toString());
+    // again rather than leaking anything to the redirect URI. 303 so the POST
+    // becomes a GET.
+    return NextResponse.redirect(new URL("/", request.url).toString(), 303);
   }
 
   if (decision !== "allow") {
@@ -74,17 +81,19 @@ export async function POST(request: Request) {
     return badRequest("This account is not set up to connect agents yet.");
   }
 
-  // Single grant: scope is decided here, not requested by the client. Direct
-  // edit is only granted when the user has approval turned off.
-  const { data: tokenRow } = await supabase
-    .from("creed_tokens")
-    .select("require_approval")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  const requireApproval = tokenRow?.require_approval ?? true;
-  const scope = requireApproval
-    ? DEFAULT_SCOPE
-    : `${DEFAULT_SCOPE} ${DIRECT_EDIT_SCOPE}`;
+  // OAuth scope is a coarse hint; real edit rights are enforced per-section on
+  // the write / proposal routes, so the token scope gates nothing on its own.
+  // Grant exactly the scopes the client asked for (bounded by what we support),
+  // and return them verbatim from /token, so strict clients like ChatGPT - which
+  // request all of scopes_supported and reject any mismatch (OAUTH_SCOPES_MISMATCH)
+  // - get back exactly what they asked for. Default to the full set when the
+  // client requests none.
+  const allowedScopes = [...DEFAULT_SCOPE.split(" "), DIRECT_EDIT_SCOPE];
+  const requestedScope = String(form.get("scope") ?? "").trim();
+  const grantedScopes = requestedScope
+    ? requestedScope.split(/\s+/).filter((value) => allowedScopes.includes(value))
+    : allowedScopes;
+  const scope = (grantedScopes.length ? grantedScopes : allowedScopes).join(" ");
 
   const code = await issueAuthorizationCode({
     clientId,

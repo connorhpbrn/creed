@@ -26,6 +26,10 @@ const MCP_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version",
+  // Browser-based clients (ChatGPT web, Claude.ai) can only read the
+  // WWW-Authenticate challenge off a cross-origin 401 if it's explicitly
+  // exposed; without this they can't discover where to start the OAuth flow.
+  "Access-Control-Expose-Headers": "WWW-Authenticate, Mcp-Session-Id",
 } as const;
 
 // Injected into the model's context at connect time via the initialize
@@ -1494,7 +1498,10 @@ function unauthorized() {
       status: 401,
       headers: {
         ...MCP_CORS_HEADERS,
-        "WWW-Authenticate": `Bearer resource_metadata="${site}/.well-known/oauth-protected-resource"`,
+        // Point at the RFC 9728 path-inserted metadata URL (matches where
+        // ChatGPT / Claude.ai probe). The root document is also served. Advertise
+        // the scope so clients request exactly what the consent flow grants.
+        "WWW-Authenticate": `Bearer resource_metadata="${site}/.well-known/oauth-protected-resource/mcp", scope="read propose direct_edit"`,
       },
     }
   );
@@ -1505,10 +1512,16 @@ export async function OPTIONS() {
 }
 
 export async function GET() {
-  return NextResponse.json(
-    { name: "Creed MCP", transport: "streamable-http" },
-    { headers: MCP_CORS_HEADERS }
-  );
+  // In streamable HTTP, GET is the client opening a server-to-client SSE
+  // stream. Creed pushes no server-initiated messages, so per the MCP spec the
+  // server returns 405 here. Browser clients (Claude.ai, ChatGPT) open this
+  // stream right after connecting; the old non-SSE 200 left them hanging and
+  // they failed after auth even though the POST handshake succeeded. CLI
+  // clients (Cursor, Claude Code) never open it, so they were unaffected.
+  return new NextResponse(null, {
+    status: 405,
+    headers: { ...MCP_CORS_HEADERS, Allow: "POST, OPTIONS" },
+  });
 }
 
 export async function POST(request: Request) {

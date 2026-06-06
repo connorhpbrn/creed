@@ -20,13 +20,17 @@ function getAgentButtonClasses(connectionId: string) {
     case "codex":
       return "bg-[#2563EB] text-white transition-colors hover:bg-[#1D4ED8]";
     case "claude":
+    case "claudecode":
       return "bg-[#FF6200] text-white hover:bg-[#E65A00]";
     case "openclaw":
       return "bg-[#FF0000] text-white hover:bg-[#E00000]";
     case "hermes":
       return "bg-[#FFBB00] text-white hover:bg-[#E6A900] dark:bg-[#D9A000] dark:hover:bg-[#B88600]";
+    case "chatgpt":
     case "cursor":
-    case "windsurf":
+    case "devin":
+    case "grok":
+    case "v0":
     case "opencode":
       return "bg-[#171717] text-white hover:bg-[#0F0F0F] dark:bg-[#e7e7e2] dark:text-[#0e0e0d] dark:hover:bg-[#cfcfc8]";
     case "custom":
@@ -58,6 +62,18 @@ export function ConnectionsScreen() {
   const mcpStatusLabel = connected ? "Connected via MCP" : "Not connected via MCP";
   const showMcpStack = connected && state.mcpClients.length > 0;
 
+  // Per-card connected status is derived from the live MCP client roster (the
+  // same source the "All Agents" card uses), matched by resolved brand icon.
+  // The roster is updated on every MCP request - including reads - so a card
+  // lights up as soon as its agent connects, which the legacy per-id status
+  // (only written on writes/proposals) never did reliably.
+  const latestClientByIcon = new Map<string, (typeof state.mcpClients)[number]>();
+  for (const client of state.mcpClients) {
+    if (!latestClientByIcon.has(client.icon)) {
+      latestClientByIcon.set(client.icon, client);
+    }
+  }
+
   return (
     <div className="h-full overflow-y-auto bg-[var(--creed-surface)] creed-scrollbar">
       <div className="mx-auto max-w-6xl px-4 py-8 md:px-12 md:py-10">
@@ -88,7 +104,7 @@ export function ConnectionsScreen() {
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[var(--creed-text-secondary)]">
                   <span
                     className={cn(
-                      "h-2 w-2 rounded-full",
+                      "h-2 w-2 rounded-[3px]",
                       connected ? "bg-[#16A34A]" : "bg-[var(--creed-border-strong)]"
                     )}
                   />
@@ -157,6 +173,9 @@ export function ConnectionsScreen() {
                 <div className="mt-5 grid items-start gap-4 border-t border-[var(--creed-border)] pt-5 lg:grid-cols-2">
                   {state.connections.map((connection) => {
                     const commandKey = `command-${connection.id}`;
+                    const matchedClient = latestClientByIcon.get(connection.icon);
+                    const isConnected = Boolean(matchedClient) || connection.status === "connected";
+                    const lastSeen = matchedClient?.lastUsed ?? connection.lastUsed;
 
                     return (
                       <div
@@ -172,19 +191,19 @@ export function ConnectionsScreen() {
                             <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-[var(--creed-text-secondary)]">
                               <span
                                 className={cn(
-                                  "h-2 w-2 rounded-full",
-                                  connection.status === "connected"
+                                  "h-2 w-2 rounded-[3px]",
+                                  isConnected
                                     ? "bg-[#16A34A]"
                                     : "bg-[var(--creed-border-strong)]"
                                 )}
                               />
                               <span>
-                                {connection.status === "connected" ? "Connected" : "Not connected"}
+                                {isConnected ? "Connected" : "Not connected"}
                               </span>
-                              {connection.status === "connected" && connection.lastUsed ? (
+                              {isConnected && lastSeen ? (
                                 <>
                                   <span>·</span>
-                                  <span>Last seen {connection.lastUsed}</span>
+                                  <span>Last seen {lastSeen}</span>
                                 </>
                               ) : null}
                             </div>

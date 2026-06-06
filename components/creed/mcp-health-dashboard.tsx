@@ -87,13 +87,17 @@ const OUTCOME_KEYS = ["accepted", "rejected", "pending"];
 // its "-mcp-client" suffix stripped and is title-cased ("codex-mcp-client" →
 // "Codex"; "my-bot" → "My Bot").
 const AGENT_LABEL: Partial<Record<AgentIconKind, string>> = {
-  claude: "Claude Code",
+  claude: "Claude",
+  claudecode: "Claude Code",
   codex: "Codex",
+  chatgpt: "ChatGPT",
+  cursor: "Cursor",
+  devin: "Devin",
+  grok: "Grok",
+  v0: "v0",
+  opencode: "OpenCode",
   openclaw: "OpenClaw",
   hermes: "Hermes",
-  cursor: "Cursor",
-  windsurf: "Windsurf",
-  opencode: "OpenCode",
 };
 
 function cleanName(name: string) {

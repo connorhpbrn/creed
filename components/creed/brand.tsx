@@ -5,15 +5,19 @@ import { cn } from "@/lib/utils";
 
 const allAgentsIcon = "/assets/agents/allagents.svg";
 const brandmark = "/assets/brand/brandmark.svg";
+const chatgptIcon = "/assets/agents/chatgpt.svg";
+const claudeIcon = "/assets/agents/claude.svg";
 const claudeCodeIcon = "/assets/agents/claudecode.svg";
 const codexIcon = "/assets/agents/codex.svg";
 const cursorIcon = "/assets/agents/cursor.svg";
 const customAgentIcon = "/assets/agents/customagent.svg";
+const devinIcon = "/assets/agents/devin.svg";
+const grokIcon = "/assets/agents/grok.svg";
 const hermesIcon = "/assets/agents/hermes.svg";
 const logo = "/assets/brand/logo.svg";
 const openClawIcon = "/assets/agents/openclaw.svg";
 const openCodeIcon = "/assets/agents/opencode.svg";
-const windsurfIcon = "/assets/agents/windsurf.svg";
+const v0Icon = "/assets/agents/v0.svg";
 
 export function CreedWordmark({
   className,
@@ -61,31 +65,42 @@ export function CreedMark({ className }: { className?: string }) {
 // type-time) so the value isn't constructed just to satisfy `keyof`.
 type GlyphKind =
   | "claude"
+  | "claudecode"
   | "codex"
+  | "chatgpt"
+  | "cursor"
+  | "devin"
+  | "grok"
+  | "v0"
+  | "opencode"
   | "openclaw"
   | "hermes"
-  | "cursor"
-  | "windsurf"
-  | "opencode"
   | "mcp"
   | "custom";
 
 const MONOCHROME_AGENTS = new Set<GlyphKind>([
+  "chatgpt",
   "cursor",
-  "windsurf",
+  "devin",
+  "grok",
+  "v0",
   "opencode",
   "custom",
   "mcp",
 ]);
 
 const glyphBrandAssets = {
-  claude: { src: claudeCodeIcon, imageClassName: "scale-[0.92]" },
+  claude: { src: claudeIcon, imageClassName: "scale-[0.92]" },
+  claudecode: { src: claudeCodeIcon, imageClassName: "scale-[0.92]" },
   codex: { src: codexIcon, imageClassName: "scale-[0.92]" },
-  openclaw: { src: openClawIcon, imageClassName: "scale-[0.92]" },
-  hermes: { src: hermesIcon, imageClassName: "scale-[0.9]" },
+  chatgpt: { src: chatgptIcon, imageClassName: "scale-[0.9]" },
   cursor: { src: cursorIcon, imageClassName: "scale-[0.9]" },
-  windsurf: { src: windsurfIcon, imageClassName: "scale-[0.9]" },
+  devin: { src: devinIcon, imageClassName: "scale-[0.9]" },
+  grok: { src: grokIcon, imageClassName: "scale-[0.9]" },
+  v0: { src: v0Icon, imageClassName: "scale-[0.9]" },
   opencode: { src: openCodeIcon, imageClassName: "scale-[0.9]" },
+  openclaw: { src: openClawIcon, imageClassName: "scale-[0.9]" },
+  hermes: { src: hermesIcon, imageClassName: "scale-[0.9]" },
   mcp: { src: allAgentsIcon, imageClassName: "scale-[0.9]" },
   custom: { src: customAgentIcon, imageClassName: "scale-[0.9]" },
 } as const;
@@ -126,8 +141,8 @@ export function IntegrationGlyph({
               "pointer-events-none select-none object-contain",
               // Monochrome agent assets read as black-on-light. Flip them to
               // white in dark mode so they don't disappear against the dark
-              // canvas. Coloured brand assets (claude, codex, openclaw, hermes)
-              // are skipped.
+              // canvas. Coloured brand assets (claude, claudecode, codex,
+              // openclaw, hermes) are skipped.
               MONOCHROME_AGENTS.has(kind) && "creed-invert-on-dark",
               asset.imageClassName,
               iconClassName
