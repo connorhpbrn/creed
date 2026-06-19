@@ -83,7 +83,11 @@ export const InlineTagMark = Mark.create({
         key: new PluginKey("creedInlineTagExit"),
         props: {
           handleKeyDown: (view, event) => {
-            if (event.key !== " " && event.key !== "Spacebar") return false;
+            const isSpace = event.key === " " || event.key === "Spacebar";
+            const isLeft = event.key === "ArrowLeft";
+            const isRight = event.key === "ArrowRight";
+            if (!isSpace && !isLeft && !isRight) return false;
+
             const { state } = view;
             const { selection, schema, doc } = state;
             if (!selection.empty) return false;
@@ -94,6 +98,48 @@ export const InlineTagMark = Mark.create({
 
             const range = getMarkRange($pos, markType);
             if (!range) return false;
+
+            // Marks at a position with the tag stripped - lets us drop the
+            // caret "outside" the inclusive tag so typing reads as plain text.
+            const marksWithoutTag = (pos: number) =>
+              doc
+                .resolve(pos)
+                .marks()
+                .filter((mark) => mark.type !== markType);
+
+            // Arrow keys escape the tag: Left pops the caret out just before
+            // it, Right just after it, dropping the inclusive tag mark so the
+            // next keystroke is plain text rather than extending the chip.
+            if (isLeft) {
+              view.dispatch(
+                state.tr
+                  .setSelection(TextSelection.create(doc, range.from))
+                  .setStoredMarks(marksWithoutTag(range.from))
+              );
+              event.preventDefault();
+              return true;
+            }
+
+            if (isRight) {
+              // Mid-tag: jump to the trailing edge and escape. Already at the
+              // trailing edge with text after the tag: let the default arrow
+              // move into that text. Only escape in place at the very end of a
+              // block (a trailing tag with nothing after it).
+              if ($pos.pos === range.to) {
+                if ($pos.pos !== $pos.end()) return false;
+                view.dispatch(state.tr.setStoredMarks(marksWithoutTag(range.to)));
+                event.preventDefault();
+                return true;
+              }
+              view.dispatch(
+                state.tr
+                  .setSelection(TextSelection.create(doc, range.to))
+                  .setStoredMarks(marksWithoutTag(range.to))
+              );
+              event.preventDefault();
+              return true;
+            }
+
             // Only exit on Space when the cursor sits at the end of the mark.
             if ($pos.pos !== range.to) return false;
 

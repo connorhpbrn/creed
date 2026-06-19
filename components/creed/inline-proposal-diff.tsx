@@ -55,14 +55,14 @@ export function DiffBadge({
 }: {
   tone: "added" | "removed";
   count: number;
-  size?: "xs" | "sm";
+  size?: "xs" | "sm" | "md";
 }) {
   const symbol = tone === "added" ? "+" : "−";
   // `!important` so the dropdown-menu primitive's `**:text-accent-foreground`
   // focus rule doesn't bleach the +N / −N numbers when the row is hovered.
   const colour =
     tone === "added" ? "!text-[var(--creed-success)]" : "!text-[var(--creed-danger)]";
-  const sizeClass = size === "xs" ? "text-[10px]" : "text-[11px]";
+  const sizeClass = size === "xs" ? "text-[10px]" : size === "md" ? "text-sm" : "text-[11px]";
   return (
     <span
       className={cn(
@@ -121,33 +121,35 @@ export function InlineProposalDiff({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left text-[12px] text-[var(--creed-text-secondary)]"
+          className="group/diff flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-[var(--creed-text-secondary)]"
         >
           <ChevronDown
             className={cn(
-              "h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-200",
+              // Match the other dropdown chevrons: muted tertiary by default,
+              // flips to primary (white in dark) on hover, smooth rotate.
+              "h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)] transition-all duration-200 group-hover/diff:text-[var(--creed-text-primary)]",
               expanded ? "rotate-0" : "-rotate-90"
             )}
           />
           <AgentIconStack
             agents={[agentName]}
             variant="inline"
-            itemClassName="h-4 w-4"
+            itemClassName="h-5 w-5"
             maxVisible={1}
           />
           <span className="truncate font-medium text-[var(--creed-text-primary)]">{agentName}</span>
           <span className="text-[var(--creed-text-tertiary)]">proposed an update</span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
           <span className="inline-flex items-center gap-1">
-            <DiffBadge tone="added" count={stats.added} />
-            <DiffBadge tone="removed" count={stats.removed} />
+            <DiffBadge tone="added" count={stats.added} size="md" />
+            <DiffBadge tone="removed" count={stats.removed} size="md" />
           </span>
         </button>
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={onReject}
-            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
+            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
             aria-label="Reject proposal"
           >
             <X className="h-3.5 w-3.5" />
@@ -156,7 +158,7 @@ export function InlineProposalDiff({
           <button
             type="button"
             onClick={onAccept}
-            className="inline-flex h-7 items-center gap-1 rounded-md bg-[#2563eb] px-2.5 text-[12px] font-medium text-white transition-colors hover:bg-[#1d4ed8]"
+            className="inline-flex h-7 items-center gap-1 rounded-md bg-[#2563eb] px-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8]"
             aria-label="Accept proposal"
           >
             <Check className="h-3.5 w-3.5" />
@@ -191,7 +193,7 @@ export function InlineProposalDiff({
           )}
         </div>
         {proposal.reason ? (
-          <div className="border-t border-[var(--creed-border)] px-4 py-2.5 text-[12px] leading-5 text-[var(--creed-text-secondary)]">
+          <div className="border-t border-[var(--creed-border)] px-4 py-2.5 text-sm leading-5 text-[var(--creed-text-secondary)]">
             {proposal.reason}
           </div>
         ) : null}
@@ -225,7 +227,7 @@ export function InlineNewSectionProposal({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left text-[12px] text-[var(--creed-text-secondary)]"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-[var(--creed-text-secondary)]"
         >
           <ChevronDown
             className={cn(
@@ -239,7 +241,7 @@ export function InlineNewSectionProposal({
           <AgentIconStack
             agents={[agentName]}
             variant="inline"
-            itemClassName="h-4 w-4"
+            itemClassName="h-5 w-5"
             maxVisible={1}
           />
           <span className="truncate font-medium text-[var(--creed-text-primary)]">{agentName}</span>
@@ -247,7 +249,7 @@ export function InlineNewSectionProposal({
               now also carries the meaning of the headline. */}
           <span className="text-[#10b981] dark:text-[#4ade80]">proposed a new section</span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
-          <span className="inline-flex items-center gap-1 text-[12px]">
+          <span className="inline-flex items-center gap-1 text-sm">
             <span className="font-medium text-[#10b981] dark:text-[#4ade80]">+</span>
             <span className="text-[var(--creed-text-primary)]">{sectionName}</span>
           </span>
@@ -259,7 +261,7 @@ export function InlineNewSectionProposal({
             // Weaker green tint by default, full green on hover. Hover
             // background is a soft green wash so the reject affordance
             // stays inside the proposal's colour family.
-            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-[#10b981]/65 transition-colors hover:bg-[#10b981]/10 hover:text-[#10b981] dark:text-[#4ade80]/65 dark:hover:bg-[#22c55e]/15 dark:hover:text-[#4ade80]"
+            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[#10b981]/65 transition-colors hover:bg-[#10b981]/10 hover:text-[#10b981] dark:text-[#4ade80]/65 dark:hover:bg-[#22c55e]/15 dark:hover:text-[#4ade80]"
           >
             <X className="h-3.5 w-3.5" />
             Reject
@@ -267,7 +269,7 @@ export function InlineNewSectionProposal({
           <button
             type="button"
             onClick={onAccept}
-            className="inline-flex h-7 items-center gap-1 rounded-md bg-[#047857] px-2.5 text-[12px] font-medium text-white transition-colors hover:bg-[#036249]"
+            className="inline-flex h-7 items-center gap-1 rounded-md bg-[#047857] px-2.5 text-sm font-medium text-white transition-colors hover:bg-[#036249]"
           >
             <Check className="h-3.5 w-3.5" />
             Accept
@@ -286,7 +288,7 @@ export function InlineNewSectionProposal({
         {proposal.reason ? (
           // Reason text tinted green to match the rest of the card's
           // colour signalling. Same hue as the chevron / `+` / headline.
-          <div className="border-t border-[#10b981]/20 px-4 py-2.5 text-[12px] leading-5 text-[#10b981] dark:text-[#4ade80]">
+          <div className="border-t border-[#10b981]/20 px-4 py-2.5 text-sm leading-5 text-[#10b981] dark:text-[#4ade80]">
             {proposal.reason}
           </div>
         ) : null}
@@ -343,7 +345,7 @@ export function InlineMetaProposal({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left text-[12px] text-[var(--creed-text-secondary)]"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-[var(--creed-text-secondary)]"
         >
           <ChevronDown
             className={cn(
@@ -360,7 +362,7 @@ export function InlineMetaProposal({
           <AgentIconStack
             agents={[agentName]}
             variant="inline"
-            itemClassName="h-4 w-4"
+            itemClassName="h-5 w-5"
             maxVisible={1}
           />
           <span className="truncate font-medium text-[var(--creed-text-primary)]">{agentName}</span>
@@ -381,7 +383,7 @@ export function InlineMetaProposal({
               on new-section cards. Non-destructive meta kinds (rename /
               recolor) stay neutral. */}
           {isDelete ? (
-            <span className="inline-flex items-center gap-1 text-[12px]">
+            <span className="inline-flex items-center gap-1 text-sm">
               <span className="font-medium text-[#dc2626] dark:text-[#f87171]">−</span>
               <span className="truncate text-[var(--creed-text-primary)]">{existingName}</span>
             </span>
@@ -394,7 +396,7 @@ export function InlineMetaProposal({
             type="button"
             onClick={onReject}
             className={cn(
-              "inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-medium transition-colors",
+              "inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium transition-colors",
               // Delete reject: weaker red default → full red on hover,
               // with a soft red wash backdrop. Rename / recolor keep the
               // neutral secondary→primary text behaviour.
@@ -410,7 +412,7 @@ export function InlineMetaProposal({
             type="button"
             onClick={onAccept}
             className={cn(
-              "inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-[12px] font-medium text-white transition-colors",
+              "inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-sm font-medium text-white transition-colors",
               isDelete ? "bg-[#dc2626] hover:bg-[#b91c1c]" : "bg-[#2563eb] hover:bg-[#1d4ed8]"
             )}
           >
@@ -465,7 +467,7 @@ export function InlineMetaProposal({
           // the neutral secondary text colour.
           <div
             className={cn(
-              "px-4 py-2.5 text-[12px] leading-5",
+              "px-4 py-2.5 text-sm leading-5",
               dividerClass,
               isDelete
                 ? "text-[#dc2626] dark:text-[#f87171]"

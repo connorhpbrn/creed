@@ -1631,7 +1631,7 @@ export function FileScreen() {
                     <div className="font-heading text-[1.22rem] font-medium tracking-[-0.03em] text-[var(--creed-text-primary)] md:text-[1.45rem]">
                       {state.user.name} / Creed
                     </div>
-                    <div className="mt-2 flex items-center gap-2 text-[13px] text-[var(--creed-text-secondary)]">
+                    <div className="mt-2 flex items-center gap-2 text-sm text-[var(--creed-text-secondary)]">
                       <Clock3 className="h-3.5 w-3.5" />
                       {state.syncLabel}
                     </div>

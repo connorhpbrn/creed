@@ -132,8 +132,8 @@ export function ReviewPill({
             className="group/trigger inline-flex h-7 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-[var(--creed-text-secondary)] outline-none transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] focus:outline-none focus-visible:outline-none"
           >
             <span className="inline-flex items-center gap-1">
-              <DiffBadge tone="added" count={totals.added} />
-              <DiffBadge tone="removed" count={totals.removed} />
+              <DiffBadge tone="added" count={totals.added} size="md" />
+              <DiffBadge tone="removed" count={totals.removed} size="md" />
             </span>
             <span className="text-[var(--creed-text-tertiary)]">·</span>
             <span>
@@ -206,15 +206,15 @@ export function ReviewPill({
                     <AgentIconStack
                       agents={[item.proposal.agentName]}
                       variant="inline"
-                      itemClassName="h-4 w-4"
+                      itemClassName="h-5 w-5"
                       maxVisible={1}
                     />
-                    <span className="min-w-0 flex-1 truncate text-[var(--creed-text-primary)]">
+                    <span className="min-w-0 flex-1 truncate font-medium text-[var(--creed-text-primary)]">
                       {item.sectionName ?? item.proposal.sectionName}
                     </span>
                     <span className="inline-flex items-center gap-1">
-                      <DiffBadge tone="added" count={stats.added} size="xs" />
-                      <DiffBadge tone="removed" count={stats.removed} size="xs" />
+                      <DiffBadge tone="added" count={stats.added} size="md" />
+                      <DiffBadge tone="removed" count={stats.removed} size="md" />
                     </span>
                     <AnimatedChevronDown
                       size={14}
@@ -236,12 +236,12 @@ export function ReviewPill({
                   onMouseEnter={isMobile ? undefined : cancelClose}
                   onMouseLeave={isMobile ? undefined : scheduleClose}
                 >
-                  <div className="flex items-center justify-between gap-2 border-b border-[var(--creed-border)] px-3 py-2 text-[12px] text-[var(--creed-text-secondary)]">
+                  <div className="flex items-center justify-between gap-2 border-b border-[var(--creed-border)] px-3 py-2 text-sm text-[var(--creed-text-secondary)]">
                     <div className="flex min-w-0 items-center gap-2">
                       <AgentIconStack
                         agents={[item.proposal.agentName]}
                         variant="inline"
-                        itemClassName="h-4 w-4"
+                        itemClassName="h-5 w-5"
                         maxVisible={1}
                       />
                       <span className="truncate font-medium text-[var(--creed-text-primary)]">
@@ -249,8 +249,8 @@ export function ReviewPill({
                       </span>
                     </div>
                     <span className="inline-flex items-center gap-1">
-                      <DiffBadge tone="added" count={stats.added} />
-                      <DiffBadge tone="removed" count={stats.removed} />
+                      <DiffBadge tone="added" count={stats.added} size="md" />
+                      <DiffBadge tone="removed" count={stats.removed} size="md" />
                     </span>
                   </div>
                   <div className="creed-diff-block max-h-[200px] overflow-y-auto px-3 py-2 text-[12px] leading-5">
@@ -390,7 +390,7 @@ function ReviewPillItem({
       >
         <ChevronDown
           className={cn(
-            "h-3 w-3 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-200",
+            "h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-200",
             open ? "rotate-0" : "-rotate-90"
           )}
         />
@@ -400,12 +400,12 @@ function ReviewPillItem({
           itemClassName="h-4 w-4"
           maxVisible={1}
         />
-        <span className="min-w-0 flex-1 truncate text-[var(--creed-text-primary)]">
+        <span className="min-w-0 flex-1 truncate font-medium text-[var(--creed-text-primary)]">
           {item.sectionName ?? item.proposal.sectionName}
         </span>
         <span className="inline-flex items-center gap-1">
-          <DiffBadge tone="added" count={stats.added} size="xs" />
-          <DiffBadge tone="removed" count={stats.removed} size="xs" />
+          <DiffBadge tone="added" count={stats.added} size="md" />
+          <DiffBadge tone="removed" count={stats.removed} size="md" />
         </span>
       </button>
 
@@ -457,7 +457,7 @@ function ReviewPillItem({
                 }}
                 className="inline-flex h-7 items-center rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-black/[0.06] hover:text-[var(--creed-text-primary)] dark:hover:bg-white/[0.08]"
               >
-                Jump to section
+                Jump
               </button>
               <div className="flex items-center gap-1">
                 <button

@@ -9,7 +9,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { flushSync } from "react-dom";
 
 type Theme = "light" | "dark";
 type Origin = { x: number; y: number };
@@ -46,9 +45,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const toggleTheme = useCallback(
     (origin?: Origin) => {
       const next: Theme = theme === "dark" ? "light" : "dark";
-      const commit = () => {
-        flushSync(() => setTheme(next));
-        apply(next);
+      const persist = () => {
         try {
           localStorage.setItem(KEY, next);
         } catch {}
@@ -57,8 +54,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       const start = (
         document as Document & { startViewTransition?: (cb: () => void) => { ready: Promise<void> } }
       ).startViewTransition?.bind(document);
-      if (!start) {
-        commit();
+      const reduceMotion =
+        typeof matchMedia !== "undefined" &&
+        matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      // No View Transitions support, or the user prefers reduced motion: just
+      // flip the theme with no animation.
+      if (!start || reduceMotion) {
+        apply(next);
+        setTheme(next);
+        persist();
         return;
       }
 
@@ -66,7 +71,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         x: innerWidth / 2,
         y: innerHeight / 2,
       };
-      start(commit).ready.then(() => {
+
+      // Only the cheap `.dark` class flip runs inside the transition callback,
+      // so the captured "new" snapshot is correct without paying for a full
+      // synchronous React re-render on the critical path. The React state
+      // update is deferred outside the transition - the live DOM it touches is
+      // hidden behind the snapshot until the animation finishes, so it can
+      // never block or stutter the reveal.
+      const transition = start(() => {
+        apply(next);
+      });
+      setTheme(next);
+      persist();
+
+      transition.ready.then(() => {
         const r = Math.hypot(
           Math.max(p.x, innerWidth - p.x),
           Math.max(p.y, innerHeight - p.y)

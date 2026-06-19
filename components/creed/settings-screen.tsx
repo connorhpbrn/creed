@@ -734,7 +734,7 @@ export function SettingsScreen() {
             <div className="mt-4 rounded-[var(--radius-xl)] border border-[var(--creed-border)] bg-[var(--creed-surface)] p-5">
               <div className="min-w-0 flex-1 space-y-3">
                 <div>
-                  <label className="mb-2 block text-[12px] font-medium text-[var(--creed-text-secondary)]">
+                  <label className="mb-2 block text-[14px] font-medium text-[var(--creed-text-secondary)]">
                     Display name
                   </label>
                   <Input
@@ -745,7 +745,7 @@ export function SettingsScreen() {
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-[12px] font-medium text-[var(--creed-text-secondary)]">
+                  <label className="mb-2 block text-[14px] font-medium text-[var(--creed-text-secondary)]">
                     Email
                   </label>
                   <Input
@@ -790,14 +790,19 @@ export function SettingsScreen() {
                 <button
                   type="button"
                   onClick={() => setPermsOpen((open) => !open)}
-                  className="flex w-full items-center justify-between text-left"
+                  // -my-2 py-2 keeps the text where it is but expands the
+                  // clickable box by 16px vertically (the bare row was too thin
+                  // a target).
+                  className="group -my-2 flex w-full items-center justify-between py-2 text-left"
                 >
                   <span className="text-[14px] font-medium text-[var(--creed-text-primary)]">
                     Per-section permissions
                   </span>
                   <ChevronDown
                     className={cn(
-                      "h-4 w-4 shrink-0 text-[var(--creed-text-secondary)] transition-transform duration-200",
+                      // Match the other dropdown chevrons: tertiary by default,
+                      // primary (white in dark) on hover.
+                      "h-4 w-4 shrink-0 text-[var(--creed-text-tertiary)] transition-all duration-200 group-hover:text-[var(--creed-text-primary)]",
                       permsOpen && "rotate-180"
                     )}
                   />
@@ -1070,7 +1075,7 @@ export function SettingsScreen() {
               <div className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <label className="mb-2 block text-[12px] font-medium text-[var(--creed-text-secondary)]">
+                    <label className="mb-2 block text-[14px] font-medium text-[var(--creed-text-secondary)]">
                       Repo
                     </label>
                     <SearchableSelect
@@ -1109,7 +1114,7 @@ export function SettingsScreen() {
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-[12px] font-medium text-[var(--creed-text-secondary)]">
+                    <label className="mb-2 block text-[14px] font-medium text-[var(--creed-text-secondary)]">
                       Branch
                     </label>
                     <SearchableSelect

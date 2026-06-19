@@ -86,11 +86,11 @@ function ShellNavLink({
     <Link
       href={item.href}
       className={cn(
-        // Sizing kept identical to the section nav buttons below this row
-        // (rounded-[10px], px-1.5 py-2.5, lg:px-2 lg:py-2, min-h-[34px])
-        // so the two stacks read as one continuous list of equal-height
-        // pills rather than two different button styles.
-        "flex min-h-[34px] items-center justify-center rounded-[10px] px-1.5 py-2.5 text-[14px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
+        // Sizing kept identical to the section nav buttons below this row so
+        // the two stacks read as one continuous list. On mobile each button is
+        // a centred square (h-8 w-8) so the selected-state background reads as
+        // a square, not a slight rectangle; lg restores the full-width row.
+        "flex h-8 w-8 mx-auto items-center justify-center rounded-[10px] text-[14px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] lg:h-auto lg:w-auto lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
         active &&
           "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)] hover:bg-[var(--creed-surface-raised)]"
       )}
@@ -249,7 +249,7 @@ export function CreedShell({
 
   return (
     <ShellActionsContext.Provider value={shellActions}>
-      <div className="grid h-screen grid-cols-[52px_minmax(0,1fr)] overflow-hidden bg-[var(--creed-surface)] lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid h-screen grid-cols-[48px_minmax(0,1fr)] overflow-hidden bg-[var(--creed-surface)] lg:grid-cols-[220px_minmax(0,1fr)]">
         <aside className="h-screen overflow-hidden border-r border-[var(--creed-border)] bg-[var(--creed-surface)] px-1.5 py-3 lg:px-5 lg:py-5">
           <div className="flex h-full flex-col">
             <div className="flex justify-center lg:justify-start">
@@ -317,7 +317,7 @@ export function CreedShell({
                     type="button"
                     onClick={() => handleSectionClick(section.id)}
                     className={cn(
-                      "flex min-h-[34px] w-full items-center justify-center rounded-[10px] px-1.5 py-2.5 text-left text-[14px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
+                      "flex h-8 w-8 mx-auto items-center justify-center rounded-[10px] text-left text-[14px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
                       isActive &&
                         "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)] hover:bg-[var(--creed-surface-raised)]",
                       // Pending delete: subtle red wash and red text so the
@@ -358,7 +358,7 @@ export function CreedShell({
                     router.push("/file");
                   }}
                   className={cn(
-                    "flex min-h-[34px] w-full items-center justify-center rounded-[10px] bg-[#ECFDF5] px-1.5 py-2.5 text-left text-[14px] font-medium text-[#047857] transition-colors duration-150 hover:bg-[#D1FAE5] hover:text-[#065F46] dark:bg-[#052e1a]/40 dark:text-[#4ade80] dark:hover:bg-[#052e1a]/60 dark:hover:text-[#4ade80] lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
+                    "flex h-8 w-8 mx-auto items-center justify-center rounded-[10px] bg-[#ECFDF5] text-left text-[14px] font-medium text-[#047857] transition-colors duration-150 hover:bg-[#D1FAE5] hover:text-[#065F46] dark:bg-[#052e1a]/40 dark:text-[#4ade80] dark:hover:bg-[#052e1a]/60 dark:hover:text-[#4ade80] lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
                     // Same active-equals-hover rule as the pending-delete
                     // rows above: once the user has scrolled into the
                     // proposal preview, lock the row into its hover tone.
@@ -378,7 +378,7 @@ export function CreedShell({
               <button
                 type="button"
                 onClick={handleAddSectionClick}
-                className="flex min-h-[34px] w-full items-center justify-center rounded-[10px] px-1.5 py-2.5 text-left text-[14px] text-[var(--creed-text-tertiary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] lg:min-h-0 lg:justify-start lg:gap-2 lg:px-2 lg:py-2"
+                className="flex h-8 w-8 mx-auto items-center justify-center rounded-[10px] text-left text-[14px] text-[var(--creed-text-tertiary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-2 lg:px-2 lg:py-2"
                 aria-label="Add section"
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -392,7 +392,7 @@ export function CreedShell({
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="h-auto w-full min-w-0 justify-center rounded-[10px] border-0 bg-transparent px-1 py-1 transition-colors hover:bg-[var(--creed-surface-raised)] aria-expanded:bg-[var(--creed-surface-raised)] dark:hover:bg-[var(--creed-surface-raised)] lg:justify-between lg:bg-transparent lg:px-2.5 lg:py-1.5"
+                    className="h-auto w-full min-w-0 justify-center rounded-[10px] border-0 bg-transparent px-1 py-1 transition-colors hover:bg-[var(--creed-surface-raised)] aria-expanded:bg-[var(--creed-surface-raised)] dark:hover:bg-[var(--creed-surface-raised)] lg:justify-between lg:bg-transparent lg:pl-[7px] lg:pr-2.5 lg:py-1.5"
                   >
                     <span className="flex min-w-0 w-full items-center justify-center gap-2.5 lg:justify-start">
                       <Avatar className="h-6 w-6 overflow-hidden rounded-[8px] border border-[var(--creed-border)] bg-[var(--creed-surface-raised)] after:rounded-[8px]">
