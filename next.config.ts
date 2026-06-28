@@ -67,7 +67,12 @@ const withBundleAnalyzer = process.env.ANALYZE === "true"
   : (config: NextConfig) => config;
 
 const nextConfig: NextConfig = {
-  ...(process.env.NODE_ENV === "development" ? { distDir: ".next-runtime" } : {}),
+  // Dev builds to .next-runtime (not .next). CREED_DIST_DIR lets a second dev
+  // server (e.g. an agent preview) run from an isolated build dir so it doesn't
+  // race the primary dev server's artifacts.
+  ...(process.env.NODE_ENV === "development"
+    ? { distDir: process.env.CREED_DIST_DIR || ".next-runtime" }
+    : {}),
   reactStrictMode: true,
   poweredByHeader: false,
   images: {

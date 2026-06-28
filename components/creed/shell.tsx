@@ -258,7 +258,7 @@ export function CreedShell({
             <Link
               href="/home"
               aria-label="Creed home"
-              className="mx-auto flex h-8 w-8 items-center justify-center rounded-[10px] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] lg:mx-0 lg:h-auto lg:w-auto lg:justify-start lg:px-2 lg:py-1.5"
+              className="mx-auto flex h-8 w-8 items-center justify-center rounded-[10px] transition-opacity duration-200 hover:opacity-60 lg:mx-0 lg:h-auto lg:w-auto lg:justify-start lg:px-2 lg:py-1.5"
             >
               <span className="lg:hidden">
                 <CreedMark />

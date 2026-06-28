@@ -16,6 +16,7 @@
 # next.js
 /.next/
 /.next-runtime*/
+/.next-preview*/
 /out/
 
 # production
@@ -63,6 +64,3 @@ supabase/.temp/
 *.log
 .idea/
 .vscode/
-
-# Source PNGs for landing backgrounds — ship the AVIF conversions, not these ~60MB originals
-public/assets/landing/backgrounds/*.png

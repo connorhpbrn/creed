@@ -11,7 +11,6 @@
 // constant, never user input.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import {
   ChevronDown,
   ChevronLeft,
@@ -65,9 +64,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { accentColorMap, accentTintMap, type AccentKey, type CreedSection, type Proposal } from "@/lib/creed-data";
 import type { CreedQualityReport } from "@/lib/ai/quality";
 import { cn } from "@/lib/utils";
-
-const lightBg = "/assets/landing/backgrounds/light-overview-bg.avif";
-const darkBg = "/assets/landing/backgrounds/dark-overview-bg.avif";
 
 // ----- mock content (real CreedSection shape, editor HTML) ------------------
 
@@ -730,12 +726,9 @@ export function CreedAppDemo() {
   );
 
   return (
-    <div className="relative w-full overflow-hidden rounded-[18px] md:rounded-[24px]">
-      <Image src={lightBg} alt="" fill unoptimized sizes="100vw" className="object-cover dark:hidden" />
-      <Image src={darkBg} alt="" fill unoptimized sizes="100vw" className="hidden object-cover dark:block" />
-
-      <div className="relative p-3 sm:p-6 lg:p-9">
-        <div className="mx-auto overflow-hidden rounded-[14px] border border-black/5 bg-[var(--creed-surface)] shadow-[0_30px_90px_-28px_rgba(20,52,140,0.55)] dark:border-white/10">
+    <div className="relative w-full">
+      <div className="relative">
+        <div className="mx-auto overflow-hidden rounded-[14px] border border-black/5 bg-[var(--creed-surface)] shadow-[0_18px_50px_-30px_rgba(0,0,0,0.32)] dark:border-white/10">
           <BrowserChrome />
 
           <div className="relative flex h-[540px] sm:h-[580px] lg:h-[620px]">

@@ -114,15 +114,10 @@ function TagPill({ label }: { label: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-[1.2]",
+        "inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-[1.2]",
         TAG_TONE_CLASS[tone]
       )}
     >
-      {tone === "amber" ? (
-        <span aria-hidden className="font-mono text-[10px] leading-none opacity-70">
-          /
-        </span>
-      ) : null}
       {label}
     </span>
   );

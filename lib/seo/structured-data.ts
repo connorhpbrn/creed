@@ -41,7 +41,7 @@ export function organizationSchema() {
     "@id": organizationId(),
     name: SITE_NAME,
     url,
-    logo: `${url}/search-preview.png`,
+    logo: `${url}/opengraph-image.png`,
     description: SITE_DESCRIPTION,
     ...(sameAs.length > 0 ? { sameAs } : {}),
   };
@@ -72,7 +72,7 @@ export function softwareApplicationSchema() {
     description: SITE_DESCRIPTION,
     applicationCategory: "ProductivityApplication",
     operatingSystem: "Web",
-    image: `${url}/search-preview.png`,
+    image: `${url}/opengraph-image.png`,
     publisher: { "@id": organizationId() },
     offers: [
       {

@@ -32,7 +32,6 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-geist-sans);
-  --font-hero-heading: var(--font-eb-garamond);
 }
 
 :root {
@@ -76,6 +75,14 @@
   --creed-accent: #2563eb;
   --creed-accent-hover: #1d4ed8;
 
+  /* Flat fills for the below-hero section panels (replacing the old image
+     plates). These light values are deepened in the .dark block below. */
+  --plate-proposal: #4f9eff;
+  --plate-direct: #ff9c5e;
+  --plate-create: #ff6fc1;
+  --plate-connect: #84d678;
+  --plate-improve: #7fbcff;
+
   /* Numeric stat / status colours. Brightened so `+57 -304`-style stats stay
      legible everywhere; the dark-mode block below picks even brighter shades. */
   --creed-success: #16a34a;
@@ -106,7 +113,6 @@
   --accent-tint-mono: #ebebe6;
   --accent-tint-custom: #ebebe6;
   --font-heading: var(--font-geist-sans);
-  --font-hero-heading: var(--font-eb-garamond);
 }
 
 /* Notion × Obsidian × Cursor inspired dark mode. Designed around a near-black
@@ -146,6 +152,13 @@
   --creed-button-primary-fg: #0e0e0d;
   --creed-button-primary-hover: #cfcfc8;
   --creed-ring-track: rgba(231, 231, 226, 0.16);
+
+  --plate-proposal: #2069d6;
+  --plate-direct: #d46d2d;
+  --plate-create: #d62b8f;
+  --plate-connect: #4bc03b;
+  --plate-improve: #3a86e8;
+
   --creed-success: #4ade80;
   --creed-danger: #f87171;
   --creed-score-good: #4ade80;
@@ -230,17 +243,13 @@
   background: var(--creed-surface-raised);
 }
 
-.font-hero-heading {
-  font-family: var(--font-hero-heading), serif;
-}
-
 .t-hero {
-  font-family: var(--font-hero-heading), serif;
-  font-weight: 500;
-  font-size: clamp(2.2rem, 11vw, 6rem);
-  line-height: 1;
-  letter-spacing: -0.015em;
-  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(2.2rem, 9vw, 3rem);
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  font-feature-settings: "kern" 1;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -248,7 +257,7 @@
 
 @media (min-width: 768px) {
   .t-hero {
-    font-size: clamp(4.4rem, 9vw, 6.6rem);
+    font-size: clamp(2.75rem, 5.5vw, 3.75rem);
   }
 }
 
@@ -296,20 +305,6 @@
   }
 }
 
-.t-lede-hero {
-  font-family: var(--font-sans);
-  font-size: 17px;
-  line-height: 1.55;
-  letter-spacing: -0.005em;
-}
-
-@media (min-width: 768px) {
-  .t-lede-hero {
-    font-size: 22px;
-    line-height: 1.5;
-  }
-}
-
 .t-body {
   font-family: var(--font-sans);
   font-size: 15px;
@@ -337,43 +332,6 @@
   font-weight: 500;
   line-height: 1.2;
   letter-spacing: 0.02em;
-}
-
-.hero-subtext-sheen {
-  color: rgba(255, 255, 255, 0.95);
-  background: linear-gradient(
-    100deg,
-    rgba(255, 255, 255, 0.92) 0%,
-    rgba(255, 255, 255, 0.94) 38%,
-    #ffffff 47%,
-    #ffffff 50%,
-    rgba(255, 255, 255, 0.94) 60%,
-    rgba(255, 255, 255, 0.92) 100%
-  );
-  background-size: 320% 100%;
-  background-position: 120% 50%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: hero-subtext-sheen 5.8s ease-in-out infinite alternate;
-}
-
-@keyframes hero-subtext-sheen {
-  0% {
-    background-position: 120% 50%;
-  }
-
-  100% {
-    background-position: -20% 50%;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hero-subtext-sheen {
-    animation: none;
-    background: none;
-    -webkit-text-fill-color: currentColor;
-  }
 }
 
 /* Onboarding "Copy prompt" button: smoothly cycles through the brand palette

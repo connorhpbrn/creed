@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, EB_Garamond } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import { ThemeProvider } from "@/components/creed/theme-provider";
 import { getSiteUrl } from "@/lib/supabase/env";
@@ -16,25 +16,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const ebGaramond = EB_Garamond({
-  variable: "--font-eb-garamond",
-  display: "swap",
-  subsets: ["latin"],
-  weight: "500",
-  style: "normal",
-});
-
-// Share-card / search-result imagery.
-//
-// - `/search-preview.png` (public/) is what Google's rich results, Slack,
-//   iMessage, LinkedIn, and Facebook fetch for the link preview.
-// - `app/twitter-image.png` is picked up by Next's filesystem convention
-//   and wired into `<meta name="twitter:image">` automatically - we
-//   don't need to reference it here.
-// - `app/favicon.ico` stays the browser-tab favicon via Next's
-//   filesystem convention. We pin it explicitly under `icons.icon` so a
-//   future `app/icon.png` doesn't silently take over and the search-
-//   result favicon Google reads stays the same one users see in tabs.
+// Share-card / search-result imagery, all via Next's filesystem convention:
+// - `app/opengraph-image.png` is wired into `<meta property="og:image">`.
+// - `app/twitter-image.png` is wired into `<meta name="twitter:image">`.
+// - `app/favicon.ico` stays the browser-tab favicon. We pin it explicitly
+//   under `icons.icon` so a future `app/icon.png` doesn't silently take over
+//   and the search-result favicon Google reads stays the one users see in tabs.
 const SITE_DESCRIPTION =
   "Creed is one personal context file that every AI reads before it answers. Written once, kept current by your agents, and portable across every tool you use.";
 
@@ -58,20 +45,11 @@ export const metadata: Metadata = {
     siteName: "Creed",
     title: "Creed - the personal context file every AI reads",
     description: SITE_DESCRIPTION,
-    images: [
-      {
-        url: "/search-preview.png",
-        width: 1000,
-        height: 1000,
-        alt: "Creed. A universal AI context file.",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Creed - the personal context file every AI reads",
     description: SITE_DESCRIPTION,
-    images: ["/search-preview.png"],
   },
 };
 
@@ -90,7 +68,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${ebGaramond.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
         {/* Apply persisted theme before paint so dark mode doesn't flash.

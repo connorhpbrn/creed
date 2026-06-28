@@ -5,9 +5,20 @@ import Image from "next/image";
 import type { StaticImageData } from "next/image";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
-import { CreedAppDemo } from "@/components/marketing/creed-app-demo";
-import { DirectEditDemo, ProposalDemo } from "@/components/marketing/governed-demos";
-import { ConnectDemo, CreateDemo, ReviewDemo } from "@/components/marketing/how-it-works-demos";
+import {
+  DirectEditDemo,
+  ProposalDemo,
+} from "@/components/marketing/governed-demos";
+import {
+  ConnectDemo,
+  CreateDemo,
+  ReviewDemo,
+} from "@/components/marketing/how-it-works-demos";
+import {
+  ReadDemo,
+  ScoreDemo,
+  UpdateDemo,
+} from "@/components/marketing/how-creed-works-demos";
 import { MarketingFooter } from "@/components/marketing/site-chrome";
 import { useLandingAuthState } from "@/components/marketing/use-landing-auth-state";
 import { usePaidStatus } from "@/components/marketing/use-paid-status";
@@ -128,7 +139,7 @@ const brandLogoMap: Record<
 export function BelowHeroSections({ configured }: { configured: boolean }) {
   return (
     <main className="bg-[var(--creed-background)] pb-12">
-      <CreedBentoSection />
+      <HowCreedWorksSection />
       <GovernedCollaborationSection />
       <HowItWorksSection />
       <IntegrationsSection />
@@ -139,38 +150,21 @@ export function BelowHeroSections({ configured }: { configured: boolean }) {
   );
 }
 
-function CreedBentoSection() {
-  return (
-    <section className="px-4 py-20 md:px-10 md:py-24 lg:px-12">
-      <div className="mx-auto max-w-6xl">
-        <SectionHeading
-          headline="The home for your personal context"
-          subline="Everything that makes an AI useful to you, in one place."
-        />
-
-        <div className="mt-10">
-          <CreedAppDemo />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// A bento tile whose media slot is a coloured gradient plate with an
-// interactive demo floating on it, and the explainer copy below. The two
-// cards stretch to equal height via the grid; the plate flexes to fill.
+// A bento tile whose media slot is a flat colour plate with an interactive
+// demo floating on it, and the explainer copy below. The two cards stretch to
+// equal height via the grid; the plate flexes to fill.
 function PlateCard({
-  lightBg,
-  darkBg,
+  plateColor,
   number,
+  numberColor,
   title,
   body,
   square = false,
   children,
 }: {
-  lightBg: string;
-  darkBg: string;
+  plateColor: string;
   number?: string;
+  numberColor?: string;
   title: string;
   body: string;
   square?: boolean;
@@ -179,42 +173,130 @@ function PlateCard({
   return (
     <article
       className={cn(
-        "flex flex-col rounded-[26px] bg-[var(--creed-surface)] p-3 md:rounded-[30px] md:p-4",
-        !square && "h-full"
+        "flex flex-col rounded-2xl bg-[var(--creed-surface)] p-3 md:p-4",
+        !square && "h-full",
       )}
     >
       <div
         className={cn(
-          "relative flex items-center justify-center overflow-hidden rounded-[16px] p-4 sm:p-6 md:rounded-[18px]",
+          "relative flex items-center justify-center overflow-hidden rounded-xl p-4 sm:p-6",
           // Square plate at the 3-up desktop width; auto height (content) when
           // the grid collapses to one column so a full-width square isn't huge.
-          square ? "lg:aspect-square" : "min-h-[380px] flex-1"
+          square ? "lg:aspect-square" : "min-h-[380px] flex-1",
         )}
+        style={{ backgroundColor: plateColor }}
       >
-        <Image
-          src={lightBg}
-          alt=""
-          fill
-          unoptimized
-          sizes="(min-width: 768px) 520px, 100vw"
-          className="object-cover dark:hidden"
-        />
-        <Image
-          src={darkBg}
-          alt=""
-          fill
-          unoptimized
-          sizes="(min-width: 768px) 520px, 100vw"
-          className="hidden object-cover dark:block"
-        />
         <div className="relative w-full">{children}</div>
       </div>
       <div className="mt-4 px-1 md:mt-5">
         <h3 className="t-step text-[var(--creed-text-primary)]">
-          {number ? <span className="mr-2 font-normal text-[var(--creed-text-tertiary)]">{number}</span> : null}
+          {number ? (
+            <span
+              className="mr-2 font-semibold"
+              style={{ color: numberColor ?? "var(--creed-text-tertiary)" }}
+            >
+              {number}
+            </span>
+          ) : null}
           {title}
         </h3>
-        <p className="t-body mt-2.5 text-[var(--creed-text-secondary)]">{body}</p>
+        <p className="t-body mt-2.5 text-[var(--creed-text-secondary)]">
+          {body}
+        </p>
+      </div>
+    </article>
+  );
+}
+
+// The headline storyteller: the Creed loop (read -> update -> refine) told as
+// three alternating rows, each a live auto-playing demo built from the real app
+// UI floating on a flat colour plate. Sits first, above the supporting sections.
+function HowCreedWorksSection() {
+  return (
+    <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
+      <SectionHeading
+        headline="How Creed works"
+        subline="The profile your agents read, update, and keep sharp."
+        className="max-w-[60rem]"
+      />
+
+      <div className="mx-auto mt-12 max-w-5xl space-y-5 md:mt-16 md:space-y-6">
+        <LoopRow
+          title="Every agent reads it first"
+          body="Before it answers, any agent pulls your Creed over MCP, so you never re-explain who you are, what you're building, or how you like to work."
+          plate="var(--plate-connect)"
+        >
+          <ReadDemo />
+        </LoopRow>
+        <LoopRow
+          title="It updates as it learns"
+          body="When an agent notices something durable, it proposes a precise edit. It lands in your Creed as a diff. Approve it and the section updates in place."
+          plate="var(--plate-proposal)"
+          flip
+        >
+          <UpdateDemo />
+        </LoopRow>
+        <LoopRow
+          title="And it sharpens over time"
+          body="Creed scores every section for signal, what's specific and what's thin, so your profile keeps getting sharper without you auditing it."
+          plate="var(--plate-create)"
+        >
+          <ScoreDemo />
+        </LoopRow>
+      </div>
+    </section>
+  );
+}
+
+// One alternating row: explainer copy on one side, the demo on a flat colour
+// plate on the other. `flip` swaps the sides on desktop; both stack text-first
+// on mobile for reading flow.
+function LoopRow({
+  title,
+  body,
+  plate,
+  flip = false,
+  children,
+}: {
+  title: string;
+  body: string;
+  plate: string;
+  flip?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    // Each row is its own surface card (matching the other sections), holding the
+    // explainer copy and the demo side by side.
+    <article className="rounded-2xl bg-[var(--creed-surface)] p-3 md:p-4">
+      <div className="grid items-stretch gap-3 lg:grid-cols-2 lg:gap-4">
+        <div
+          className={cn(
+            "flex flex-col justify-center px-4 py-6 md:px-8",
+            flip ? "lg:order-2" : "lg:order-1",
+          )}
+        >
+          <h3 className="text-[1.55rem] font-medium leading-[1.12] tracking-[-0.025em] text-[var(--creed-text-primary)] md:text-[1.85rem]">
+            {title}
+          </h3>
+          <p className="t-body-lg mt-3.5 max-w-md text-[var(--creed-text-secondary)]">
+            {body}
+          </p>
+        </div>
+        <div className={cn("flex", flip ? "lg:order-1" : "lg:order-2")}>
+          {/* Flat colour plate filling its half of the card, with a uniform
+              min-height across rows so the cards line up. The demo inside hugs
+              its content and is centred, so the Update pill can expand/collapse
+              smoothly without changing the plate's height. `inert` keeps the
+              decorative demos' buttons out of the tab order + a11y tree. */}
+          <div
+            className="flex min-h-[420px] w-full items-center justify-center rounded-[16px] p-5"
+            style={{ backgroundColor: plate }}
+          >
+            <div className="w-full max-w-[440px]" inert>
+              {children}
+            </div>
+          </div>
+        </div>
       </div>
     </article>
   );
@@ -227,21 +309,18 @@ function GovernedCollaborationSection() {
         <SectionHeading
           headline="Review everything or nothing"
           subline="Approve every agent edit, or let them write directly."
-          align="left"
         />
 
         <div className="mt-12 grid items-stretch gap-5 md:grid-cols-2">
           <PlateCard
-            lightBg="/assets/landing/backgrounds/light-proposal-bg.avif"
-            darkBg="/assets/landing/backgrounds/dark-proposal-bg.avif"
+            plateColor="var(--plate-proposal)"
             title="You control what gets remembered."
             body="Agents propose updates in real time, but nothing changes until you approve it."
           >
             <ProposalDemo />
           </PlateCard>
           <PlateCard
-            lightBg="/assets/landing/backgrounds/light-direct-bg.avif"
-            darkBg="/assets/landing/backgrounds/dark-direct-bg.avif"
+            plateColor="var(--plate-direct)"
             title="Let trusted agents write directly."
             body="Agents can update your Creed without review, keeping your context current as you work."
           >
@@ -257,38 +336,38 @@ function HowItWorksSection() {
   return (
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading
-        headline="How Creed works"
-        subline="Set your context once and let your agents keep it sharp."
+        headline="Get started in minutes"
+        subline="Three steps to a profile every agent can read."
         className="max-w-[52rem]"
       />
 
       <div className="mx-auto mt-14 grid max-w-6xl items-start gap-5 lg:grid-cols-3">
         <PlateCard
-          lightBg="/assets/landing/backgrounds/light-create-bg.avif"
-          darkBg="/assets/landing/backgrounds/dark-create-bg.avif"
+          plateColor="var(--plate-create)"
           number="1"
-          title="Create your Creed"
-          body="Answer a few sharp questions and generate your starter profile."
+          numberColor="#ec4899"
+          title="Describe yourself"
+          body="Answer a few quick questions and Creed drafts your starter profile."
           square
         >
           <CreateDemo />
         </PlateCard>
         <PlateCard
-          lightBg="/assets/landing/backgrounds/light-connect-bg.avif"
-          darkBg="/assets/landing/backgrounds/dark-connect-bg.avif"
+          plateColor="var(--plate-connect)"
           number="2"
-          title="Connect your agents"
-          body="Add the MCP server, click Allow, and every agent reads your profile."
+          numberColor="#22c55e"
+          title="Extract your context"
+          body="Pull the context you've already built across your tools into one profile."
           square
         >
           <ConnectDemo />
         </PlateCard>
         <PlateCard
-          lightBg="/assets/landing/backgrounds/light-improve-bg.avif"
-          darkBg="/assets/landing/backgrounds/dark-improve-bg.avif"
+          plateColor="var(--plate-improve)"
           number="3"
-          title="Review what sticks"
-          body="Approve the updates worth keeping and let your profile sharpen over time."
+          numberColor="#2563eb"
+          title="Review and improve"
+          body="See what your starter Creed scores, then keep sharpening it over time."
           square
         >
           <ReviewDemo />
@@ -321,7 +400,7 @@ function StackTile({ brand, label }: { brand: BrandLogoKey; label: string }) {
       <div
         className={cn(
           "text-center text-[12px] font-medium leading-tight tracking-[-0.01em]",
-          STACK_NAME_ACCENT[brand] ?? "text-[var(--creed-text-primary)]"
+          STACK_NAME_ACCENT[brand] ?? "text-[var(--creed-text-primary)]",
         )}
       >
         {label}
@@ -347,12 +426,6 @@ function IntegrationsSection() {
     { label: "v0", brand: "v0" },
     { label: "Custom", brand: "custom" },
   ];
-  const integrations: Array<{ label: string; brand: BrandLogoKey }> = [
-    { label: "GitHub", brand: "github" },
-    { label: "Notion", brand: "notion" },
-    { label: "Obsidian", brand: "obsidian" },
-  ];
-
   return (
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading
@@ -361,26 +434,10 @@ function IntegrationsSection() {
         className="max-w-[64rem]"
       />
 
-      {/* Both grids share the same 7-column track so the Integrations tiles
-          line up directly under the first Agents. Centred under the heading. */}
-      <div className="mx-auto mt-14 grid max-w-[46rem] gap-10">
-        <div>
-          <div className="t-body-lg font-medium text-[var(--creed-text-primary)]">Agents</div>
-          <div className="mt-6 grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-7">
-            {agents.map((item) => (
-              <StackTile key={item.label} brand={item.brand} label={item.label} />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="t-body-lg font-medium text-[var(--creed-text-primary)]">Integrations</div>
-          <div className="mt-6 grid grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-7">
-            {integrations.map((item) => (
-              <StackTile key={item.label} brand={item.brand} label={item.label} />
-            ))}
-          </div>
-        </div>
+      <div className="mx-auto mt-14 grid max-w-[46rem] grid-cols-3 gap-3 sm:grid-cols-5 md:grid-cols-7">
+        {agents.map((item) => (
+          <StackTile key={item.label} brand={item.brand} label={item.label} />
+        ))}
       </div>
     </section>
   );
@@ -398,17 +455,22 @@ function FaqSection() {
           const open = openIndex === index;
 
           return (
-            <div key={item.question} className="border-b border-[var(--creed-border)]">
+            <div
+              key={item.question}
+              className="border-b border-[var(--creed-border)]"
+            >
               <button
                 type="button"
                 onClick={() => setOpenIndex(open ? -1 : index)}
                 className="flex w-full items-center justify-between gap-6 py-7 text-left"
               >
-                <span className="t-body-lg font-medium text-[var(--creed-text-primary)]">{item.question}</span>
+                <span className="t-body-lg font-medium text-[var(--creed-text-primary)]">
+                  {item.question}
+                </span>
                 <ChevronDown
                   className={cn(
                     "h-4 w-4 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-300",
-                    open && "rotate-180"
+                    open && "rotate-180",
                   )}
                 />
               </button>
@@ -416,7 +478,9 @@ function FaqSection() {
               <div
                 className={cn(
                   "grid transition-[grid-template-rows,opacity] duration-300 ease-out",
-                  open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                  open
+                    ? "grid-rows-[1fr] opacity-100"
+                    : "grid-rows-[0fr] opacity-0",
                 )}
               >
                 <div className="overflow-hidden">
@@ -479,7 +543,9 @@ function ClosingCtaSection({ configured }: { configured: boolean }) {
               }}
               className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#2563EB] pl-4 pr-3 text-[14px] font-medium text-white transition-colors hover:bg-[#1D4ED8]"
             >
-              <span className="leading-none">{canResume ? "Resume" : "Get Started"}</span>
+              <span className="leading-none">
+                {canResume ? "Resume" : "Get Started"}
+              </span>
               <ArrowRightIcon
                 ref={closingArrow.iconRef}
                 size={16}
@@ -512,13 +578,13 @@ function SectionHeading({
         centered
           ? "mx-auto max-w-3xl px-2 text-center sm:px-0 md:max-w-[72rem]"
           : "mx-auto max-w-3xl px-2 text-center sm:px-0 md:mx-0 md:max-w-2xl md:text-left",
-        className
+        className,
       )}
     >
       <SectionTitle
         className={cn(
           "t-section text-[var(--creed-text-primary)]",
-          centered ? "justify-center" : "justify-center md:justify-start"
+          centered ? "justify-center" : "justify-center md:justify-start",
         )}
       >
         {headline}
@@ -527,7 +593,7 @@ function SectionHeading({
         <p
           className={cn(
             "t-lede mt-5 max-w-2xl text-[var(--creed-text-tertiary)]",
-            centered ? "mx-auto" : "mx-auto md:mx-0"
+            centered ? "mx-auto" : "mx-auto md:mx-0",
           )}
         >
           {subline}
@@ -567,7 +633,7 @@ function BrandImage({
       <div
         className={cn(
           "flex items-center justify-center rounded-md bg-[var(--creed-surface-raised)] text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--creed-text-tertiary)]",
-          className
+          className,
         )}
         title={typeof asset.src === "string" ? asset.src : label}
       >
@@ -586,7 +652,7 @@ function BrandImage({
         className={cn(
           "pointer-events-none select-none object-contain",
           MONOCHROME_BRANDS.has(brand) && "creed-invert-on-dark",
-          asset.imageClassName
+          asset.imageClassName,
         )}
         draggable={false}
         onError={() => setErrored(true)}
@@ -610,7 +676,13 @@ function SectionTitle({
   const hasExplicitBreak = lines.length > 1;
 
   return (
-    <h2 className={cn("flex flex-wrap", !hasExplicitBreak && "md:flex-nowrap", className)}>
+    <h2
+      className={cn(
+        "flex flex-wrap",
+        !hasExplicitBreak && "md:flex-nowrap",
+        className,
+      )}
+    >
       {lines.map((line, lineIndex) => (
         <span
           key={`${line}-${lineIndex}`}

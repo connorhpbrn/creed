@@ -1,264 +1,115 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import Image from "next/image";
 import Link from "next/link";
+import { SceneryImage } from "@/components/marketing/scenery-image";
 import { BelowHeroSections } from "@/components/marketing/below-hero-sections";
+import { CreedAppDemo } from "@/components/marketing/creed-app-demo";
 import { MarketingHeader } from "@/components/marketing/site-chrome";
 import { useLandingAuthState } from "@/components/marketing/use-landing-auth-state";
 import { usePaidStatus } from "@/components/marketing/use-paid-status";
 import { useOnboardingResume } from "@/components/marketing/use-onboarding-resume";
 import { useAnimatedIconControls } from "@/components/creed/animated-icon-controls";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
-import { splitPreservingLigatures } from "@/lib/landing-text";
-import { cn } from "@/lib/utils";
 
-const lightApostlesImage = "/assets/landing/backgrounds/light-apostles.avif";
-const darkApostlesImage = "/assets/landing/backgrounds/dark-apostles.avif";
+const lightHeroImage = "/assets/landing/scenery/light-hero.png";
+const darkHeroImage = "/assets/landing/scenery/dark-hero.png";
 
 export function LandingHero({ configured }: { configured: boolean }) {
-  const prefersReducedMotion = useReducedMotion();
-  const reduceMotion = Boolean(prefersReducedMotion);
-  const [animationReady, setAnimationReady] = useState(false);
   const authState = useLandingAuthState(configured);
   const paidStatus = usePaidStatus(configured);
   const isPaid = authState === "signed-in" && paidStatus === "paid";
-  // Signed-in, unpaid, with an unfinished onboarding in this browser -> offer to
-  // resume straight into /onboarding rather than the generic "Get Started".
+  // Signed-in, unpaid, with an unfinished onboarding in this browser -> resume
+  // straight into /onboarding rather than the generic "Get Started".
   const canResume = useOnboardingResume(configured) && !isPaid;
   const heroArrow = useAnimatedIconControls(80, undefined, 420);
 
-  useEffect(() => {
-    if (reduceMotion) {
-      setAnimationReady(true);
-      return;
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      setAnimationReady(true);
-    });
-
-    function handlePageShow() {
-      setAnimationReady(false);
-      window.requestAnimationFrame(() => {
-        setAnimationReady(true);
-      });
-    }
-
-    window.addEventListener("pageshow", handlePageShow);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("pageshow", handlePageShow);
-    };
-  }, [reduceMotion]);
+  const ctaHref = isPaid ? "/file" : canResume ? "/onboarding" : "/pricing";
+  const ctaLabel = isPaid ? "Go to app" : canResume ? "Resume" : "Get Started";
 
   return (
     <>
-      <section className="relative bg-[var(--creed-background)] p-2.5 md:p-3">
-        {/* The hero artwork sits inside a rounded card with a thin page-bg
-            gutter, so the image reads as cleanly cropped by the frame rather
-            than fading into the page. */}
-        <div className="relative flex min-h-[calc(100svh-1.25rem)] flex-col overflow-hidden rounded-[28px] bg-[#e9e5de] dark:bg-[#0e0e0d] md:min-h-[calc(100svh-1.5rem)]">
-          {/* Theme-paired hero artwork. Both images render to the DOM but only
-              the active theme's image is shown - keeps Next/Image priority +
-              CDN caching while flipping cleanly with `.dark`. */}
-          <Image
-            src={lightApostlesImage}
-            alt=""
-            fill
+      {/* Header rendered at the page root (not inside the hero section) so its
+          fixed z-50 sits above the app-demo bridge's z-20 - otherwise the demo,
+          a root-level sibling, paints over the header trapped in the hero's
+          z-10 stacking context. */}
+      <MarketingHeader configured={configured} scrolled={false} />
+      <section className="relative bg-[var(--creed-background)]">
+        {/* Full-bleed hero art (no framed card). The page background fades over
+            the lower edge so the app demo below reads as crossing the seam. */}
+        <div className="relative flex min-h-[94svh] flex-col overflow-hidden">
+          {/* Theme-paired hero art (light/dark). SceneryImage still self-heals to
+              a labelled placeholder if a file is ever missing. */}
+          <SceneryImage
+            src={lightHeroImage}
+            fileName="light-hero.png"
+            label="Light hero"
             priority
-            // Already hand-optimized AVIF: skip Next's optimizer (no /_next/image
-            // re-encode) and serve the static file, which the immutable cache
-            // header keeps so repeat visits paint instantly.
-            unoptimized
-            sizes="100vw"
-            className="object-cover object-center dark:hidden"
+            className="dark:hidden"
           />
-          <Image
-            src={darkApostlesImage}
-            alt=""
-            fill
-            unoptimized
-            sizes="100vw"
-            className="hidden object-cover object-center dark:block"
+          <SceneryImage
+            src={darkHeroImage}
+            fileName="dark-hero.png"
+            label="Dark hero"
+            hint="landscape, ~16:9"
+            className="hidden dark:block"
           />
 
-          {/* Top wash keeps the white header + headline legible over the art. */}
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,31,60,0.16)_0%,rgba(15,31,60,0.08)_28%,rgba(15,31,60,0.05)_56%,rgba(255,255,255,0)_76%)] dark:bg-[linear-gradient(180deg,rgba(0,0,0,0.32)_0%,rgba(0,0,0,0.18)_28%,rgba(0,0,0,0.08)_56%,rgba(0,0,0,0)_76%)]" />
+          {/* Top wash keeps the header + headline legible over the art. */}
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,31,60,0.18)_0%,rgba(15,31,60,0.08)_30%,rgba(15,31,60,0)_60%)] dark:bg-[linear-gradient(180deg,rgba(0,0,0,0.34)_0%,rgba(0,0,0,0.16)_30%,rgba(0,0,0,0)_60%)]" />
+
+          {/* Bottom fade: melt the art into the page background. Eased multi-stop
+              gradient (slow onset) so the transition reads smooth, not banded. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-[linear-gradient(180deg,rgba(249,249,248,0)_0%,rgba(249,249,248,0.08)_30%,rgba(249,249,248,0.34)_55%,rgba(249,249,248,0.72)_76%,rgba(249,249,248,0.94)_90%,rgba(249,249,248,1)_100%)] dark:bg-[linear-gradient(180deg,rgba(14,14,13,0)_0%,rgba(14,14,13,0.08)_30%,rgba(14,14,13,0.34)_55%,rgba(14,14,13,0.72)_76%,rgba(14,14,13,0.94)_90%,rgba(14,14,13,1)_100%)]" />
 
           <div className="relative z-10 flex flex-1 flex-col px-6 py-5 md:px-10 md:py-7">
-            <MarketingHeader configured={configured} scrolled={false} />
-
-            <div className="flex flex-1 items-start justify-center pt-[16vh] text-center md:pt-[13vh]">
+            <div className="flex flex-1 items-start justify-center pt-[13vh] text-center md:pt-[12vh]">
               <div className="w-full max-w-3xl">
-                <AnimatedLandingHeadline
-                  animate={animationReady}
-                  simplifyMotion={reduceMotion}
-                  text={"Your context file\nfor all agents"}
-                  className="t-hero justify-center text-white"
-                />
+                <h1 className="t-hero justify-center text-white">
+                  {["Your context file", "for all agents"].map((line) => (
+                    <span key={line} className="block whitespace-nowrap">
+                      {line}
+                    </span>
+                  ))}
+                </h1>
 
-                <motion.div
-                  initial={false}
-                  animate={
-                    animationReady
-                      ? { opacity: 1, scaleX: 1, transformOrigin: "center" }
-                      : { opacity: 0, scaleX: 0, transformOrigin: "center" }
-                  }
-                  transition={{ delay: 1.55, duration: 0.54, ease: [0.16, 1, 0.3, 1] }}
-                  className="mx-auto mt-7 h-px w-80 transform-gpu bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,0.34)_18%,rgba(255,255,255,0.34)_82%,rgba(255,255,255,0))]"
-                  style={{ willChange: "transform, opacity" }}
-                />
+                <p className="mx-auto mt-5 max-w-xl text-[15px] font-semibold text-white/90 md:mt-6 md:whitespace-nowrap md:text-[18px]">
+                  One markdown file every AI reads before it answers.
+                </p>
 
-                <AnimatedFadeIn
-                  animate={animationReady}
-                  delay={1.95}
-                  simplifyMotion={reduceMotion}
-                  className="hero-subtext-sheen t-lede-hero mx-auto mt-6 max-w-[21rem] font-medium text-white/90 md:mt-7 md:max-w-2xl"
-                >
-                  Your personal context, written once and kept polished by your agents. Every AI knows
-                  you instantly.
-                </AnimatedFadeIn>
-
-                <AnimatedFadeIn
-                  animate={animationReady}
-                  delay={2.18}
-                  simplifyMotion={reduceMotion}
-                  className="mt-7 flex justify-center"
-                >
-                  {isPaid ? (
-                    <Link
-                      href="/file"
-                      onMouseEnter={heroArrow.start}
-                      onMouseLeave={heroArrow.settle}
-                      onPointerDown={(event) => {
-                        if (event.pointerType !== "mouse") heroArrow.start();
-                      }}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-white pl-4 pr-3 text-[14px] font-medium text-[#19345f] transition-colors hover:bg-[#f6f7fb]"
-                    >
-                      <span className="leading-none">Go to app</span>
-                      <ArrowRightIcon
-                        ref={heroArrow.iconRef}
-                        size={16}
-                        className="inline-flex shrink-0 items-center justify-center leading-none"
-                      />
-                    </Link>
-                  ) : (
-                    <Link
-                      href={canResume ? "/onboarding" : "/pricing"}
-                      onMouseEnter={heroArrow.start}
-                      onMouseLeave={heroArrow.settle}
-                      onPointerDown={(event) => {
-                        if (event.pointerType !== "mouse") heroArrow.start();
-                      }}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-white pl-4 pr-3 text-[14px] font-medium text-[#19345f] transition-colors hover:bg-[#f6f7fb]"
-                    >
-                      <span className="leading-none">{canResume ? "Resume" : "Get Started"}</span>
-                      <ArrowRightIcon
-                        ref={heroArrow.iconRef}
-                        size={16}
-                        className="inline-flex shrink-0 items-center justify-center leading-none"
-                      />
-                    </Link>
-                  )}
-                </AnimatedFadeIn>
+                <div className="mt-7 flex justify-center">
+                  <Link
+                    href={ctaHref}
+                    onMouseEnter={heroArrow.start}
+                    onMouseLeave={heroArrow.settle}
+                    onPointerDown={(event) => {
+                      if (event.pointerType !== "mouse") heroArrow.start();
+                    }}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-white pl-4 pr-3 text-[14px] font-medium text-[#19345f] transition-colors hover:bg-[#f6f7fb]"
+                  >
+                    <span className="leading-none">{ctaLabel}</span>
+                    <ArrowRightIcon
+                      ref={heroArrow.iconRef}
+                      size={16}
+                      className="inline-flex shrink-0 items-center justify-center leading-none"
+                    />
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
+      {/* The app demo bridges the hero and the first content section: pulled up
+          so its top overlaps the faded hero art and its body extends into the
+          page below (like a hero product shot crossing the seam). */}
+      <div className="relative z-20 -mt-[42vh] px-4 md:-mt-[34vh] md:px-10 lg:px-12">
+        <div className="mx-auto max-w-6xl">
+          <CreedAppDemo />
+        </div>
+      </div>
+
       <BelowHeroSections configured={configured} />
     </>
-  );
-}
-
-function AnimatedLandingHeadline({
-  animate,
-  simplifyMotion,
-  text,
-  className,
-}: {
-  animate: boolean;
-  simplifyMotion?: boolean;
-  text: string;
-  className?: string;
-}) {
-  const lines = useMemo(() => text.split("\n"), [text]);
-
-  if (simplifyMotion) {
-    return <h1 className={cn(className)}>{text.split("\n").map((line, index) => <span key={`${line}-${index}`} className="block whitespace-nowrap">{line}</span>)}</h1>;
-  }
-
-  return (
-    <motion.h1
-      initial={false}
-      animate={animate ? "visible" : "hidden"}
-      variants={{
-        hidden: {},
-        visible: {
-          transition: {
-            staggerChildren: 0.042,
-          },
-        },
-      }}
-      className={cn("flex flex-wrap transform-gpu", className)}
-      style={{ willChange: "transform, opacity" }}
-    >
-      {lines.map((line, lineIndex) => (
-        <span key={`${line}-${lineIndex}`} className="basis-full whitespace-nowrap">
-          {splitPreservingLigatures(line).map((glyph, index) => (
-            <motion.span
-              key={`${glyph}-${lineIndex}-${index}`}
-              variants={{
-                hidden: { opacity: 0, filter: "blur(10px)", y: 10 },
-                visible: { opacity: 1, filter: "blur(0px)", y: 0 },
-              }}
-              transition={{ duration: 0.62, ease: [0.16, 1, 0.3, 1] }}
-              className="inline-block whitespace-pre"
-              style={{ willChange: "transform, opacity, filter" }}
-            >
-              {glyph === " " ? "\u00A0" : glyph}
-            </motion.span>
-          ))}
-        </span>
-      ))}
-    </motion.h1>
-  );
-}
-
-function AnimatedFadeIn({
-  animate,
-  children,
-  className,
-  delay,
-  simplifyMotion,
-}: {
-  animate: boolean;
-  children: ReactNode;
-  className?: string;
-  delay: number;
-  simplifyMotion?: boolean;
-}) {
-  if (simplifyMotion) {
-    return <div className={className}>{children}</div>;
-  }
-
-  return (
-    <motion.div
-      initial={false}
-      animate={
-        animate
-          ? { opacity: 1, filter: "blur(0px)", y: 0 }
-          : { opacity: 0, filter: "blur(10px)", y: 10 }
-      }
-      transition={{ delay, duration: 0.62, ease: [0.16, 1, 0.3, 1] }}
-      className={className}
-      style={{ willChange: "transform, opacity, filter" }}
-    >
-      {children}
-    </motion.div>
   );
 }

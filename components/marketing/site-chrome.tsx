@@ -7,10 +7,10 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import Image from "next/image";
+import { SceneryImage } from "@/components/marketing/scenery-image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, Star } from "lucide-react";
+import { ChevronDown, ChevronLeft, Star } from "lucide-react";
 import { MenuIcon } from "@/components/ui/menu";
 import { CreedWordmark } from "@/components/creed/brand";
 import { SystemStatusPill } from "@/components/marketing/system-status";
@@ -27,24 +27,42 @@ import {
   TWITTER_URL,
 } from "@/lib/branding";
 
-const navItems = [
-  { label: "Examples", href: "/examples" },
-  { label: "Pricing", href: "/pricing" },
-  { label: "Context", href: "/context" },
-] as const;
+type NavItem = { label: string; href: string };
 
-const lightApostlesImage = "/assets/landing/backgrounds/light-apostles.avif";
-const darkApostlesImage = "/assets/landing/backgrounds/dark-apostles.avif";
+// Header nav groups. Mirror the footer's Product / Legal / Resources columns so
+// the two stay in lockstep; each renders as a dropdown in the desktop chrome.
+const navGroups: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Product",
+    items: [
+      { label: "Pricing", href: "/pricing" },
+      { label: "Examples", href: "/examples" },
+    ],
+  },
+  {
+    label: "Legal",
+    items: [
+      { label: "Privacy", href: "/privacy" },
+      { label: "Terms", href: "/terms" },
+      { label: "Stack", href: "/stack" },
+    ],
+  },
+  {
+    label: "Resources",
+    items: [
+      { label: "Docs", href: "/docs" },
+      { label: "Context", href: "/context" },
+      { label: "Contact", href: CONTACT_MAILTO },
+    ],
+  },
+];
 
-// Shared style for the right-aligned white text links in the mobile menu and the
-// Start dropdown. Keeps the desktop and mobile menus in lockstep.
-const MENU_TEXT_LINK =
-  "flex h-9 items-center justify-end rounded-md px-3.5 text-[14px] font-medium leading-none text-white transition-colors duration-200 hover:text-white/55";
+const lightHeroImage = "/assets/landing/scenery/light-hero.png";
+const darkHeroImage = "/assets/landing/scenery/dark-hero.png";
 
 // Shared hero banner for the inner marketing pages (pricing, docs, privacy,
-// terms, stack). Same framed-card treatment as the landing hero, just shorter:
-// the artwork sits inside a rounded card with a thin page-bg gutter, cropped
-// cleanly by the frame instead of fading into the page.
+// terms, stack). Full-bleed art (no framed card) with the page background
+// fading over the lower edge, matching the landing hero treatment.
 export function MarketingHeroBanner({
   configured,
   scrolled,
@@ -53,34 +71,31 @@ export function MarketingHeroBanner({
   scrolled: boolean;
 }) {
   return (
-    <section className="relative bg-[var(--creed-background)] p-2.5 md:p-3">
-      <div className="relative h-[14.5rem] overflow-hidden rounded-[24px] bg-[#e9e5de] dark:bg-[#0e0e0d] md:h-[17.25rem]">
-        {/* The image covers a reference box matching the landing hero card
-            (same width + height), so the artwork scales identically; the
-            banner just windows the top slice of it. */}
-        <div className="absolute inset-x-0 top-0 h-[calc(100svh-1.25rem)] md:h-[calc(100svh-1.5rem)]">
-          <Image
-            src={lightApostlesImage}
-            alt=""
-            fill
+    <section className="relative bg-[var(--creed-background)]">
+      <div className="relative h-[15rem] overflow-hidden md:h-[18rem]">
+        {/* The image covers a reference box matching the landing hero (same
+            full-bleed height) so the artwork scales identically; the banner
+            just windows the top slice of it. */}
+        <div className="absolute inset-x-0 top-0 h-[94svh]">
+          <SceneryImage
+            src={lightHeroImage}
+            fileName="light-hero.png"
+            label="Light hero"
             priority
-            // Pre-optimized AVIF: serve the static file directly (cached
-            // immutably) instead of re-encoding through /_next/image.
-            unoptimized
-            sizes="100vw"
-            className="object-cover object-center dark:hidden"
+            className="dark:hidden"
           />
-          <Image
-            src={darkApostlesImage}
-            alt=""
-            fill
-            unoptimized
-            sizes="100vw"
-            className="hidden object-cover object-center dark:block"
+          <SceneryImage
+            src={darkHeroImage}
+            fileName="dark-hero.png"
+            label="Dark hero"
+            className="hidden dark:block"
           />
         </div>
         {/* Top wash keeps the white header legible over the art. */}
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,31,60,0.16)_0%,rgba(15,31,60,0.08)_28%,rgba(15,31,60,0.05)_56%,rgba(255,255,255,0)_76%)] dark:bg-[linear-gradient(180deg,rgba(0,0,0,0.32)_0%,rgba(0,0,0,0.18)_28%,rgba(0,0,0,0.08)_56%,rgba(0,0,0,0)_76%)]" />
+        {/* Bottom fade melts the art into the page background. Eased multi-stop
+            gradient so the transition reads smooth, not banded. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-[linear-gradient(180deg,rgba(249,249,248,0)_0%,rgba(249,249,248,0.08)_30%,rgba(249,249,248,0.34)_55%,rgba(249,249,248,0.72)_76%,rgba(249,249,248,0.94)_90%,rgba(249,249,248,1)_100%)] dark:bg-[linear-gradient(180deg,rgba(14,14,13,0)_0%,rgba(14,14,13,0.08)_30%,rgba(14,14,13,0.34)_55%,rgba(14,14,13,0.72)_76%,rgba(14,14,13,0.94)_90%,rgba(14,14,13,1)_100%)]" />
         <div className="relative z-10 flex flex-col px-6 py-5 md:px-10 md:py-7">
           <MarketingHeader configured={configured} scrolled={scrolled} />
         </div>
@@ -99,10 +114,26 @@ export function MarketingHeader({
   void scrolled;
   const authState = useLandingAuthState(configured);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const mobileEnterArrow = useAnimatedIconControls(80, undefined, 420);
+  // Which mobile dropdown row is expanded (one at a time).
+  const [openMobileGroup, setOpenMobileGroup] = useState<string | null>(null);
+  // Sticky-header morph: once scrolled past the hero's top edge the header
+  // condenses into a translucent rounded bar (in-app surface material).
+  const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
-    if (!mobileMenuOpen) return;
+    function onScroll() {
+      setIsScrolled(window.scrollY > 64);
+    }
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      setOpenMobileGroup(null);
+      return;
+    }
 
     function closeOnScroll() {
       setMobileMenuOpen(false);
@@ -113,7 +144,32 @@ export function MarketingHeader({
   }, [mobileMenuOpen]);
 
   return (
-    <header className="relative mx-auto flex w-full max-w-[760px] items-center justify-between">
+    <div className="pointer-events-none fixed inset-x-0 top-0 z-50 px-3 pt-3 md:px-4 md:pt-4">
+      <div
+        className={cn(
+          "pointer-events-auto relative mx-auto w-full transition-[max-width] duration-300 ease-out",
+          isScrolled ? "max-w-[720px]" : "max-w-[880px]",
+        )}
+      >
+        {/* Translucent bar material on its OWN layer behind the content. It must
+            not wrap the nav, because a backdrop-filter is canceled inside a
+            backdrop-filter ancestor - keeping the blur a sibling (not a parent)
+            of the dropdown blurs lets both render. */}
+        <div
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute inset-0 rounded-2xl transition-opacity duration-300 ease-out",
+            isScrolled
+              ? "bg-[color:var(--creed-surface)]/80 opacity-100 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.22)] backdrop-blur-md"
+              : "opacity-0",
+          )}
+        />
+        <header
+          className={cn(
+            "relative flex w-full items-center justify-between transition-[padding] duration-300 ease-out",
+            isScrolled ? "py-1.5 pl-4 pr-1.5" : "px-1 py-1",
+          )}
+        >
       <div className="flex items-center md:hidden">
         <Link
           href="/home"
@@ -123,7 +179,7 @@ export function MarketingHeader({
         >
           <CreedWordmark
             className="ml-1.5"
-            imageClassName="invert brightness-0"
+            imageClassName={isScrolled ? undefined : "invert brightness-0"}
           />
         </Link>
       </div>
@@ -133,19 +189,24 @@ export function MarketingHeader({
         aria-label="Creed home"
         className="hidden shrink-0 transition-opacity duration-200 hover:opacity-60 md:block"
       >
-        <CreedWordmark className="ml-0" imageClassName="invert brightness-0" />
+        <CreedWordmark className="ml-0" imageClassName={isScrolled ? undefined : "invert brightness-0"} />
       </Link>
 
       <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
-        {navItems.map((item) => (
-          <HeaderTextButton key={item.label} href={item.href}>
-            {item.label}
-          </HeaderTextButton>
+        {navGroups.map((group) => (
+          <HeaderDropdown
+            key={group.label}
+            label={group.label}
+            items={group.items}
+            align="left"
+            scrolled={isScrolled}
+          />
         ))}
       </nav>
 
       <HeaderAuthActions
         authState={authState}
+        scrolled={isScrolled}
         mobileMenuOpen={mobileMenuOpen}
         setMobileMenuOpen={setMobileMenuOpen}
       />
@@ -188,112 +249,112 @@ export function MarketingHeader({
               }}
             />
 
+            {/* No filter animation here: a lingering filter (even blur(0px))
+                forms a backdrop root that cancels the per-row backdrop-blur on
+                the expanded sub-items below. */}
             <motion.div
-              initial={{ opacity: 0, y: -10, filter: "blur(8px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -10, filter: "blur(8px)" }}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute right-4 top-[4.65rem] flex w-[8.25rem] flex-col items-end gap-2 text-white"
+              className="absolute right-4 top-[4.65rem] flex flex-col items-end gap-2 text-white"
             >
-              {navItems.map((item, index) => (
+              {navGroups.map((group, gIndex) => (
                 <motion.div
-                  key={item.label}
+                  key={group.label}
                   className="relative z-10"
                   initial={{ opacity: 0, x: 10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  // Close is the open animation in reverse: same x-slide, but
-                  // the last item to appear is the first to leave.
                   exit={{
                     opacity: 0,
                     x: 10,
                     transition: {
                       duration: 0.24,
-                      delay: (navItems.length - 1 - index) * 0.04 + 0.04,
+                      delay: (navGroups.length + 1 - gIndex) * 0.04,
                       ease: [0.16, 1, 0.3, 1],
                     },
                   }}
                   transition={{
                     duration: 0.24,
-                    delay: 0.04 + index * 0.04,
+                    delay: 0.04 + gIndex * 0.05,
                     ease: [0.16, 1, 0.3, 1],
                   }}
                 >
-                  <Link
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={MENU_TEXT_LINK}
-                  >
-                    {item.label}
-                  </Link>
+                  <MobileNavRow
+                    label={group.label}
+                    items={group.items}
+                    open={openMobileGroup === group.label}
+                    onToggle={() =>
+                      setOpenMobileGroup((cur) =>
+                        cur === group.label ? null : group.label,
+                      )
+                    }
+                    onNavigate={() => setMobileMenuOpen(false)}
+                  />
                 </motion.div>
               ))}
 
-              <motion.div
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                // Appears last, so it leaves first when closing.
-                exit={{
-                  opacity: 0,
-                  x: 10,
-                  transition: {
+              {authState !== "loading" ? (
+                <motion.div
+                  className="relative z-10"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{
+                    opacity: 0,
+                    x: 10,
+                    transition: { duration: 0.24, delay: 0.04, ease: [0.16, 1, 0.3, 1] },
+                  }}
+                  transition={{
                     duration: 0.24,
-                    delay: 0,
+                    delay: 0.04 + navGroups.length * 0.05,
                     ease: [0.16, 1, 0.3, 1],
-                  },
-                }}
-                transition={{
-                  duration: 0.24,
-                  delay: 0.18,
-                  ease: [0.16, 1, 0.3, 1],
-                }}
-                className="relative z-10 flex flex-col items-end gap-2"
-              >
-                {authState === "loading" ? null : authState === "signed-in" ? (
-                  <Link
-                    href="/file"
-                    onClick={() => setMobileMenuOpen(false)}
-                    onMouseEnter={mobileEnterArrow.start}
-                    onMouseLeave={mobileEnterArrow.settle}
-                    onPointerDown={(event) => {
-                      if (event.pointerType !== "mouse") {
-                        mobileEnterArrow.start();
-                      }
-                    }}
-                    className={cn(MENU_TEXT_LINK, "gap-1.5")}
-                  >
-                    Continue
-                    <ArrowRightIcon ref={mobileEnterArrow.iconRef} className="h-3.5 w-3.5" size={14} />
-                  </Link>
-                ) : (
-                  <>
-                    <Link
-                      href="/login"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={MENU_TEXT_LINK}
-                    >
-                      Login
-                    </Link>
-                    <Link
-                      href="/signup"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={MENU_TEXT_LINK}
-                    >
-                      Sign up
-                    </Link>
-                  </>
-                )}
-                {authState !== "loading" ? (
-                  <GitHubStarButton
+                  }}
+                >
+                  <MobileNavRow
+                    label="Start"
+                    items={
+                      authState === "signed-in"
+                        ? [{ label: "Continue", href: "/file" }]
+                        : [
+                            { label: "Login", href: "/login" },
+                            { label: "Sign up", href: "/signup" },
+                          ]
+                    }
+                    open={openMobileGroup === "Start"}
+                    onToggle={() =>
+                      setOpenMobileGroup((cur) => (cur === "Start" ? null : "Start"))
+                    }
                     onNavigate={() => setMobileMenuOpen(false)}
-                    className="mt-1"
                   />
-                ) : null}
-              </motion.div>
+                </motion.div>
+              ) : null}
+
+              {authState !== "loading" ? (
+                <motion.div
+                  className="relative z-10 mt-1"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{
+                    opacity: 0,
+                    x: 10,
+                    transition: { duration: 0.24, delay: 0, ease: [0.16, 1, 0.3, 1] },
+                  }}
+                  transition={{
+                    duration: 0.24,
+                    delay: 0.04 + (navGroups.length + 1) * 0.05,
+                    ease: [0.16, 1, 0.3, 1],
+                  }}
+                >
+                  <GitHubStarButton onNavigate={() => setMobileMenuOpen(false)} />
+                </motion.div>
+              ) : null}
             </motion.div>
           </div>
         ) : null}
       </AnimatePresence>
-    </header>
+        </header>
+      </div>
+    </div>
   );
 }
 
@@ -301,21 +362,12 @@ export function MarketingHeader({
 // so both the chrome and the pricing card share the same auth listener
 // rather than each spinning up their own.
 
-// GitHub octocat mark (same icon as the footer), sized for the star pill.
+// Circular (solid) GitHub mark for the star pill - the filled logo rather than
+// the line-art octocat.
 function GitHubMark({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" />
-      <path d="M9 18c-4.51 2-5-2-7-2" />
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className={className}>
+      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
     </svg>
   );
 }
@@ -334,9 +386,11 @@ function formatStarCount(stars: number | null): string {
 function GitHubStarButton({
   className,
   onNavigate,
+  scrolled,
 }: {
   className?: string;
   onNavigate?: () => void;
+  scrolled?: boolean;
 }) {
   const stars = useGitHubStars();
   return (
@@ -347,7 +401,10 @@ function GitHubStarButton({
       aria-label="Star Creed on GitHub"
       onClick={onNavigate}
       className={cn(
-        "inline-flex h-9 items-center gap-2.5 rounded-md bg-white px-3 text-[14px] font-medium text-[#19345f] shadow-none transition-colors hover:bg-[#f6f7fb]",
+        "inline-flex h-9 items-center gap-2.5 rounded-md px-3 text-[14px] font-medium shadow-none transition-colors duration-300",
+        scrolled
+          ? "bg-[var(--creed-accent)] text-white hover:bg-[var(--creed-accent-hover)]"
+          : "bg-white text-[#19345f] hover:bg-[#f6f7fb]",
         className,
       )}
     >
@@ -362,12 +419,26 @@ function GitHubStarButton({
   );
 }
 
-// "Start" dropdown for the signed-out desktop chrome: a text trigger that opens
-// Login / Sign up in the same blurred, text-button style as the mobile nav.
-// Closes on outside click or scroll.
-function StartDropdown() {
+// A header dropdown: a text trigger that opens a small blurred menu of links in
+// the same style as the mobile nav. Used for the centre nav groups (Product /
+// Legal / Resources, align left) and the signed-out "Start" menu (Login / Sign
+// up, align right). Closes on outside click, scroll, or Escape.
+function HeaderDropdown({
+  label,
+  items,
+  align = "left",
+  scrolled,
+  className,
+}: {
+  label: string;
+  items: NavItem[];
+  align?: "left" | "right";
+  scrolled?: boolean;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+  const alignRight = align === "right";
 
   useEffect(() => {
     if (!open) return;
@@ -392,21 +463,29 @@ function StartDropdown() {
     };
   }, [open]);
 
-  const items = [
-    { label: "Login", href: "/login" },
-    { label: "Sign up", href: "/signup" },
-  ];
+  const linkClass = cn(
+    "flex h-9 items-center rounded-md px-3.5 text-[14px] font-medium leading-none transition-colors duration-200",
+    scrolled
+      ? "text-[var(--creed-text-primary)] hover:text-[var(--creed-text-secondary)]"
+      : "text-white hover:text-white/55",
+    alignRight ? "justify-end" : "justify-start",
+  );
 
   return (
-    <div ref={ref} className="relative hidden md:block">
+    <div ref={ref} className={cn("relative", className)}>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="inline-flex h-9 items-center gap-1 rounded-md px-3.5 text-[14px] font-medium text-white transition-colors duration-200 hover:text-white/55"
+        className={cn(
+          "inline-flex h-9 items-center gap-1 rounded-md px-3.5 text-[14px] font-medium transition-colors duration-200",
+          scrolled
+            ? "text-[var(--creed-text-primary)] hover:text-[var(--creed-text-secondary)]"
+            : "text-white hover:text-white/55",
+        )}
       >
-        Start
+        {label}
         <ChevronDown
           className={cn(
             "h-3.5 w-3.5 transition-transform duration-200",
@@ -420,20 +499,33 @@ function StartDropdown() {
           <>
             {/* Localized blur behind the menu (sibling of the menu, not a child:
                 motion's filter animation creates a stacking context that would
-                nuke a child's backdrop-filter). A radial mask melts it in. */}
+                nuke a child's backdrop-filter). A feathered mask melts it in. */}
             <motion.div
               aria-hidden
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-              className="pointer-events-none absolute right-0 top-[2.6rem] h-[7.5rem] w-[11rem] backdrop-blur-[6px]"
+              className={cn(
+                "pointer-events-none absolute top-[1.6rem] w-[11rem] backdrop-blur-[7px]",
+                alignRight ? "-right-4" : "-left-4",
+              )}
               style={{
-                WebkitBackdropFilter: "blur(6px)",
+                // Centred on the menu's bounding box (top-[2.6rem], w-[9rem], the
+                // h-9 rows with gap-2) with ~1rem of feather padding all round, so
+                // the soft mask edges fade out beyond the items, not across them.
+                height: `${items.length * 2.75 + 1.5}rem`,
+                WebkitBackdropFilter: "blur(7px)",
+                // Feathered rectangle (solid centre, soft edges on every side) with
+                // a wide, gradual fade so the blur melts into the hero instead of
+                // ending on a hard edge. Wider feather than the mobile menu since
+                // this is a tall vertical stack.
                 WebkitMaskImage:
-                  "radial-gradient(ellipse 70% 70% at 72% 45%, black 35%, transparent 80%)",
+                  "linear-gradient(to right, transparent 0%, #000 15%, #000 85%, transparent 100%), linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%)",
                 maskImage:
-                  "radial-gradient(ellipse 70% 70% at 72% 45%, black 35%, transparent 80%)",
+                  "linear-gradient(to right, transparent 0%, #000 15%, #000 85%, transparent 100%), linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%)",
+                maskComposite: "intersect",
+                WebkitMaskComposite: "source-in",
               }}
             />
             <motion.div
@@ -441,17 +533,20 @@ function StartDropdown() {
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               exit={{ opacity: 0, y: -10, filter: "blur(8px)" }}
               transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute right-0 top-[2.6rem] z-10 flex w-[8.5rem] flex-col items-end gap-2 text-white"
+              className={cn(
+                "absolute top-[2.6rem] z-10 flex w-[9rem] flex-col gap-2 text-white",
+                alignRight ? "right-0 items-end" : "left-0 items-start",
+              )}
             >
               {items.map((item, index) => (
                 <motion.div
                   key={item.label}
                   className="w-full"
-                  initial={{ opacity: 0, x: 10 }}
+                  initial={{ opacity: 0, x: alignRight ? 10 : -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{
                     opacity: 0,
-                    x: 10,
+                    x: alignRight ? 10 : -10,
                     transition: {
                       duration: 0.2,
                       delay: (items.length - 1 - index) * 0.04,
@@ -467,7 +562,7 @@ function StartDropdown() {
                   <Link
                     href={item.href}
                     onClick={() => setOpen(false)}
-                    className={MENU_TEXT_LINK}
+                    className={linkClass}
                   >
                     {item.label}
                   </Link>
@@ -483,10 +578,12 @@ function StartDropdown() {
 
 function HeaderAuthActions({
   authState,
+  scrolled,
   mobileMenuOpen,
   setMobileMenuOpen,
 }: {
   authState: "loading" | "signed-in" | "signed-out";
+  scrolled?: boolean;
   mobileMenuOpen: boolean;
   setMobileMenuOpen: Dispatch<SetStateAction<boolean>>;
 }) {
@@ -501,7 +598,12 @@ function HeaderAuthActions({
     <button
       type="button"
       onClick={() => setMobileMenuOpen((value) => !value)}
-      className="inline-flex size-9 items-center justify-center rounded-md text-white outline-none focus-visible:ring-2 focus-visible:ring-white/20 md:hidden"
+      className={cn(
+        "inline-flex size-9 items-center justify-center rounded-md outline-none focus-visible:ring-2 md:hidden",
+        scrolled
+          ? "text-[var(--creed-text-primary)] focus-visible:ring-black/10"
+          : "text-white focus-visible:ring-white/20",
+      )}
       aria-label={
         mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"
       }
@@ -522,7 +624,12 @@ function HeaderAuthActions({
       <div className="flex items-center gap-2">
         <Link
           href="/file"
-          className="hidden h-9 items-center gap-1.5 rounded-md px-3.5 text-[14px] font-medium text-white transition-colors duration-200 hover:text-white/55 md:inline-flex"
+          className={cn(
+            "hidden h-9 items-center gap-1.5 rounded-md px-3.5 text-[14px] font-medium transition-colors duration-200 md:inline-flex",
+            scrolled
+              ? "text-[var(--creed-text-primary)] hover:text-[var(--creed-text-secondary)]"
+              : "text-white hover:text-white/55",
+          )}
           onMouseEnter={enterArrow.start}
           onMouseLeave={enterArrow.settle}
         >
@@ -533,7 +640,7 @@ function HeaderAuthActions({
             size={14}
           />
         </Link>
-        <GitHubStarButton className="hidden md:inline-flex" />
+        <GitHubStarButton scrolled={scrolled} className="hidden md:inline-flex" />
         {mobileLinksTrigger}
       </div>
     );
@@ -544,32 +651,103 @@ function HeaderAuthActions({
   // page itself.
   return (
     <div className="flex items-center gap-2">
-      <StartDropdown />
-      <GitHubStarButton className="hidden md:inline-flex" />
+      <HeaderDropdown
+        label="Start"
+        items={[
+          { label: "Login", href: "/login" },
+          { label: "Sign up", href: "/signup" },
+        ]}
+        align="right"
+        scrolled={scrolled}
+        className="hidden md:block"
+      />
+      <GitHubStarButton scrolled={scrolled} className="hidden md:inline-flex" />
       {mobileLinksTrigger}
     </div>
   );
 }
 
-function HeaderTextButton({
-  children,
-  href,
-  className,
+// One row of the mobile menu: a dropdown trigger whose chevron sits to the
+// right of the label and points left when closed, rotating to point right when
+// open as the sub-links slide in to the left of the label.
+function MobileNavRow({
+  label,
+  items,
+  open,
+  onToggle,
+  onNavigate,
 }: {
-  children: React.ReactNode;
-  href: string;
-  className?: string;
+  label: string;
+  items: NavItem[];
+  open: boolean;
+  onToggle: () => void;
+  onNavigate: () => void;
 }) {
   return (
-    <Link
-      href={href}
-      className={cn(
-        "inline-flex h-9 items-center rounded-md px-3.5 text-[14px] font-medium text-white transition-colors duration-200 hover:text-white/55",
-        className,
-      )}
-    >
-      {children}
-    </Link>
+    <div className="flex items-center gap-2">
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div
+            key="items"
+            initial={{ opacity: 0, width: 0 }}
+            animate={{ opacity: 1, width: "auto" }}
+            exit={{ opacity: 0, width: 0 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="flex items-center gap-1 overflow-hidden px-5 py-2.5 backdrop-blur-[7px]"
+            style={{
+              WebkitBackdropFilter: "blur(7px)",
+              // A flat, evenly-feathered panel rather than a radial "wheel":
+              // two linear fades intersected give a solid centre with a soft
+              // edge on every side, and the generous padding makes the blurred
+              // area extend well beyond the text.
+              maskImage:
+                "linear-gradient(to right, transparent 0%, #000 13%, #000 87%, transparent 100%), linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%)",
+              WebkitMaskImage:
+                "linear-gradient(to right, transparent 0%, #000 13%, #000 87%, transparent 100%), linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%)",
+              maskComposite: "intersect",
+              WebkitMaskComposite: "source-in",
+            }}
+          >
+            {items.map((item, index) => (
+              <motion.span
+                key={item.label}
+                initial={{ opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 8 }}
+                transition={{
+                  duration: 0.24,
+                  delay: 0.05 + index * 0.05,
+                  ease: [0.16, 1, 0.3, 1],
+                }}
+              >
+                <Link
+                  href={item.href}
+                  onClick={onNavigate}
+                  className="block whitespace-nowrap px-2.5 py-1 text-[14px] font-medium text-white transition-colors duration-200 hover:text-white/55"
+                >
+                  {item.label}
+                </Link>
+              </motion.span>
+            ))}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex h-9 shrink-0 items-center gap-1.5 px-3.5 text-[14px] font-medium text-white transition-colors duration-200 hover:text-white/55"
+      >
+        {label}
+        <ChevronLeft
+          className={cn(
+            "h-3.5 w-3.5 transition-transform duration-300",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+    </div>
   );
 }
 

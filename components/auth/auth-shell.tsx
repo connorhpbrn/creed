@@ -5,14 +5,14 @@
 // image panel on the right. /login, /signup and /reset-password all render
 // inside it so they stay visually identical.
 
-import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { SceneryImage } from "@/components/marketing/scenery-image";
 import { CreedWordmark } from "@/components/creed/brand";
 import { CONTACT_MAILTO } from "@/lib/branding";
 
-const lightPanelImage = "/assets/landing/backgrounds/surmon-light.avif";
-const darkPanelImage = "/assets/landing/backgrounds/surmon-dark.avif";
+const lightPanelImage = "/assets/landing/scenery/light-auth.png";
+const darkPanelImage = "/assets/landing/scenery/dark-auth.png";
 
 export function AuthShell({ topRight, children }: { topRight?: ReactNode; children: ReactNode }) {
   return (
@@ -22,7 +22,7 @@ export function AuthShell({ topRight, children }: { topRight?: ReactNode; childr
           <Link
             href="/home"
             aria-label="Creed home"
-            className="-ml-2 inline-flex items-center rounded-[10px] px-2 py-1.5 transition-colors duration-150 hover:bg-[var(--creed-surface-raised)]"
+            className="-ml-1 inline-flex shrink-0 items-center transition-opacity duration-200 hover:opacity-60"
           >
             <CreedWordmark className="ml-0" />
           </Link>
@@ -46,30 +46,26 @@ export function AuthShell({ topRight, children }: { topRight?: ReactNode; childr
         </div>
       </div>
 
-      {/* Image panel (hidden on mobile), framed by a rounded card with a thin
-          gutter to match the landing hero. */}
-      <div className="hidden w-1/2 p-3 md:flex">
-        <div className="relative flex-1 overflow-hidden rounded-[28px] bg-[#e9e5de] dark:bg-[#0e0e0d]">
-          <Image
-            src={lightPanelImage}
-            alt=""
-            fill
-            priority
-            // Pre-optimized AVIF: serve the static file directly (cached
-            // immutably) instead of re-encoding through /_next/image.
-            unoptimized
-            sizes="50vw"
-            className="object-cover object-center dark:hidden"
-          />
-          <Image
-            src={darkPanelImage}
-            alt=""
-            fill
-            unoptimized
-            sizes="50vw"
-            className="hidden object-cover object-center dark:block"
-          />
-        </div>
+      {/* Image panel (hidden on mobile). No framed card - the page background
+          fades over the inner edge so the art blends into the form column. */}
+      <div className="relative hidden w-1/2 md:block">
+        <SceneryImage
+          src={lightPanelImage}
+          fileName="light-auth.png"
+          label="Light auth"
+          priority
+          className="dark:hidden"
+        />
+        <SceneryImage
+          src={darkPanelImage}
+          fileName="dark-auth.png"
+          label="Dark auth"
+          hint="portrait"
+          className="hidden dark:block"
+        />
+        {/* Smooth, eased fade from the page bg on the inner (left) edge into
+            the image so it melts in rather than cutting off. */}
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(249,249,248,1)_0%,rgba(249,249,248,0.92)_9%,rgba(249,249,248,0.6)_20%,rgba(249,249,248,0.26)_30%,rgba(249,249,248,0.06)_38%,rgba(249,249,248,0)_46%)] dark:bg-[linear-gradient(90deg,rgba(14,14,13,1)_0%,rgba(14,14,13,0.92)_9%,rgba(14,14,13,0.6)_20%,rgba(14,14,13,0.26)_30%,rgba(14,14,13,0.06)_38%,rgba(14,14,13,0)_46%)]" />
       </div>
     </div>
   );
