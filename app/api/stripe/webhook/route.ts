@@ -4,6 +4,7 @@ import {
   assertWebhookSignature,
   creditBalanceFromPaymentIntent,
   getStripeWebhookSecret,
+  revokeEntitlementForRefund,
   syncSubscriptionFromStripe,
   upsertEntitlementFromSession,
 } from "@/lib/stripe";
@@ -11,10 +12,17 @@ import { log } from "@/lib/observability";
 
 // Stripe webhook receiver.
 //
-// Verifies the `Stripe-Signature` header against the raw body, then
-// handles `checkout.session.completed` by upserting the entitlement.
+// Verifies the `Stripe-Signature` header against the raw body, then handles:
+//   - checkout.session.completed       → grant entitlement
+//   - customer.subscription.updated/.deleted → sync subscription lifecycle
+//   - charge.refunded                  → revoke entitlement + OAuth tokens
+//   - payment_intent.succeeded         → credit prepaid balance
 // Other event types are acknowledged with 200 (so Stripe doesn't retry)
 // and noted in the log.
+//
+// NOTE: `charge.refunded` must be enabled on the webhook endpoint in the
+// Stripe Dashboard for refund revocation to fire - Stripe only delivers the
+// event types the endpoint subscribes to.
 //
 // Idempotency: the row's PK is `user_id` and `stripe_session_id` is
 // UNIQUE, so a retry from Stripe (or a race with /payment/success'
@@ -93,6 +101,20 @@ export async function POST(request: Request) {
         applied,
       });
       return NextResponse.json({ ok: true, applied });
+    }
+
+    if (event.type === "charge.refunded") {
+      // A full refund in Stripe revokes the purchase end-to-end: app access,
+      // future billing, and the live MCP/OAuth session. Partial refunds and
+      // charges that map to no entitlement are no-ops inside the helper.
+      const charge = event.data.object as Stripe.Charge;
+      const revoked = await revokeEntitlementForRefund(charge);
+      log.info("stripe_webhook_refund_processed", {
+        eventId: event.id,
+        chargeId: charge.id,
+        revoked,
+      });
+      return NextResponse.json({ ok: true, applied: revoked });
     }
 
     if (event.type === "payment_intent.succeeded") {

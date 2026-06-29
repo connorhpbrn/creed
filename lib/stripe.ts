@@ -3,7 +3,14 @@ import Stripe from "stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseLikeClient } from "@/lib/supabase/types";
 import { creditTopup } from "@/lib/ai/credits";
+import { revokeOAuthTokensForUser } from "@/lib/oauth";
+import { isChargeFullyRefunded } from "@/lib/stripe-refund";
 import { log } from "@/lib/observability";
+
+// Re-export so callers can keep importing the refund rule from the Stripe
+// module surface; the implementation lives in a dependency-free file so it
+// stays unit-testable (see lib/stripe-refund.ts).
+export { isChargeFullyRefunded };
 
 // Stripe client + entitlement helpers.
 //
@@ -460,6 +467,116 @@ export async function cancelActiveSubscriptionsForCustomer(customerId: string): 
 }
 
 /**
+ * Revoke an entitlement when its underlying charge is fully refunded in Stripe
+ * (the `charge.refunded` webhook). This is the single action that undoes a
+ * purchase end-to-end, closing all three gaps a bare Stripe refund leaves open:
+ *
+ *   1. App access - flip the entitlement to `refunded`. That value falls
+ *      outside both the lifetime `paid` check and the active-subscription set,
+ *      so entitlementGrantsAccess() returns false on the next per-request read
+ *      and every server route guard (layout, onboarding, /authorize) locks.
+ *   2. Future billing - a refund does NOT cancel a subscription in Stripe, so a
+ *      still-live subscriber would be charged again next period. Cancel it.
+ *   3. The live MCP session - /mcp authorises on OAuth token validity, not
+ *      entitlement, so revoking the row alone leaves read/propose access alive
+ *      until the refresh token lapses (up to 30 days). Revoke the tokens too.
+ *
+ * Only acts on a full refund (see isChargeFullyRefunded). Idempotent: a row
+ * already `refunded` is a no-op, so Stripe retries and multi-step refund
+ * sequences don't thrash. Returns true when a row was revoked, else false.
+ */
+export async function revokeEntitlementForRefund(
+  charge: Stripe.Charge
+): Promise<boolean> {
+  if (!isChargeFullyRefunded(charge)) {
+    return false;
+  }
+
+  const paymentIntentId =
+    typeof charge.payment_intent === "string"
+      ? charge.payment_intent
+      : charge.payment_intent?.id ?? null;
+  const customerId =
+    typeof charge.customer === "string"
+      ? charge.customer
+      : charge.customer?.id ?? null;
+
+  const admin = getSupabaseAdminClient() as unknown as SupabaseLikeClient;
+
+  // Resolve the owning row. Prefer the exact payment_intent - it's the charge
+  // that paid for a lifetime purchase (and a subscription's first invoice).
+  // Fall back to the customer, which covers subscription renewal charges whose
+  // PI was never stored on the row.
+  let row: EntitlementRow | null = null;
+  if (paymentIntentId) {
+    const { data } = (await admin
+      .from("creed_entitlements")
+      .select("*")
+      .eq("stripe_payment_intent_id", paymentIntentId)
+      .maybeSingle()) as { data: EntitlementRow | null };
+    row = data;
+  }
+  if (!row && customerId) {
+    const { data } = (await admin
+      .from("creed_entitlements")
+      .select("*")
+      .eq("stripe_customer_id", customerId)
+      .maybeSingle()) as { data: EntitlementRow | null };
+    row = data;
+  }
+  if (!row) {
+    return false;
+  }
+  if (row.status === "refunded") {
+    // Already revoked (Stripe retry, or a second refund event) - nothing to do.
+    return false;
+  }
+
+  const { user_id: userId, billing_mode: billingMode } = row;
+
+  // 1. Revoke app access.
+  const { error } = await admin
+    .from("creed_entitlements")
+    .update({
+      status: "refunded",
+      cancel_at_period_end: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId);
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  // 2. Stop future billing. Best-effort - a failure here must not unwind the
+  //    revoke above (the syncSubscriptionFromStripe guard keeps `refunded`
+  //    intact even when the cancel's `subscription.deleted` lands later).
+  if (billingMode === "subscription" && customerId) {
+    await cancelActiveSubscriptionsForCustomer(customerId).catch((cancelError) => {
+      log.warn("stripe_cancel_subscription_after_refund_failed", {
+        userId,
+        customerId,
+        error: cancelError instanceof Error ? cancelError.message : String(cancelError),
+      });
+    });
+  }
+
+  // 3. Cut the MCP/OAuth session now. revokeOAuthTokensForUser flips revoked_at
+  //    on every token pair, which both rejects the live access token and blocks
+  //    refresh - so access doesn't linger for the token's remaining TTL.
+  //    Best-effort: the entitlement is already revoked; the web app is locked
+  //    regardless, and a transient failure here can be retried by Stripe (we
+  //    rethrow nothing, so the webhook still 200s).
+  await revokeOAuthTokensForUser(userId).catch((revokeError) => {
+    log.warn("oauth_revoke_after_refund_failed", {
+      userId,
+      error: revokeError instanceof Error ? revokeError.message : String(revokeError),
+    });
+  });
+
+  return true;
+}
+
+/**
  * Keep an entitlement in sync with a Stripe subscription lifecycle event
  * (`customer.subscription.updated` / `.deleted`). Looks the user up via the
  * subscription metadata we stamped at checkout, falling back to the customer
@@ -505,6 +622,12 @@ export async function syncSubscriptionFromStripe(
   }
   if (row.billing_mode === "lifetime") {
     // Owned outright - ignore subscription churn entirely.
+    return false;
+  }
+  if (row.status === "refunded") {
+    // A refund is terminal until a fresh purchase re-creates the row. Don't let
+    // a post-refund `subscription.deleted` (often from our own cancel in
+    // revokeEntitlementForRefund) rewrite 'refunded' to 'canceled'.
     return false;
   }
 
