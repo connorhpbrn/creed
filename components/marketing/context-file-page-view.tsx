@@ -6,6 +6,7 @@ import { AnimatedPageTitle } from "@/components/marketing/animated-page-title";
 import { MarketingFooter, MarketingHeroBanner } from "@/components/marketing/site-chrome";
 import { ArrowRightIcon, type ArrowRightIconHandle } from "@/components/ui/arrow-right";
 import { contextFileFaqItems } from "@/lib/marketing/faq";
+import { FaqAccordion } from "@/components/marketing/faq-accordion";
 
 const contentSections = [
   {
@@ -93,18 +94,9 @@ export function ContextFilePageView() {
           <h2 className="text-[20px] font-medium text-[var(--creed-text-primary)] md:text-[22px]">
             Common questions
           </h2>
-          <dl className="mt-6 divide-y divide-[var(--creed-border)]">
-            {contextFileFaqItems.map((item) => (
-              <div key={item.question} className="py-6 first:pt-0">
-                <dt className="text-[17px] font-medium text-[var(--creed-text-primary)]">
-                  {item.question}
-                </dt>
-                <dd className="mt-2.5 max-w-2xl text-[16px] leading-7 text-[var(--creed-text-secondary)]">
-                  {item.answer}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <div className="mt-4">
+            <FaqAccordion items={contextFileFaqItems} />
+          </div>
         </section>
 
         <div className="pt-2">

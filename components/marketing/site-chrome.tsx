@@ -96,7 +96,10 @@ export function MarketingHeroBanner({
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,31,60,0.16)_0%,rgba(15,31,60,0.08)_28%,rgba(15,31,60,0.05)_56%,rgba(255,255,255,0)_76%)] dark:bg-[linear-gradient(180deg,rgba(0,0,0,0.32)_0%,rgba(0,0,0,0.18)_28%,rgba(0,0,0,0.08)_56%,rgba(0,0,0,0)_76%)]" />
         {/* Bottom fade melts the art into the page background. Eased multi-stop
             gradient so the transition reads smooth, not banded. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-[linear-gradient(180deg,rgba(249,249,248,0)_0%,rgba(249,249,248,0.08)_30%,rgba(249,249,248,0.34)_55%,rgba(249,249,248,0.72)_76%,rgba(249,249,248,0.94)_90%,rgba(249,249,248,1)_100%)] dark:bg-[linear-gradient(180deg,rgba(14,14,13,0)_0%,rgba(14,14,13,0.08)_30%,rgba(14,14,13,0.34)_55%,rgba(14,14,13,0.72)_76%,rgba(14,14,13,0.94)_90%,rgba(14,14,13,1)_100%)]" />
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5"
+          style={{ backgroundImage: "var(--scenery-fade-down)" }}
+        />
         <div className="relative z-10 flex flex-col px-6 py-5 md:px-10 md:py-7">
           <MarketingHeader configured={configured} scrolled={scrolled} />
         </div>
@@ -685,7 +688,11 @@ function MobileNavRow({
   onNavigate: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    // Fixed height so expanding a group (its items panel is taller than the
+    // h-9 button because of the blur-feather padding) doesn't grow the row and
+    // jump the spacing between the dropdown buttons. The panel overflows this
+    // row visually but never changes its layout height.
+    <div className="flex h-9 items-center gap-2">
       <AnimatePresence initial={false}>
         {open ? (
           <motion.div

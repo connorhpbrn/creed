@@ -65,7 +65,10 @@ export function AuthShell({ topRight, children }: { topRight?: ReactNode; childr
         />
         {/* Smooth, eased fade from the page bg on the inner (left) edge into
             the image so it melts in rather than cutting off. */}
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(249,249,248,1)_0%,rgba(249,249,248,0.92)_9%,rgba(249,249,248,0.6)_20%,rgba(249,249,248,0.26)_30%,rgba(249,249,248,0.06)_38%,rgba(249,249,248,0)_46%)] dark:bg-[linear-gradient(90deg,rgba(14,14,13,1)_0%,rgba(14,14,13,0.92)_9%,rgba(14,14,13,0.6)_20%,rgba(14,14,13,0.26)_30%,rgba(14,14,13,0.06)_38%,rgba(14,14,13,0)_46%)]" />
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{ backgroundImage: "var(--scenery-fade-in-x)" }}
+        />
       </div>
     </div>
   );

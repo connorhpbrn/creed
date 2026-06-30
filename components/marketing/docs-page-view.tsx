@@ -914,32 +914,63 @@ export function DocsPageView() {
           </p>
         </div>
 
-        <div className="mt-8 block md:hidden">
+        {/* Below the desktop sidebar breakpoint, the same collapsible dropdown
+            nav as desktop (one group open at a time, click to scroll), but
+            without the scrollspy highlight: a sidebar that isn't on screen
+            while you scroll has nothing to highlight, so the links stay plain. */}
+        <div className="mt-8 block lg:hidden">
           <div className="text-[18px] font-semibold tracking-[-0.01em] text-[var(--creed-text-primary)]">On this page</div>
-          <div className="mt-4 space-y-4">
-            {navGroups.map((group) => (
-              <div key={group.group}>
-                <div className="text-[12px] font-medium tracking-[0.02em] text-[var(--creed-text-tertiary)]">
-                  {group.group}
+          <nav className="mt-5 space-y-1">
+            {navGroups.map((group) => {
+              const open = isOpen(group.group);
+              return (
+                <div key={group.group}>
+                  <button
+                    type="button"
+                    onClick={() => toggle(group.group)}
+                    aria-expanded={open}
+                    className="flex w-full items-center justify-between gap-2 py-1.5 text-[15px] font-medium text-[var(--creed-text-primary)] transition-opacity hover:opacity-70"
+                  >
+                    <span>{group.group}</span>
+                    <ChevronDown
+                      className={cn(
+                        "h-[18px] w-[18px] shrink-0 transition-transform duration-200",
+                        open ? "" : "-rotate-90"
+                      )}
+                    />
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {open ? (
+                      <motion.div
+                        key="items"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mb-3 mt-1 space-y-3">
+                          {group.items.map((section) => (
+                            <a
+                              key={section.id}
+                              href={`#${section.id}`}
+                              onClick={(event) => {
+                                event.preventDefault();
+                                scrollToSection(section.id);
+                              }}
+                              className="block text-[14px] leading-6 text-[var(--creed-text-secondary)] transition-colors hover:text-[var(--creed-text-primary)]"
+                            >
+                              {section.label}
+                            </a>
+                          ))}
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
-                  {group.items.map((section) => (
-                    <a
-                      key={section.id}
-                      href={`#${section.id}`}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        scrollToSection(section.id);
-                      }}
-                      className="text-[14px] text-[#2563EB] transition-colors hover:text-[#1D4ED8]"
-                    >
-                      {section.label}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+              );
+            })}
+          </nav>
         </div>
 
         <div className="mt-10 grid gap-14 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-20">

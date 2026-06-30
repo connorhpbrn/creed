@@ -112,6 +112,22 @@
   --accent-color-mono: #1c1c1a;
   --accent-tint-mono: #ebebe6;
   --accent-tint-custom: #ebebe6;
+
+  /* Scenery fades. The art (hero, auth panel, inner banner, closing band)
+     melts into the page background through these. Stops are densely sampled
+     along an ease curve so the ramp reads as a smooth blur, not banding.
+     Redefined per theme in .dark; surfaces reference them by name so the fade
+     is identical everywhere. `fade-down` melts art into the bg downward;
+     `fade-band` frames the closing band with two smootherstep fades sharing one
+     curve around a clear centre, so the top and bottom blurs read as a matched
+     pair; the bottom sits a touch higher than a pure mirror with a small solid
+     tail so the art clears the footer; it melts to full page colour at the top
+     edge so it joins the section above seamlessly;
+     `fade-in-x` melts the inner vertical edge of the auth panel. */
+  --scenery-fade-down: linear-gradient(180deg, rgba(249,249,248,0) 0%, rgba(249,249,248,0.012) 14%, rgba(249,249,248,0.05) 26%, rgba(249,249,248,0.11) 37%, rgba(249,249,248,0.2) 47%, rgba(249,249,248,0.32) 56%, rgba(249,249,248,0.45) 64%, rgba(249,249,248,0.59) 72%, rgba(249,249,248,0.73) 80%, rgba(249,249,248,0.85) 87%, rgba(249,249,248,0.94) 93%, rgba(249,249,248,1) 100%);
+  --scenery-fade-band: linear-gradient(180deg, rgba(249,249,248,1) 0%, rgba(249,249,248,0.99) 2%, rgba(249,249,248,0.98) 4%, rgba(249,249,248,0.95) 6%, rgba(249,249,248,0.9) 8%, rgba(249,249,248,0.82) 10%, rgba(249,249,248,0.74) 12%, rgba(249,249,248,0.62) 14%, rgba(249,249,248,0.5) 16%, rgba(249,249,248,0.38) 18%, rgba(249,249,248,0.26) 20%, rgba(249,249,248,0.18) 22%, rgba(249,249,248,0.1) 24%, rgba(249,249,248,0.05) 26%, rgba(249,249,248,0.016) 28%, rgba(249,249,248,0.002) 30%, rgba(249,249,248,0) 32%, rgba(249,249,248,0) 65%, rgba(249,249,248,0.002) 67%, rgba(249,249,248,0.016) 69%, rgba(249,249,248,0.05) 71%, rgba(249,249,248,0.1) 73%, rgba(249,249,248,0.18) 75%, rgba(249,249,248,0.26) 77%, rgba(249,249,248,0.38) 79%, rgba(249,249,248,0.5) 81%, rgba(249,249,248,0.62) 83%, rgba(249,249,248,0.74) 85%, rgba(249,249,248,0.82) 87%, rgba(249,249,248,0.9) 89%, rgba(249,249,248,0.95) 91%, rgba(249,249,248,0.98) 93%, rgba(249,249,248,0.99) 95%, rgba(249,249,248,1) 97%, rgba(249,249,248,1) 100%);
+  --scenery-fade-in-x: linear-gradient(90deg, rgba(249,249,248,1) 0%, rgba(249,249,248,0.97) 5%, rgba(249,249,248,0.9) 10%, rgba(249,249,248,0.78) 15%, rgba(249,249,248,0.62) 20%, rgba(249,249,248,0.46) 25%, rgba(249,249,248,0.3) 30%, rgba(249,249,248,0.17) 35%, rgba(249,249,248,0.07) 40%, rgba(249,249,248,0) 46%);
+
   --font-heading: var(--font-geist-sans);
 }
 
@@ -187,6 +203,11 @@
   --accent-color-mono: #e7e7e2;
   --accent-tint-mono: rgba(231, 231, 226, 0.10);
   --accent-tint-custom: rgba(231, 231, 226, 0.10);
+
+  /* Dark-canvas twins of the scenery fades (see :root for the shape notes). */
+  --scenery-fade-down: linear-gradient(180deg, rgba(14,14,13,0) 0%, rgba(14,14,13,0.012) 14%, rgba(14,14,13,0.05) 26%, rgba(14,14,13,0.11) 37%, rgba(14,14,13,0.2) 47%, rgba(14,14,13,0.32) 56%, rgba(14,14,13,0.45) 64%, rgba(14,14,13,0.59) 72%, rgba(14,14,13,0.73) 80%, rgba(14,14,13,0.85) 87%, rgba(14,14,13,0.94) 93%, rgba(14,14,13,1) 100%);
+  --scenery-fade-band: linear-gradient(180deg, rgba(14,14,13,1) 0%, rgba(14,14,13,0.99) 2%, rgba(14,14,13,0.98) 4%, rgba(14,14,13,0.95) 6%, rgba(14,14,13,0.9) 8%, rgba(14,14,13,0.82) 10%, rgba(14,14,13,0.74) 12%, rgba(14,14,13,0.62) 14%, rgba(14,14,13,0.5) 16%, rgba(14,14,13,0.38) 18%, rgba(14,14,13,0.26) 20%, rgba(14,14,13,0.18) 22%, rgba(14,14,13,0.1) 24%, rgba(14,14,13,0.05) 26%, rgba(14,14,13,0.016) 28%, rgba(14,14,13,0.002) 30%, rgba(14,14,13,0) 32%, rgba(14,14,13,0) 65%, rgba(14,14,13,0.002) 67%, rgba(14,14,13,0.016) 69%, rgba(14,14,13,0.05) 71%, rgba(14,14,13,0.1) 73%, rgba(14,14,13,0.18) 75%, rgba(14,14,13,0.26) 77%, rgba(14,14,13,0.38) 79%, rgba(14,14,13,0.5) 81%, rgba(14,14,13,0.62) 83%, rgba(14,14,13,0.74) 85%, rgba(14,14,13,0.82) 87%, rgba(14,14,13,0.9) 89%, rgba(14,14,13,0.95) 91%, rgba(14,14,13,0.98) 93%, rgba(14,14,13,0.99) 95%, rgba(14,14,13,1) 97%, rgba(14,14,13,1) 100%);
+  --scenery-fade-in-x: linear-gradient(90deg, rgba(14,14,13,1) 0%, rgba(14,14,13,0.97) 5%, rgba(14,14,13,0.9) 10%, rgba(14,14,13,0.78) 15%, rgba(14,14,13,0.62) 20%, rgba(14,14,13,0.46) 25%, rgba(14,14,13,0.3) 30%, rgba(14,14,13,0.17) 35%, rgba(14,14,13,0.07) 40%, rgba(14,14,13,0) 46%);
 }
 
 @layer base {

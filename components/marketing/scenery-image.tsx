@@ -45,7 +45,7 @@ export function SceneryImage({
       <div className={cn("absolute inset-0 bg-[var(--creed-surface-raised)]", className)}>
         <div className="absolute left-1/2 top-1/2 max-w-[16rem] -translate-x-1/2 -translate-y-1/2 px-6 text-center">
           <div className="text-[13px] font-medium text-[var(--creed-text-secondary)]">
-            {label ?? "Image"} — add this file
+            {label ?? "Image"} - add this file
           </div>
           <div
             className="mt-2 rounded-md bg-[var(--creed-surface)] px-2.5 py-1.5 text-[11px] leading-relaxed text-[var(--creed-text-tertiary)]"

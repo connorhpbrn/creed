@@ -59,7 +59,10 @@ export function LandingHero({ configured }: { configured: boolean }) {
 
           {/* Bottom fade: melt the art into the page background. Eased multi-stop
               gradient (slow onset) so the transition reads smooth, not banded. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-[linear-gradient(180deg,rgba(249,249,248,0)_0%,rgba(249,249,248,0.08)_30%,rgba(249,249,248,0.34)_55%,rgba(249,249,248,0.72)_76%,rgba(249,249,248,0.94)_90%,rgba(249,249,248,1)_100%)] dark:bg-[linear-gradient(180deg,rgba(14,14,13,0)_0%,rgba(14,14,13,0.08)_30%,rgba(14,14,13,0.34)_55%,rgba(14,14,13,0.72)_76%,rgba(14,14,13,0.94)_90%,rgba(14,14,13,1)_100%)]" />
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2"
+            style={{ backgroundImage: "var(--scenery-fade-down)" }}
+          />
 
           <div className="relative z-10 flex flex-1 flex-col px-6 py-5 md:px-10 md:py-7">
             <div className="flex flex-1 items-start justify-center pt-[13vh] text-center md:pt-[12vh]">

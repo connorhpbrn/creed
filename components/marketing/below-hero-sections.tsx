@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import type { StaticImageData } from "next/image";
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
+import { FaqAccordion } from "@/components/marketing/faq-accordion";
 import {
   DirectEditDemo,
   ProposalDemo,
@@ -20,6 +20,7 @@ import {
   UpdateDemo,
 } from "@/components/marketing/how-creed-works-demos";
 import { MarketingFooter } from "@/components/marketing/site-chrome";
+import { SceneryImage } from "@/components/marketing/scenery-image";
 import { useLandingAuthState } from "@/components/marketing/use-landing-auth-state";
 import { usePaidStatus } from "@/components/marketing/use-paid-status";
 import { useOnboardingResume } from "@/components/marketing/use-onboarding-resume";
@@ -30,6 +31,9 @@ import { ROADMAP_STATUS_STYLE } from "@/components/marketing/roadmap-status";
 import type { RoadmapColumn, RoadmapTask } from "@/lib/marketing/roadmap";
 import { homeFaqItems as faqItems } from "@/lib/marketing/faq";
 import { cn } from "@/lib/utils";
+
+const lightFinaleImage = "/assets/landing/scenery/light-finale.png";
+const darkFinaleImage = "/assets/landing/scenery/dark-finale.png";
 
 const claudeCodeIcon = "/assets/agents/claudecode.svg";
 const codexIcon = "/assets/agents/codex.svg";
@@ -492,7 +496,7 @@ function RoadmapTeaserCard({
   return (
     <article className="flex w-full flex-col overflow-hidden rounded-2xl bg-[var(--creed-surface)] sm:w-[340px]">
       <div className={cn("px-5 py-2.5", style.fill)}>
-        <span className={cn("text-[12px] font-medium", style.text)}>
+        <span className={cn("text-[14px] font-medium", style.text)}>
           {column.label}
         </span>
       </div>
@@ -516,54 +520,12 @@ function RoadmapTeaserCard({
 }
 
 function FaqSection() {
-  const [openIndex, setOpenIndex] = useState(0);
-
   return (
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading headline="Questions" />
 
       <div className="mx-auto mt-14 max-w-[46rem]">
-        {faqItems.map((item, index) => {
-          const open = openIndex === index;
-
-          return (
-            <div
-              key={item.question}
-              className="border-b border-[var(--creed-border)]"
-            >
-              <button
-                type="button"
-                onClick={() => setOpenIndex(open ? -1 : index)}
-                className="flex w-full items-center justify-between gap-6 py-7 text-left"
-              >
-                <span className="t-body-lg font-medium text-[var(--creed-text-primary)]">
-                  {item.question}
-                </span>
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-300",
-                    open && "rotate-180",
-                  )}
-                />
-              </button>
-
-              <div
-                className={cn(
-                  "grid transition-[grid-template-rows,opacity] duration-300 ease-out",
-                  open
-                    ? "grid-rows-[1fr] opacity-100"
-                    : "grid-rows-[0fr] opacity-0",
-                )}
-              >
-                <div className="overflow-hidden">
-                  <p className="t-body max-w-3xl pb-7 text-[var(--creed-text-secondary)]">
-                    {item.answer}
-                  </p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        <FaqAccordion items={faqItems} />
       </div>
     </section>
   );
@@ -577,14 +539,44 @@ function ClosingCtaSection({ configured }: { configured: boolean }) {
   const closingArrow = useAnimatedIconControls(80, undefined, 420);
 
   return (
-    <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
-      <div className="mx-auto max-w-4xl text-center">
-        <SectionTitle className="t-section justify-center text-[var(--creed-text-primary)]">
-          {"Give every agent\nthe same starting point"}
+    <section className="relative flex min-h-[94svh] items-center overflow-hidden bg-[var(--creed-background)]">
+      {/* Full-bleed closing art (theme-paired light/dark), the bookend to the
+          hero. SceneryImage self-heals to a labelled placeholder until the file
+          is dropped into public/assets/landing/scenery/. */}
+      <SceneryImage
+        src={lightFinaleImage}
+        fileName="light-finale.png"
+        label="Light finale"
+        hint="wide landscape, ~2400x1400"
+        className="dark:hidden"
+      />
+      <SceneryImage
+        src={darkFinaleImage}
+        fileName="dark-finale.png"
+        label="Dark finale"
+        hint="wide landscape, ~2400x1400"
+        className="hidden dark:block"
+      />
+
+      {/* Light, soft scrim localized behind the copy so the white headline stays
+          legible without visibly dimming the art. Sits under the melt layer so
+          the faded edges stay clean page background. */}
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(92%_54%_at_50%_50%,rgba(0,0,0,0.16)_0%,rgba(0,0,0,0.05)_46%,rgba(0,0,0,0)_70%)]" />
+
+      {/* Melt the art into the page background at both the top and bottom edges,
+          so it reads as a band the page opens into and out of. */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ backgroundImage: "var(--scenery-fade-band)" }}
+      />
+
+      <div className="relative z-10 mx-auto w-full max-w-4xl px-6 py-24 text-center md:px-10 md:py-30 lg:px-12">
+        <SectionTitle className="t-section justify-center text-white">
+          Stop starting from scratch
         </SectionTitle>
 
-        <p className="t-lede mx-auto mt-5 max-w-2xl text-[var(--creed-text-tertiary)]">
-          Try Creed today for completely free.
+        <p className="t-lede mx-auto mt-5 max-w-2xl text-white/85">
+          Every agent you use, already up to speed.
         </p>
 
         <div className="mt-9 flex justify-center">
@@ -596,7 +588,7 @@ function ClosingCtaSection({ configured }: { configured: boolean }) {
               onPointerDown={(event) => {
                 if (event.pointerType !== "mouse") closingArrow.start();
               }}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#2563EB] pl-4 pr-3 text-[14px] font-medium text-white transition-colors hover:bg-[#1D4ED8]"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-white pl-4 pr-3 text-[14px] font-medium text-[#19345f] transition-colors hover:bg-[#f6f7fb]"
             >
               <span className="leading-none">Go to app</span>
               <ArrowRightIcon
@@ -613,7 +605,7 @@ function ClosingCtaSection({ configured }: { configured: boolean }) {
               onPointerDown={(event) => {
                 if (event.pointerType !== "mouse") closingArrow.start();
               }}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#2563EB] pl-4 pr-3 text-[14px] font-medium text-white transition-colors hover:bg-[#1D4ED8]"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-white pl-4 pr-3 text-[14px] font-medium text-[#19345f] transition-colors hover:bg-[#f6f7fb]"
             >
               <span className="leading-none">
                 {canResume ? "Resume" : "Get Started"}
