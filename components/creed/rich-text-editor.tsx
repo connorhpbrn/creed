@@ -1040,7 +1040,7 @@ export function RichTextEditor({
     tableHideTimerRef.current = window.setTimeout(() => {
       hoveredTableRef.current = null;
       setTableToolbar(null);
-    }, 140);
+    }, 260);
   }, [clearTableHideTimer]);
 
   const positionTableToolbar = useCallback((tableEl: HTMLElement) => {
@@ -1686,6 +1686,18 @@ export function RichTextEditor({
             event.preventDefault();
           }}
         >
+          {/* Transparent bridge over the gap between the bar and the table so
+              moving the pointer from the table onto the controls doesn't cross
+              a dead zone and dismiss the toolbar. */}
+          <span
+            aria-hidden
+            className="absolute inset-x-0 top-full h-3"
+          />
+          {/* Bridge above too, for the inset (table-hugs-top) placement. */}
+          <span
+            aria-hidden
+            className="absolute inset-x-0 bottom-full h-3"
+          />
           <TableToolbarButton onClick={() => editor.chain().focus().addRowAfter().run()}>
             <Plus className="h-3.5 w-3.5" />
             Row
