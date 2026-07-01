@@ -21,6 +21,9 @@ export type DocumentComment = {
   parentId: string | null;
   referenceId: string | null;
   referenceQuote: string;
+  // The proposal this comment is anchored to (a comment on a proposal), or null
+  // for a range-anchored / general document comment.
+  proposalId: string | null;
   body: string;
   status: "open" | "resolved";
   resolvedAt: string | null;
@@ -72,6 +75,7 @@ type CommentRow = {
   parent_id: string | null;
   reference_id: string | null;
   reference_quote: string | null;
+  proposal_id: string | null;
   body: string;
   status: string | null;
   resolved_at: string | null;
@@ -136,6 +140,7 @@ const COMMENT_COLUMNS = [
   "parent_id",
   "reference_id",
   "reference_quote",
+  "proposal_id",
   "body",
   "status",
   "resolved_at",
@@ -224,6 +229,7 @@ function mapComment(
     parentId: row.parent_id,
     referenceId: row.reference_id,
     referenceQuote: row.reference_quote ?? "",
+    proposalId: row.proposal_id,
     body: row.body,
     status: row.status === "resolved" ? "resolved" : "open",
     resolvedAt: row.resolved_at,
@@ -438,6 +444,78 @@ export async function listPendingCommentsForUser(
   return rows.map((row) => mapComment(row, users, mentions));
 }
 
+// The shared comment thread anchored to a single proposal (a comment on a
+// proposal), oldest first. Pending agent-proposed comments stay private and are
+// excluded, matching listDocumentComments.
+export async function listCommentsForProposal(
+  client: unknown,
+  documentId: string,
+  proposalId: string
+) {
+  const db = client as SupabaseLikeClient;
+  const { data, error } = (await db
+    .from("creed_document_comments")
+    .select(COMMENT_COLUMNS)
+    .eq("document_id", documentId)
+    .eq("proposal_id", proposalId)
+    .eq("proposal_status", "shared")
+    .order("created_at", { ascending: true })) as {
+    data: CommentRow[] | null;
+    error: { message: string } | null;
+  };
+
+  if (error) {
+    throw new Error(error.message || "Could not load proposal comments.");
+  }
+
+  const rows = data ?? [];
+  const [users, mentions] = await Promise.all([
+    userMap(client),
+    mentionsByComment(client, rows.map((row) => row.id)),
+  ]);
+  return rows.map((row) => mapComment(row, users, mentions));
+}
+
+// Resolve every still-open shared comment anchored to a proposal. Called when
+// the proposal is accepted or rejected: the review conversation is over, so its
+// comments are marked resolved in one bulk update (no per-comment activity, to
+// keep the audit trail from ballooning - the proposal decision already logs an
+// event). Returns the number of comments resolved.
+export async function resolveOpenCommentsForProposal(
+  client: unknown,
+  input: { proposalId: string; actorUserId?: string | null }
+): Promise<number> {
+  if (!input.proposalId) {
+    return 0;
+  }
+
+  const now = nowIso();
+  const db = client as SupabaseLikeClient;
+  const { data, error } = (await db
+    .from("creed_document_comments")
+    .update({
+      status: "resolved",
+      resolved_at: now,
+      resolved_by: input.actorUserId ?? null,
+      updated_by: input.actorUserId ?? null,
+      updated_at: now,
+    })
+    .eq("proposal_id", input.proposalId)
+    .eq("proposal_status", "shared")
+    .eq("status", "open")
+    .select("id")) as {
+    data: { id: string }[] | null;
+    error: { message: string } | null;
+  };
+
+  if (error) {
+    log.warn("resolve_proposal_comments_failed", { proposalId: input.proposalId }, error);
+    return 0;
+  }
+
+  return (data ?? []).length;
+}
+
 export async function recordDocumentActivity(
   client: unknown,
   input: {
@@ -495,6 +573,10 @@ export async function createDocumentComment(
     parentId?: string | null;
     referenceId?: string | null;
     referenceQuote?: string | null;
+    // Anchor the comment to a specific pending proposal (a comment on a
+    // proposal). Open comments on a proposal are auto-resolved when it is
+    // accepted or rejected.
+    proposalId?: string | null;
     mentionedUserIds?: string[];
     source?: "creed" | "mcp";
     // When "pending", the comment is a private agent proposal: it is stored
@@ -552,6 +634,7 @@ export async function createDocumentComment(
       parent_id: effectiveParentId,
       reference_id: trimToNull(input.referenceId),
       reference_quote: trimToNull(input.referenceQuote),
+      proposal_id: trimToNull(input.proposalId),
       body,
       status: "open",
       proposal_status: input.proposalStatus === "pending" ? "pending" : "shared",

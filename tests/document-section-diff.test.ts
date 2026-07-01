@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applySectionChange,
   diffMarkdownSections,
+  replaceSectionInMarkdown,
   sectionChangeLabel,
   splitMarkdownSections,
 } from "@/lib/document-section-diff";
@@ -71,5 +73,96 @@ describe("sectionChangeLabel", () => {
   it("labels the preamble as Intro", () => {
     expect(sectionChangeLabel({ heading: "", level: 0 })).toBe("Intro");
     expect(sectionChangeLabel({ heading: "Goals", level: 2 })).toBe("Goals");
+  });
+});
+
+describe("applySectionChange", () => {
+  const doc = [
+    "# Doc",
+    "Preamble stays.",
+    "",
+    "## Goals",
+    "Old goal.",
+    "",
+    "## Work",
+    "Do the work.",
+  ].join("\n");
+
+  function change(before: string, after: string) {
+    const changes = diffMarkdownSections(before, after);
+    return changes.find((c) => c.status !== "unchanged")!;
+  }
+
+  it("applies a single modified section and leaves every other section byte-for-byte", () => {
+    const after = doc.replace("Old goal.", "New goal.");
+    const result = applySectionChange(doc, change(doc, after));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.content).toContain("New goal.");
+      expect(result.content).toContain("Do the work.");
+      expect(result.content).toContain("Preamble stays.");
+      // The Work section is untouched.
+      expect(result.content).not.toContain("Old goal.");
+    }
+  });
+
+  it("adds a new section", () => {
+    const after = `${doc}\n\n## Routines\nMornings.`;
+    const result = applySectionChange(doc, change(doc, after));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.content).toContain("## Routines");
+  });
+
+  it("removes a section", () => {
+    const after = ["# Doc", "Preamble stays.", "", "## Goals", "Old goal."].join("\n");
+    const result = applySectionChange(doc, change(doc, after));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.content).not.toContain("## Work");
+      expect(result.content).toContain("## Goals");
+    }
+  });
+
+  it("is a no-op success when the change is already applied (idempotent)", () => {
+    const after = doc.replace("Old goal.", "New goal.");
+    const target = change(doc, after);
+    const result = applySectionChange(after, target);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.content).toBe(after);
+  });
+
+  it("conflicts when the target section moved underneath the proposal", () => {
+    const after = doc.replace("Old goal.", "New goal.");
+    const target = change(doc, after);
+    // Someone else already rewrote the Goals section to something different.
+    const drifted = doc.replace("Old goal.", "Totally different goal.");
+    const result = applySectionChange(drifted, target);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("conflict");
+  });
+
+  it("lets two sibling section changes both land on the same document", () => {
+    const goalsOnly = doc.replace("Old goal.", "New goal.");
+    const workOnly = doc.replace("Do the work.", "Did the work.");
+    const goalsChange = change(doc, goalsOnly);
+    const workChange = change(doc, workOnly);
+
+    const first = applySectionChange(doc, goalsChange);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    // The Work change was authored against the original doc; it must still apply
+    // after the Goals change advanced the document.
+    const second = applySectionChange(first.content, workChange);
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.content).toContain("New goal.");
+      expect(second.content).toContain("Did the work.");
+    }
+  });
+});
+
+describe("replaceSectionInMarkdown", () => {
+  it("returns null when the section key is absent", () => {
+    expect(replaceSectionInMarkdown("## A\nbody", "h2:missing", "## A\nnew")).toBeNull();
   });
 });

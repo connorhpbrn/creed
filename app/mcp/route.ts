@@ -1254,8 +1254,11 @@ async function handleToolCall(
       return jsonToolResult({
         ok: true,
         outcome: "proposed",
-        proposal: result.proposal,
-        message: "Recorded as a pending proposal for workspace review (agent edits require approval).",
+        proposals: result.proposals,
+        sectionCount: result.proposals.length,
+        message: `Recorded as ${result.proposals.length} pending per-section ${
+          result.proposals.length === 1 ? "proposal" : "proposals"
+        } for workspace review (agent edits require approval).`,
       });
     }
     return jsonToolResult({ ok: true, outcome: "applied", document: result.document });

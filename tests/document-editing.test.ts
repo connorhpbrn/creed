@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 // don't want to load under test. Mock the whole module to a no-op.
 vi.mock("@/lib/document-collaboration", () => ({
   recordDocumentActivity: vi.fn(async () => {}),
+  resolveOpenCommentsForProposal: vi.fn(async () => 0),
 }));
 
 import {
@@ -105,7 +106,7 @@ describe("Property 2: version-per-apply", () => {
     // Pending proposal has not applied a version yet.
     expect(client.count(VERSIONS)).toBe(0);
 
-    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposal.id : "";
+    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposals[0].id : "";
     const accepted = await acceptDocumentProposal(client, {
       documentId,
       proposalId,
@@ -154,7 +155,7 @@ describe("Property 5: at-most-once resolution", () => {
       expectedRevision: 1,
       summary: "proposed",
     });
-    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposal.id : "";
+    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposals[0].id : "";
 
     const first = await acceptDocumentProposal(client, { documentId, proposalId, actorUserId: "user-B" });
     const second = await acceptDocumentProposal(client, { documentId, proposalId, actorUserId: "user-C" });
@@ -179,7 +180,7 @@ describe("Property 5: at-most-once resolution", () => {
       expectedRevision: 1,
       summary: "proposed",
     });
-    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposal.id : "";
+    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposals[0].id : "";
 
     await acceptDocumentProposal(client, { documentId, proposalId, actorUserId: "user-B" });
     const rejected = await rejectDocumentProposal(client, { documentId, proposalId, actorUserId: "user-C" });
@@ -226,7 +227,7 @@ describe("Property 6: concurrency guard", () => {
       expectedRevision: 1,
       summary: "proposed",
     });
-    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposal.id : "";
+    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposals[0].id : "";
 
     // Meanwhile an agent applies a direct edit, moving the document to revision 2.
     await routeDocumentEdit(client, {
@@ -261,7 +262,7 @@ describe("Property 7: reject safety", () => {
       expectedRevision: 1,
       summary: "proposed",
     });
-    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposal.id : "";
+    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposals[0].id : "";
 
     const rejected = await rejectDocumentProposal(client, { documentId, proposalId, actorUserId: "user-B" });
     expect(rejected.ok).toBe(true);
@@ -294,7 +295,7 @@ describe("Property 8: attribution preservation", () => {
       expectedRevision: 1,
       summary: "proposed",
     });
-    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposal.id : "";
+    const proposalId = proposed.ok && proposed.outcome === "proposed" ? proposed.proposals[0].id : "";
 
     const accepted = await acceptDocumentProposal(client, { documentId, proposalId, actorUserId: "accepting-user-B" });
     expect(accepted.ok).toBe(true);
@@ -352,5 +353,72 @@ describe("Property 3 (bonus): revert appends and never deletes", () => {
     expect(client.count(VERSIONS)).toBe(3);
     expect(client.rows(DOCS)[0].revision).toBe(4);
     expect(client.rows(DOCS)[0].content).toBe("# Test Doc\nVersion two body.");
+  });
+});
+
+describe("Per-section proposals (batching + independent accept)", () => {
+  const MULTI = ["# Doc", "Intro.", "", "## Goals", "Old goal.", "", "## Work", "Do work."].join("\n");
+  const BOTH = ["# Doc", "Intro.", "", "## Goals", "New goal.", "", "## Work", "Did work."].join("\n");
+
+  async function proposeBoth() {
+    const { client, documentId } = createFakeClientWithDocument({ content: MULTI });
+    setPolicy(client, { human: "propose" });
+    const proposed = await routeDocumentEdit(client, {
+      documentId,
+      actorType: "human",
+      author: { userId: "author-A" },
+      content: BOTH,
+      expectedRevision: 1,
+      summary: "propose two sections",
+    });
+    if (!(proposed.ok && proposed.outcome === "proposed")) throw new Error("setup failed");
+    return { client, documentId, proposals: proposed.proposals };
+  }
+
+  it("splits one edit into a proposal per changed section, sharing a batch", async () => {
+    const { proposals } = await proposeBoth();
+    expect(proposals).toHaveLength(2);
+    expect(proposals[0].batchId).toBeTruthy();
+    expect(proposals[0].batchId).toBe(proposals[1].batchId);
+    expect(proposals.map((p) => p.sectionHeading).sort()).toEqual(["Goals", "Work"]);
+    // Creating proposals never touches the document.
+    expect(proposals.every((p) => p.kind === "document-section")).toBe(true);
+  });
+
+  it("accepts each section independently, advancing the document once per accept", async () => {
+    const { client, documentId, proposals } = await proposeBoth();
+    const goals = proposals.find((p) => p.sectionHeading === "Goals")!;
+    const work = proposals.find((p) => p.sectionHeading === "Work")!;
+
+    const first = await acceptDocumentProposal(client, { documentId, proposalId: goals.id, actorUserId: "u-B" });
+    expect(first.ok).toBe(true);
+    expect(client.rows(DOCS)[0].content).toContain("New goal.");
+    expect(client.rows(DOCS)[0].content).toContain("Do work."); // Work not yet accepted
+    expect(client.rows(DOCS)[0].revision).toBe(2);
+
+    // The Work proposal was authored against revision 1 but must still apply
+    // after the Goals accept advanced the document (per-section merge guard).
+    const second = await acceptDocumentProposal(client, { documentId, proposalId: work.id, actorUserId: "u-B" });
+    expect(second.ok).toBe(true);
+    expect(client.rows(DOCS)[0].content).toContain("New goal.");
+    expect(client.rows(DOCS)[0].content).toContain("Did work.");
+    expect(client.rows(DOCS)[0].revision).toBe(3);
+    expect(client.count(VERSIONS)).toBe(2);
+  });
+
+  it("rejecting one section leaves its sibling acceptable", async () => {
+    const { client, documentId, proposals } = await proposeBoth();
+    const goals = proposals.find((p) => p.sectionHeading === "Goals")!;
+    const work = proposals.find((p) => p.sectionHeading === "Work")!;
+
+    const rejected = await rejectDocumentProposal(client, { documentId, proposalId: goals.id, actorUserId: "u-B" });
+    expect(rejected.ok).toBe(true);
+
+    const accepted = await acceptDocumentProposal(client, { documentId, proposalId: work.id, actorUserId: "u-B" });
+    expect(accepted.ok).toBe(true);
+    // Only Work landed; Goals still reads the original.
+    expect(client.rows(DOCS)[0].content).toContain("Old goal.");
+    expect(client.rows(DOCS)[0].content).toContain("Did work.");
+    expect(client.count(VERSIONS)).toBe(1);
   });
 });

@@ -41,6 +41,7 @@ export async function POST(
     documentId: id,
     actorType: "human",
     author: { userId: auth.user.id },
+    baseContent: document.content,
     content,
     summary: typeof input.summary === "string" && input.summary.trim() ? input.summary.trim() : "Proposed a change",
     baseRevision: document.revision,
@@ -50,5 +51,5 @@ export async function POST(
     return NextResponse.json({ error: result.error }, { status: result.code === "not-found" ? 404 : 400 });
   }
 
-  return NextResponse.json({ proposal: result.value });
+  return NextResponse.json({ proposals: result.value });
 }

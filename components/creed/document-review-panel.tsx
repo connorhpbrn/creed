@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronDown, History, RotateCcw, X } from "@/components/ui/phosphor-icons";
+import { Check, ChevronDown, History, LoaderCircle, MessageSquare, RotateCcw, Send, X } from "@/components/ui/phosphor-icons";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -29,15 +29,34 @@ import { cn } from "@/lib/utils";
 
 type ActorType = "human" | "agent";
 
+type SectionStatus = "added" | "removed" | "modified" | "unchanged";
+
 type DocumentProposal = {
   id: string;
   actorType: ActorType;
   authorUserId: string | null;
   authorAgentLabel: string | null;
+  kind: "document-content" | "document-section";
   content: string;
   summary: string;
   baseRevision: number;
   status: string;
+  createdAt: string;
+  batchId: string | null;
+  sectionKey: string | null;
+  sectionHeading: string | null;
+  sectionLevel: number | null;
+  sectionStatus: SectionStatus | null;
+  sectionBefore: string | null;
+  sectionAfter: string | null;
+};
+
+type ProposalComment = {
+  id: string;
+  body: string;
+  status: "open" | "resolved";
+  createdBy: string | null;
+  authorLabel: string;
   createdAt: string;
 };
 
@@ -211,15 +230,42 @@ function SectionGroupedDiff({ before, after }: { before: string; after: string }
   );
 }
 
-function useSectionSummary(before: string, after: string) {
-  return useMemo(() => {
-    const parts = computeDiffParts(before, after);
-    const stats = summarizeDiff(parts);
-    const changedSections = diffMarkdownSections(before, after).filter(
-      (change) => change.status !== "unchanged"
-    ).length;
-    return { stats, changedSections };
-  }, [before, after]);
+type ProposalBatch = {
+  key: string;
+  proposals: DocumentProposal[];
+};
+
+// Group the pending proposals into review items: the per-section proposals from
+// one edit share a `batchId` and review together under one summary; a legacy
+// whole-content proposal (no batch) is its own group of one. Insertion order is
+// preserved so the newest edits keep their server ordering.
+function groupProposalBatches(proposals: DocumentProposal[]): ProposalBatch[] {
+  const order: string[] = [];
+  const byKey = new Map<string, DocumentProposal[]>();
+  for (const proposal of proposals) {
+    const key = proposal.batchId ?? proposal.id;
+    if (!byKey.has(key)) {
+      byKey.set(key, []);
+      order.push(key);
+    }
+    byKey.get(key)!.push(proposal);
+  }
+  return order.map((key) => ({ key, proposals: byKey.get(key)! }));
+}
+
+// The before/after a proposal represents: a section proposal carries its own
+// before/after; a legacy whole-content proposal diffs against the live document.
+function proposalDiffPair(proposal: DocumentProposal, currentContent: string) {
+  if (proposal.kind === "document-section") {
+    return { before: proposal.sectionBefore ?? "", after: proposal.sectionAfter ?? "" };
+  }
+  return { before: currentContent, after: proposal.content };
+}
+
+function sectionRowLabel(proposal: DocumentProposal) {
+  if (proposal.kind !== "document-section") return "Whole document";
+  if ((proposal.sectionLevel ?? 0) === 0 || !proposal.sectionHeading) return "Intro";
+  return proposal.sectionHeading;
 }
 
 export function DocumentReviewPanel({
@@ -240,7 +286,6 @@ export function DocumentReviewPanel({
   const [proposals, setProposals] = useState<DocumentProposal[]>([]);
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [expandedProposal, setExpandedProposal] = useState<string | null>(null);
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
   const [busyProposal, setBusyProposal] = useState<string | null>(null);
   const [revertingVersion, setRevertingVersion] = useState<string | null>(null);
@@ -378,6 +423,7 @@ export function DocumentReviewPanel({
     }
   }
 
+  const batches = useMemo(() => groupProposalBatches(proposals), [proposals]);
   const hasProposals = proposals.length > 0;
 
   if (!hasProposals && versions.length === 0) {
@@ -390,23 +436,23 @@ export function DocumentReviewPanel({
         <div className="rounded-[var(--radius-lg)] border border-[var(--creed-border)] bg-[var(--creed-surface)]">
           <div className="flex items-center justify-between border-b border-[var(--creed-border)] px-4 py-2.5">
             <span className="text-[13px] font-medium text-[var(--creed-text-primary)]">
-              {proposals.length} pending {proposals.length === 1 ? "proposal" : "proposals"}
+              {batches.length} pending {batches.length === 1 ? "proposal" : "proposals"}
             </span>
           </div>
           <div className="divide-y divide-[var(--creed-border)]">
-            {proposals.map((proposal) => (
-              <ProposalRow
-                key={proposal.id}
-                proposal={proposal}
+            {batches.map((batch) => (
+              <ProposalBatchCard
+                key={batch.key}
+                batch={batch}
+                documentId={documentId}
                 currentContent={currentContent}
-                person={resolvePerson(proposal.authorUserId, proposal.authorAgentLabel)}
-                expanded={expandedProposal === proposal.id}
-                busy={busyProposal === proposal.id}
-                onToggle={() =>
-                  setExpandedProposal((current) => (current === proposal.id ? null : proposal.id))
-                }
-                onAccept={() => void resolveProposal(proposal.id, "accept")}
-                onReject={() => void resolveProposal(proposal.id, "reject")}
+                users={users}
+                person={resolvePerson(
+                  batch.proposals[0].authorUserId,
+                  batch.proposals[0].authorAgentLabel
+                )}
+                busyProposal={busyProposal}
+                onResolve={resolveProposal}
               />
             ))}
           </div>
@@ -472,52 +518,78 @@ export function DocumentReviewPanel({
   );
 }
 
-function ProposalRow({
-  proposal,
+// One review item: the group of per-section proposals from a single edit (or a
+// single legacy whole-content proposal). Shows a summary line the reviewer can
+// expand into per-section rows, each accept/reject-able on its own, each with
+// its own comment thread. Accept/reject-all are conveniences over the per-row
+// controls.
+function ProposalBatchCard({
+  batch,
+  documentId,
   currentContent,
+  users,
   person,
-  expanded,
-  busy,
-  onToggle,
-  onAccept,
-  onReject,
+  busyProposal,
+  onResolve,
 }: {
-  proposal: DocumentProposal;
+  batch: ProposalBatch;
+  documentId: string;
   currentContent: string;
+  users: WorkspaceUser[];
   person: Person;
-  expanded: boolean;
-  busy: boolean;
-  onToggle: () => void;
-  onAccept: () => void;
-  onReject: () => void;
+  busyProposal: string | null;
+  onResolve: (id: string, action: "accept" | "reject") => Promise<void>;
 }) {
-  const { stats, changedSections } = useSectionSummary(currentContent, proposal.content);
+  const [open, setOpen] = useState(true);
+
+  const summary = useMemo(() => {
+    let added = 0;
+    let removed = 0;
+    for (const proposal of batch.proposals) {
+      const { before, after } = proposalDiffPair(proposal, currentContent);
+      const stats = summarizeDiff(computeDiffParts(before, after));
+      added += stats.added;
+      removed += stats.removed;
+    }
+    return { added, removed };
+  }, [batch.proposals, currentContent]);
+
+  const sectionCount = batch.proposals.length;
+  const head = batch.proposals[0];
+  const anyBusy = batch.proposals.some((proposal) => busyProposal === proposal.id);
+
+  async function resolveAll(action: "accept" | "reject") {
+    // Sequentially, so each section applies against the revision the previous
+    // acceptance produced (the per-section merge guard handles ordering).
+    for (const proposal of batch.proposals) {
+      await onResolve(proposal.id, action);
+    }
+  }
 
   return (
     <div className="px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
-          onClick={onToggle}
+          onClick={() => setOpen((value) => !value)}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
-          aria-expanded={expanded}
+          aria-expanded={open}
         >
           <ChevronDown
             className={cn(
               "h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-200",
-              expanded ? "rotate-0" : "-rotate-90"
+              open ? "rotate-0" : "-rotate-90"
             )}
           />
           <PersonBadge person={person} />
           <span className="truncate text-[13px] text-[var(--creed-text-secondary)]">
             {" "}
-            {proposal.actorType === "agent" ? "proposed an edit" : "proposed a change"} ·{" "}
-            {changedSections} {changedSections === 1 ? "section" : "sections"} ·{" "}
-            {relativeTime(proposal.createdAt)}
+            {head.actorType === "agent" ? "proposed an edit" : "proposed a change"} ·{" "}
+            {sectionCount} {sectionCount === 1 ? "section" : "sections"} · {relativeTime(head.createdAt)}
           </span>
           <span className="ml-auto inline-flex shrink-0 items-center gap-1.5">
-            <DiffBadge tone="added" count={stats.added} />
-            <DiffBadge tone="removed" count={stats.removed} />
+            <DiffBadge tone="added" count={summary.added} />
+            <DiffBadge tone="removed" count={summary.removed} />
           </span>
         </button>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -525,25 +597,25 @@ function ProposalRow({
             variant="ghost"
             size="sm"
             className="h-7 gap-1 rounded-md px-2 text-[12px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
-            disabled={busy}
-            onClick={onReject}
+            disabled={anyBusy}
+            onClick={() => void resolveAll("reject")}
           >
             <X className="h-3.5 w-3.5" />
-            Reject
+            {sectionCount === 1 ? "Reject" : "Reject all"}
           </Button>
           <Button
             size="sm"
             className="h-7 gap-1 rounded-md bg-[var(--creed-accent)] px-2.5 text-[12px] text-white hover:bg-[var(--creed-accent-hover)]"
-            disabled={busy}
-            onClick={onAccept}
+            disabled={anyBusy}
+            onClick={() => void resolveAll("accept")}
           >
             <Check className="h-3.5 w-3.5" />
-            Accept
+            {sectionCount === 1 ? "Accept" : "Accept all"}
           </Button>
         </div>
       </div>
       <AnimatePresence initial={false}>
-        {expanded ? (
+        {open ? (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -551,12 +623,272 @@ function ProposalRow({
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
-            <div className="pt-3">
-              <SectionGroupedDiff before={currentContent} after={proposal.content} />
+            <div className="mt-3 space-y-1.5">
+              {batch.proposals.map((proposal) => (
+                <ProposalSectionRow
+                  key={proposal.id}
+                  proposal={proposal}
+                  currentContent={currentContent}
+                  documentId={documentId}
+                  users={users}
+                  busy={busyProposal === proposal.id}
+                  onAccept={() => void onResolve(proposal.id, "accept")}
+                  onReject={() => void onResolve(proposal.id, "reject")}
+                />
+              ))}
             </div>
           </motion.div>
         ) : null}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function ProposalSectionRow({
+  proposal,
+  currentContent,
+  documentId,
+  users,
+  busy,
+  onAccept,
+  onReject,
+}: {
+  proposal: DocumentProposal;
+  currentContent: string;
+  documentId: string;
+  users: WorkspaceUser[];
+  busy: boolean;
+  onAccept: () => void;
+  onReject: () => void;
+}) {
+  const [showDiff, setShowDiff] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const { before, after } = proposalDiffPair(proposal, currentContent);
+  const stats = useMemo(() => summarizeDiff(computeDiffParts(before, after)), [before, after]);
+  const label = sectionRowLabel(proposal);
+  const status = proposal.sectionStatus ?? "modified";
+
+  return (
+    <div className="rounded-[10px] border border-[var(--creed-border)] bg-[var(--creed-surface)]">
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setShowDiff((value) => !value)}
+          aria-expanded={showDiff}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          <ChevronDown
+            className={cn(
+              "h-3 w-3 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-200",
+              showDiff ? "rotate-0" : "-rotate-90"
+            )}
+          />
+          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", STATUS_DOT[status])} />
+          <span className="truncate text-[13px] text-[var(--creed-text-primary)]">{label}</span>
+          {status === "added" ? (
+            <span className="shrink-0 text-[11px] text-[var(--creed-text-tertiary)]">new section</span>
+          ) : status === "removed" ? (
+            <span className="shrink-0 text-[11px] text-[var(--creed-text-tertiary)]">removed</span>
+          ) : null}
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1.5">
+            <DiffBadge tone="added" count={stats.added} />
+            <DiffBadge tone="removed" count={stats.removed} />
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowComments((value) => !value)}
+          aria-expanded={showComments}
+          title="Comment on this section"
+          className={cn(
+            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--creed-text-tertiary)] hover:text-[var(--creed-text-primary)]",
+            showComments ? "text-[var(--creed-text-primary)]" : ""
+          )}
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+        </button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 gap-1 rounded-md px-1.5 text-[11px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
+          disabled={busy}
+          onClick={onReject}
+        >
+          <X className="h-3 w-3" />
+          Reject
+        </Button>
+        <Button
+          size="sm"
+          className="h-6 gap-1 rounded-md bg-[var(--creed-accent)] px-2 text-[11px] text-white hover:bg-[var(--creed-accent-hover)]"
+          disabled={busy}
+          onClick={onAccept}
+        >
+          <Check className="h-3 w-3" />
+          Accept
+        </Button>
+      </div>
+      <AnimatePresence initial={false}>
+        {showDiff ? (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="px-2.5 pb-2.5">
+              {proposal.kind === "document-section" ? (
+                <DiffText before={before} after={after} />
+              ) : (
+                <SectionGroupedDiff before={before} after={after} />
+              )}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+      <AnimatePresence initial={false}>
+        {showComments ? (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <ProposalCommentThread documentId={documentId} proposalId={proposal.id} users={users} />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// The comment thread anchored to a single proposal. Comments are loaded lazily
+// when the thread is first opened; open comments here are auto-resolved server
+// side when the proposal is accepted or rejected.
+function ProposalCommentThread({
+  documentId,
+  proposalId,
+  users,
+}: {
+  documentId: string;
+  proposalId: string;
+  users: WorkspaceUser[];
+}) {
+  const [comments, setComments] = useState<ProposalComment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [body, setBody] = useState("");
+  const [posting, setPosting] = useState(false);
+  const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `/api/app/documents/${encodeURIComponent(documentId)}/comments?proposalId=${encodeURIComponent(proposalId)}`,
+        { cache: "no-store" }
+      );
+      if (response.ok) {
+        const payload = (await response.json()) as { comments?: ProposalComment[] };
+        setComments(payload.comments ?? []);
+      }
+    } catch {
+      // Non-fatal: leave the last known thread in place.
+    } finally {
+      setLoading(false);
+    }
+  }, [documentId, proposalId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function submit() {
+    const text = body.trim();
+    if (!text || posting) return;
+    setPosting(true);
+    try {
+      const response = await fetch(
+        `/api/app/documents/${encodeURIComponent(documentId)}/comments`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: text, proposalId }),
+        }
+      );
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || "Could not add comment.");
+      }
+      setBody("");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not add comment.");
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-t border-[var(--creed-border)] px-3 py-2.5">
+      {loading ? (
+        <div className="flex items-center gap-1.5 text-[12px] text-[var(--creed-text-tertiary)]">
+          <LoaderCircle className="h-3 w-3 animate-spin" />
+          Loading comments…
+        </div>
+      ) : comments.length === 0 ? (
+        <div className="text-[12px] text-[var(--creed-text-tertiary)]">
+          No comments yet. Ask a question or leave a review note.
+        </div>
+      ) : (
+        comments.map((comment) => {
+          const author = comment.createdBy ? usersById.get(comment.createdBy) : undefined;
+          const label = author?.label ?? comment.authorLabel;
+          return (
+            <div key={comment.id} className="flex gap-2">
+              <Avatar size="sm" className="mt-0.5 h-5 w-5 shrink-0">
+                {author?.avatarUrl ? <AvatarImage src={author.avatarUrl} alt={label} /> : null}
+                <AvatarFallback className="text-[10px]">{initialsFor(label)}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-[var(--creed-text-secondary)]">
+                  <span className="font-medium text-[var(--creed-text-primary)]">{label}</span>
+                  <span className="text-[var(--creed-text-tertiary)]">
+                    {" · "}
+                    {relativeTime(comment.createdAt)}
+                    {comment.status === "resolved" ? " · resolved" : ""}
+                  </span>
+                </div>
+                <div className="whitespace-pre-wrap break-words text-[13px] text-[var(--creed-text-primary)]">
+                  {comment.body}
+                </div>
+              </div>
+            </div>
+          );
+        })
+      )}
+      <div className="flex items-center gap-2 pt-1">
+        <input
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void submit();
+            }
+          }}
+          placeholder="Comment on this proposal"
+          className="min-w-0 flex-1 rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface-raised)] px-2.5 py-1.5 text-[13px] text-[var(--creed-text-primary)] outline-none placeholder:text-[var(--creed-text-tertiary)] focus:border-[var(--creed-accent)]"
+        />
+        <Button
+          size="sm"
+          className="h-8 shrink-0 gap-1 rounded-md bg-[var(--creed-accent)] px-2.5 text-[12px] text-white hover:bg-[var(--creed-accent-hover)]"
+          disabled={posting || !body.trim()}
+          onClick={() => void submit()}
+        >
+          <Send className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }

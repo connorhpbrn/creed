@@ -1,5 +1,15 @@
 import "server-only";
-import { recordDocumentActivity } from "@/lib/document-collaboration";
+import {
+  recordDocumentActivity,
+  resolveOpenCommentsForProposal,
+} from "@/lib/document-collaboration";
+import {
+  applySectionChange,
+  diffMarkdownSections,
+  sectionChangeLabel,
+  type SectionChange,
+  type SectionChangeStatus,
+} from "@/lib/document-section-diff";
 import { appendDocumentVersion, readDocumentVersion, type DocumentVersion } from "@/lib/document-versions";
 import {
   readSharedDocumentById,
@@ -7,19 +17,27 @@ import {
   type SharedDocument,
 } from "@/lib/shared-documents";
 import { policyForActor, type ActorType } from "@/lib/workspace-settings";
+import { randomUUID } from "node:crypto";
 import type { SupabaseLikeClient } from "@/lib/supabase/types";
 
 // Model S edit engine. Every document mutation flows through `routeDocumentEdit`,
 // which reads the workspace policy for the actor type and either rejects it,
-// records a workspace-shared proposal, or applies it and appends a version.
-// Shared documents are edited as whole-content changes (the editor and the MCP
-// document tools both submit full Markdown), so a proposal stores the full
-// proposed content; the UI diffs it section-by-section for review.
+// records workspace-shared proposals, or applies it and appends a version.
+//
+// The editor and the MCP document tools both submit a full Markdown body. Under
+// the "propose" policy that whole-content submission is split into one proposal
+// per changed Markdown section (all sharing a `batchId`), so a reviewer can
+// accept or reject each section independently. Each section proposal stores its
+// own before/after so acceptance applies just that section, merge-guarded so
+// siblings can land in any order. Legacy whole-content proposals (draft.kind =
+// 'document-content') are still understood on the accept path.
 
 export type DocumentEditAuthor = {
   userId?: string | null;
   agentLabel?: string | null;
 };
+
+export type DocumentProposalKind = "document-content" | "document-section";
 
 export type DocumentProposal = {
   id: string;
@@ -27,6 +45,9 @@ export type DocumentProposal = {
   actorType: ActorType;
   authorUserId: string | null;
   authorAgentLabel: string | null;
+  kind: DocumentProposalKind;
+  // Whole-content proposals: the full proposed body. Section proposals: the
+  // section's proposed body ("" for a removed section).
   content: string;
   summary: string;
   baseRevision: number;
@@ -34,6 +55,16 @@ export type DocumentProposal = {
   createdAt: string;
   resolvedAt: string | null;
   resolvedBy: string | null;
+  // Groups the sibling section proposals produced by one edit. Null for a
+  // legacy whole-content proposal (which reviews as a group of one).
+  batchId: string | null;
+  // Section-scoped fields; all null for a whole-content proposal.
+  sectionKey: string | null;
+  sectionHeading: string | null;
+  sectionLevel: number | null;
+  sectionStatus: SectionChangeStatus | null;
+  sectionBefore: string | null;
+  sectionAfter: string | null;
 };
 
 type DocumentProposalRow = {
@@ -43,6 +74,8 @@ type DocumentProposalRow = {
   author_user_id: string | null;
   author_agent_label: string | null;
   draft: unknown;
+  section_id: string | null;
+  batch_id: string | null;
   summary: string | null;
   base_revision: number;
   status: string;
@@ -52,7 +85,7 @@ type DocumentProposalRow = {
 };
 
 type EditResult =
-  | { ok: true; outcome: "proposed"; proposal: DocumentProposal }
+  | { ok: true; outcome: "proposed"; proposals: DocumentProposal[] }
   | { ok: true; outcome: "applied"; document: SharedDocument; version: DocumentVersion }
   | { ok: false; code: "invalid" | "not-found" | "conflict" | "forbidden"; error: string };
 
@@ -67,6 +100,8 @@ const PROPOSAL_COLUMNS = [
   "author_user_id",
   "author_agent_label",
   "draft",
+  "section_id",
+  "batch_id",
   "summary",
   "base_revision",
   "status",
@@ -74,6 +109,23 @@ const PROPOSAL_COLUMNS = [
   "resolved_at",
   "resolved_by",
 ].join(", ");
+
+// A section-scoped draft carries the whole SectionChange so acceptance can
+// merge-guard on the author-time `before` and splice in `after`.
+type SectionDraft = {
+  kind: "document-section";
+  section: SectionChange;
+};
+
+function isSectionDraft(draft: unknown): draft is SectionDraft {
+  return (
+    !!draft &&
+    typeof draft === "object" &&
+    (draft as { kind?: unknown }).kind === "document-section" &&
+    typeof (draft as { section?: unknown }).section === "object" &&
+    (draft as { section?: unknown }).section !== null
+  );
+}
 
 function draftContent(draft: unknown): string {
   if (draft && typeof draft === "object" && "content" in draft) {
@@ -83,20 +135,46 @@ function draftContent(draft: unknown): string {
   return "";
 }
 
+// Rebuild the SectionChange stored on a section proposal, tolerating partially
+// shaped drafts.
+function sectionFromDraft(draft: unknown): SectionChange | null {
+  if (!isSectionDraft(draft)) return null;
+  const section = draft.section as Partial<SectionChange>;
+  if (typeof section.key !== "string") return null;
+  return {
+    key: section.key,
+    heading: typeof section.heading === "string" ? section.heading : "",
+    level: typeof section.level === "number" ? section.level : 0,
+    status: (section.status as SectionChangeStatus) ?? "modified",
+    before: typeof section.before === "string" ? section.before : "",
+    after: typeof section.after === "string" ? section.after : "",
+  };
+}
+
 function mapProposal(row: DocumentProposalRow): DocumentProposal {
+  const section = sectionFromDraft(row.draft);
+  const kind: DocumentProposalKind = section ? "document-section" : "document-content";
   return {
     id: row.id,
     documentId: row.document_id,
     actorType: row.actor_type === "agent" ? "agent" : "human",
     authorUserId: row.author_user_id,
     authorAgentLabel: row.author_agent_label,
-    content: draftContent(row.draft),
+    kind,
+    content: section ? section.after : draftContent(row.draft),
     summary: row.summary ?? "",
     baseRevision: row.base_revision,
     status: row.status === "accepted" ? "accepted" : row.status === "rejected" ? "rejected" : "pending",
     createdAt: row.created_at,
     resolvedAt: row.resolved_at,
     resolvedBy: row.resolved_by,
+    batchId: row.batch_id,
+    sectionKey: section ? section.key : row.section_id,
+    sectionHeading: section ? section.heading : null,
+    sectionLevel: section ? section.level : null,
+    sectionStatus: section ? section.status : null,
+    sectionBefore: section ? section.before : null,
+    sectionAfter: section ? section.after : null,
   };
 }
 
@@ -144,54 +222,80 @@ async function applyDocumentContent(
   return { ok: true, document: applied.value, version };
 }
 
+// Split a whole-content submission into one proposal per changed Markdown
+// section (all sharing a batchId) so each section can be reviewed on its own.
+// Returns the created batch, oldest-key-first. When nothing changed, returns an
+// empty batch (the caller treats that as "no proposal to record").
 export async function createDocumentProposal(
   client: unknown,
   input: {
     documentId: string;
     actorType: ActorType;
     author: DocumentEditAuthor;
+    baseContent: string;
     content: string;
     summary: string;
     baseRevision: number;
   }
-): Promise<ProposalResult<DocumentProposal>> {
+): Promise<ProposalResult<DocumentProposal[]>> {
   const db = client as SupabaseLikeClient;
+
+  const changed = diffMarkdownSections(input.baseContent, input.content).filter(
+    (change) => change.status !== "unchanged"
+  );
+
+  if (changed.length === 0) {
+    return { ok: false, code: "invalid", error: "No changes to propose." };
+  }
+
+  const batchId = randomUUID();
+  const now = new Date().toISOString();
+  const rows = changed.map((section) => ({
+    document_id: input.documentId,
+    actor_type: input.actorType,
+    author_user_id: input.author.userId ?? null,
+    author_agent_label: input.author.agentLabel ?? null,
+    draft: { kind: "document-section", section },
+    section_id: section.key,
+    batch_id: batchId,
+    summary: input.summary,
+    base_revision: input.baseRevision,
+    status: "pending",
+    resolving: false,
+    created_at: now,
+  }));
+
   const { data, error } = (await db
     .from("creed_document_proposals")
-    .insert({
-      document_id: input.documentId,
-      actor_type: input.actorType,
-      author_user_id: input.author.userId ?? null,
-      author_agent_label: input.author.agentLabel ?? null,
-      draft: { kind: "document-content", content: input.content },
-      summary: input.summary,
-      base_revision: input.baseRevision,
-      status: "pending",
-      resolving: false,
-    })
-    .select(PROPOSAL_COLUMNS)
-    .single()) as {
-    data: DocumentProposalRow | null;
+    .insert(rows)
+    .select(PROPOSAL_COLUMNS)) as {
+    data: DocumentProposalRow[] | null;
     error: { message: string } | null;
   };
 
-  if (error || !data) {
-    return { ok: false, code: "invalid", error: error?.message || "Could not create proposal." };
+  if (error || !data || data.length === 0) {
+    return { ok: false, code: "invalid", error: error?.message || "Could not create proposals." };
   }
 
+  // One activity event for the whole batch keeps the audit trail readable even
+  // when an edit touches many sections.
   await recordDocumentActivity(client, {
     documentId: input.documentId,
     actorUserId: input.author.userId ?? null,
     action: "document.proposal.created",
-    summary: input.summary || "Proposed a change",
+    summary:
+      input.summary ||
+      `Proposed changes to ${changed.length} ${changed.length === 1 ? "section" : "sections"}`,
     metadata: {
-      proposalId: data.id,
+      batchId,
+      proposalIds: data.map((row) => row.id),
+      sectionCount: changed.length,
       actorType: input.actorType,
       agentLabel: input.author.agentLabel ?? null,
     },
   });
 
-  return { ok: true, value: mapProposal(data) };
+  return { ok: true, value: data.map(mapProposal) };
 }
 
 export async function listDocumentProposals(
@@ -249,18 +353,16 @@ export async function routeDocumentEdit(
   }
 
   if (policy === "propose") {
-    // Record the proposal against the revision the caller actually read
+    // Record the proposal(s) against the revision the caller actually read
     // (`expectedRevision`), not a fresh re-read. Otherwise a proposal authored
-    // against an older revision would be stamped with the current revision, and
-    // the accept-time guard (`baseRevision === document.revision`) would let it
-    // silently clobber intervening edits the author never saw. Fall back to the
-    // current revision when the caller did not supply a real read revision
-    // (e.g. an MCP agent that omitted expectedRevision), preserving the prior
-    // best-effort behaviour rather than forcing a guaranteed conflict.
+    // against an older revision would be stamped with the current revision.
+    // Fall back to the current revision when the caller did not supply a real
+    // read revision (e.g. an MCP agent that omitted expectedRevision).
     const created = await createDocumentProposal(client, {
       documentId: input.documentId,
       actorType: input.actorType,
       author: input.author,
+      baseContent: document.content,
       content: input.content,
       summary: input.summary,
       baseRevision: input.expectedRevision > 0 ? input.expectedRevision : document.revision,
@@ -268,7 +370,7 @@ export async function routeDocumentEdit(
     if (!created.ok) {
       return created;
     }
-    return { ok: true, outcome: "proposed", proposal: created.value };
+    return { ok: true, outcome: "proposed", proposals: created.value };
   }
 
   // direct
@@ -331,26 +433,63 @@ export async function acceptDocumentProposal(
     return { ok: false, code: "not-found", error: "Document not found." };
   }
 
-  // Whole-content proposals must apply against the revision they were authored
-  // on; if the document moved on, accepting would clobber the newer content.
-  if (proposal.baseRevision !== document.revision) {
-    await releaseProposalClaim(client, input.proposalId);
-    return {
-      ok: false,
-      code: "conflict",
-      error: "The document changed since this proposal was created. Re-review it before accepting.",
-    };
+  let applied:
+    | { ok: true; document: SharedDocument; version: DocumentVersion }
+    | { ok: false; code: "invalid" | "not-found" | "conflict"; error: string };
+
+  if (proposal.kind === "document-section") {
+    const section = sectionFromDraft(claimed.draft);
+    if (!section) {
+      await releaseProposalClaim(client, input.proposalId);
+      return { ok: false, code: "invalid", error: "This section proposal is malformed." };
+    }
+
+    // Merge-guarded apply: the section must still match what the author saw, so
+    // sibling section proposals from the same edit can be accepted in any order
+    // even though each acceptance advances the document revision.
+    const merged = applySectionChange(document.content, section);
+    if (!merged.ok) {
+      await releaseProposalClaim(client, input.proposalId);
+      return {
+        ok: false,
+        code: "conflict",
+        error:
+          "This section changed since the proposal was created. Re-review it before accepting.",
+      };
+    }
+
+    applied = await applyDocumentContent(client, {
+      documentId: input.documentId,
+      content: merged.content,
+      expectedRevision: document.revision,
+      actorType: proposal.actorType,
+      author: { userId: proposal.authorUserId, agentLabel: proposal.authorAgentLabel },
+      summary: proposal.summary || `Accepted a change to ${sectionChangeLabel(section)}`,
+      sourceProposalId: proposal.id,
+    });
+  } else {
+    // Legacy whole-content proposal: apply against the revision it was authored
+    // on, or accepting would clobber newer content.
+    if (proposal.baseRevision !== document.revision) {
+      await releaseProposalClaim(client, input.proposalId);
+      return {
+        ok: false,
+        code: "conflict",
+        error: "The document changed since this proposal was created. Re-review it before accepting.",
+      };
+    }
+
+    applied = await applyDocumentContent(client, {
+      documentId: input.documentId,
+      content: proposal.content,
+      expectedRevision: document.revision,
+      actorType: proposal.actorType,
+      author: { userId: proposal.authorUserId, agentLabel: proposal.authorAgentLabel },
+      summary: proposal.summary || "Accepted proposal",
+      sourceProposalId: proposal.id,
+    });
   }
 
-  const applied = await applyDocumentContent(client, {
-    documentId: input.documentId,
-    content: proposal.content,
-    expectedRevision: document.revision,
-    actorType: proposal.actorType,
-    author: { userId: proposal.authorUserId, agentLabel: proposal.authorAgentLabel },
-    summary: proposal.summary || "Accepted proposal",
-    sourceProposalId: proposal.id,
-  });
   if (!applied.ok) {
     await releaseProposalClaim(client, input.proposalId);
     return applied;
@@ -366,6 +505,12 @@ export async function acceptDocumentProposal(
       resolved_by: input.actorUserId,
     })
     .eq("id", input.proposalId);
+
+  // The review conversation on this proposal is finished once it is accepted.
+  await resolveOpenCommentsForProposal(client, {
+    proposalId: input.proposalId,
+    actorUserId: input.actorUserId,
+  });
 
   await recordDocumentActivity(client, {
     documentId: input.documentId,
@@ -411,6 +556,12 @@ export async function rejectDocumentProposal(
     await releaseProposalClaim(client, input.proposalId);
     return { ok: false, code: "invalid", error: error?.message || "Could not reject proposal." };
   }
+
+  // Rejecting also concludes the proposal's review conversation.
+  await resolveOpenCommentsForProposal(client, {
+    proposalId: input.proposalId,
+    actorUserId: input.actorUserId,
+  });
 
   await recordDocumentActivity(client, {
     documentId: input.documentId,

@@ -3,19 +3,24 @@ import { apiResultErrorResponse, requireApiAuth, requireApiJson } from "@/lib/ap
 import {
   createDocumentComment,
   deliverPendingMentionEmails,
+  listCommentsForProposal,
   listDocumentComments,
 } from "@/lib/document-collaboration";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireApiAuth();
   if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;
-  const comments = await listDocumentComments(getSupabaseAdminClient(), id);
+  const proposalId = new URL(request.url).searchParams.get("proposalId");
+  const admin = getSupabaseAdminClient();
+  const comments = proposalId
+    ? await listCommentsForProposal(admin, id, proposalId)
+    : await listDocumentComments(admin, id);
   return NextResponse.json({ comments });
 }
 
@@ -39,6 +44,7 @@ export async function POST(
     parentId: typeof input.parentId === "string" ? input.parentId : null,
     referenceId: typeof input.referenceId === "string" ? input.referenceId : null,
     referenceQuote: typeof input.referenceQuote === "string" ? input.referenceQuote : null,
+    proposalId: typeof input.proposalId === "string" ? input.proposalId : null,
     mentionedUserIds,
     actorUserId: auth.user.id,
     source: "creed",
