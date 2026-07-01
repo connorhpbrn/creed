@@ -610,8 +610,9 @@
 }
 
 .ProseMirror .creed-mermaid-selected {
-  outline: 2px solid var(--section-accent-bar, var(--creed-border));
-  outline-offset: 2px;
+  outline: none;
+  border-color: var(--section-accent-bar, var(--creed-border-strong));
+  box-shadow: 0 0 0 2px var(--section-accent-bar, var(--creed-border-strong));
 }
 
 .ProseMirror .creed-mermaid-preview {

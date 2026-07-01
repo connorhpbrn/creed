@@ -1127,10 +1127,11 @@ export function RichTextEditor({
     const { state } = currentEditor;
     const { selection } = state;
 
-    // Bail for empty selections, NodeSelections (drag handles), and any
-    // selection where the editor isn't focused - Notion only shows the
-    // bubble menu while a *user* selection is live.
-    if (selection.empty || !currentEditor.isFocused) {
+    // Bail for empty selections, NodeSelections (an atom block like a mermaid
+    // diagram, embed, or reference card is selected - the text-format bubble
+    // and mark-based comments don't apply to it), and any selection where the
+    // editor isn't focused. Notion only shows the bubble for a live text range.
+    if (selection.empty || selection instanceof NodeSelection || !currentEditor.isFocused) {
       setSelectionToolbar(null);
       return;
     }
