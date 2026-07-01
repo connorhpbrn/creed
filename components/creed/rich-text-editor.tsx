@@ -301,7 +301,7 @@ export function RichTextEditor({
   const [mentionState, setMentionState] = useState<MentionMenuState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [selectionToolbar, setSelectionToolbar] = useState<SelectionToolbarState | null>(null);
-  const [tableActive, setTableActive] = useState(false);
+  const [tableToolbar, setTableToolbar] = useState<{ x: number; y: number; placeBelow: boolean } | null>(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
   const [commentDraft, setCommentDraft] = useState<CommentDraftState | null>(null);
@@ -965,8 +965,57 @@ export function RichTextEditor({
     },
   });
 
+  // Anchor the in-table controls just above (or below, near the top of the
+  // doc) the active table. Positioned absolutely inside containerRef so the
+  // offset is page-scroll invariant and the bar tracks the table on scroll.
+  function updateTableToolbar(currentEditor: Editor) {
+    if (readOnly || !containerRef.current || !currentEditor.isActive("table")) {
+      setTableToolbar(null);
+      return;
+    }
+
+    const { state, view } = currentEditor;
+    const { $from } = state.selection;
+    let tablePos = -1;
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+      if ($from.node(depth).type.name === "table") {
+        tablePos = $from.before(depth);
+        break;
+      }
+    }
+    if (tablePos < 0) {
+      setTableToolbar(null);
+      return;
+    }
+
+    const dom = view.nodeDOM(tablePos);
+    const tableEl =
+      dom instanceof HTMLElement
+        ? ((dom.closest(".tableWrapper") as HTMLElement | null) ?? dom)
+        : null;
+    if (!tableEl) {
+      setTableToolbar(null);
+      return;
+    }
+
+    const tableRect = tableEl.getBoundingClientRect();
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const GAP = 8;
+    const spaceAbove = tableRect.top - containerRect.top;
+    // When the table hugs the top of the editor there's no room for the bar
+    // above it, so drop it just below the table instead.
+    const placeBelow = spaceAbove < 44;
+    setTableToolbar({
+      x: tableRect.left - containerRect.left + tableRect.width / 2,
+      y: placeBelow
+        ? tableRect.bottom - containerRect.top + GAP
+        : tableRect.top - containerRect.top - GAP,
+      placeBelow,
+    });
+  }
+
   function syncSelectionToolbar(currentEditor: Editor) {
-    setTableActive(!readOnly && currentEditor.isActive("table"));
+    updateTableToolbar(currentEditor);
     if (readOnly) {
       setSelectionToolbar(null);
       return;
@@ -1452,49 +1501,50 @@ export function RichTextEditor({
 
       <EditorContent editor={editor} />
 
-      <AnimatePresence>
-        {editor && tableActive && !readOnly ? (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
-            className="sticky bottom-2 z-40 mx-auto flex w-fit max-w-full flex-wrap items-center gap-0.5 rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1 text-[var(--creed-text-primary)] shadow-[0_6px_20px_rgba(28,28,26,0.10)]"
-            onMouseDown={(event) => {
-              // Keep the table cell selection alive when a control is pressed.
-              event.preventDefault();
-            }}
-          >
-            <TableToolbarButton onClick={() => editor.chain().focus().addRowAfter().run()}>
-              <Plus className="h-3.5 w-3.5" />
-              Row
-            </TableToolbarButton>
-            <TableToolbarButton onClick={() => editor.chain().focus().addColumnAfter().run()}>
-              <Plus className="h-3.5 w-3.5" />
-              Column
-            </TableToolbarButton>
-            <ToolbarDivider />
-            <TableToolbarButton onClick={() => editor.chain().focus().deleteRow().run()}>
-              <Minus className="h-3.5 w-3.5" />
-              Row
-            </TableToolbarButton>
-            <TableToolbarButton onClick={() => editor.chain().focus().deleteColumn().run()}>
-              <Minus className="h-3.5 w-3.5" />
-              Column
-            </TableToolbarButton>
-            <ToolbarDivider />
-            <TableToolbarButton onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
-              <Table className="h-3.5 w-3.5" />
-              Header
-            </TableToolbarButton>
-            <ToolbarDivider />
-            <TableToolbarButton onClick={() => editor.chain().focus().deleteTable().run()}>
-              <Delete className="h-3.5 w-3.5" />
-              Delete
-            </TableToolbarButton>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      {editor && tableToolbar && !readOnly ? (
+        <div
+          className="absolute z-40 flex w-fit flex-wrap items-center gap-0.5 rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1 text-[var(--creed-text-primary)] shadow-[0_6px_20px_rgba(28,28,26,0.10)]"
+          style={{
+            left: tableToolbar.x,
+            top: tableToolbar.y,
+            transform: tableToolbar.placeBelow
+              ? "translate(-50%, 0)"
+              : "translate(-50%, -100%)",
+          }}
+          onMouseDown={(event) => {
+            // Keep the table cell selection alive when a control is pressed.
+            event.preventDefault();
+          }}
+        >
+          <TableToolbarButton onClick={() => editor.chain().focus().addRowAfter().run()}>
+            <Plus className="h-3.5 w-3.5" />
+            Row
+          </TableToolbarButton>
+          <TableToolbarButton onClick={() => editor.chain().focus().addColumnAfter().run()}>
+            <Plus className="h-3.5 w-3.5" />
+            Column
+          </TableToolbarButton>
+          <ToolbarDivider />
+          <TableToolbarButton onClick={() => editor.chain().focus().deleteRow().run()}>
+            <Minus className="h-3.5 w-3.5" />
+            Row
+          </TableToolbarButton>
+          <TableToolbarButton onClick={() => editor.chain().focus().deleteColumn().run()}>
+            <Minus className="h-3.5 w-3.5" />
+            Column
+          </TableToolbarButton>
+          <ToolbarDivider />
+          <TableToolbarButton onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
+            <Table className="h-3.5 w-3.5" />
+            Header
+          </TableToolbarButton>
+          <ToolbarDivider />
+          <TableToolbarButton onClick={() => editor.chain().focus().deleteTable().run()}>
+            <Delete className="h-3.5 w-3.5" />
+            Delete
+          </TableToolbarButton>
+        </div>
+      ) : null}
 
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
         <DialogContent className="rounded-[var(--radius-xl)] border-[var(--creed-border)] bg-[var(--creed-surface)]">
