@@ -55,6 +55,24 @@ The token round-trips through Markdown, so it survives edits by both humans and
 agents. In-editor, users insert the same references with `@` or the "Reference
 document" slash command.
 
+Document and Creed content is Markdown with a rich component set that round-trips
+through the Tiptap editor: `##`/`###` headings, bullet/numbered lists, `>`
+callouts, `---` dividers, inline `#tags`, fenced code blocks, GFM pipe tables,
+and ```mermaid diagrams. Both agents (via MCP) and users (via the editor's slash
+menu) choose the clearest shape for the content:
+
+- a **table** (`| A | B |` over a `| --- | --- |` delimiter row) for comparing
+  items across shared attributes;
+- a ```mermaid **flow diagram** (`flowchart`, `sequenceDiagram`, `erDiagram`,
+  `journey`) for branching processes, sequences, and relationships - draw the
+  branches, don't just list steps;
+- lists for simple enumerations.
+
+Tables and mermaid blocks parse in `lib/rich-text.ts` (`markdownToRichHtml`) and
+serialize back in `lib/creed-data.ts` (`sectionToMarkdown`); the editor registers
+them via `@tiptap/extension-table`'s `TableKit` and `MermaidBlock`. Keep those
+two functions in lockstep if you touch either component.
+
 Do not attempt to push, pull, or publish shared documents to GitHub — documents
 live only in Supabase.
 

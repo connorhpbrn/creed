@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Extension, type Editor, type Range } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Placeholder from "@tiptap/extension-placeholder";
+import { TableKit } from "@tiptap/extension-table";
 import StarterKit from "@tiptap/starter-kit";
 import { common, createLowlight } from "lowlight";
 import Suggestion, {
@@ -32,9 +33,12 @@ import {
   PlusSquare,
   Strikethrough,
   Tag,
+  Table,
   TreeStructure,
   FileText,
   Folder,
+  Plus,
+  Delete,
 } from "@/components/ui/phosphor-icons";
 import { InlineTagMark } from "@/components/creed/extensions/inline-tag";
 import { MermaidBlock } from "@/components/creed/extensions/mermaid-block";
@@ -297,6 +301,7 @@ export function RichTextEditor({
   const [mentionState, setMentionState] = useState<MentionMenuState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [selectionToolbar, setSelectionToolbar] = useState<SelectionToolbarState | null>(null);
+  const [tableActive, setTableActive] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
   const [commentDraft, setCommentDraft] = useState<CommentDraftState | null>(null);
@@ -450,11 +455,24 @@ export function RichTextEditor({
         : []),
       {
         title: "Mermaid diagram",
-        description: "Flowchart or diagram",
+        description: "Flow, sequence or graph diagram",
         icon: TreeStructure,
-        keywords: ["mermaid", "diagram", "flowchart", "sequence", "graph", "chart", "visualize", "visualization"],
+        keywords: ["mermaid", "diagram", "flowchart", "flow", "sequence", "graph", "chart", "visualize", "visualization"],
         run: (editor, range) =>
           editor.chain().focus().deleteRange(range).setMermaidBlock().run(),
+      },
+      {
+        title: "Table",
+        description: "Rows and columns grid",
+        icon: Table,
+        keywords: ["table", "grid", "rows", "columns", "spreadsheet", "matrix"],
+        run: (editor, range) =>
+          editor
+            .chain()
+            .focus()
+            .deleteRange(range)
+            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            .run(),
       },
       {
         title: "Callout",
@@ -862,6 +880,12 @@ export function RichTextEditor({
       }),
       InlineTagMark,
       MermaidBlock,
+      TableKit.configure({
+        table: {
+          resizable: true,
+          HTMLAttributes: { class: "creed-table" },
+        },
+      }),
       CommentHighlight,
       slashCommandExtension,
       ...referenceExtensions,
@@ -942,6 +966,7 @@ export function RichTextEditor({
   });
 
   function syncSelectionToolbar(currentEditor: Editor) {
+    setTableActive(!readOnly && currentEditor.isActive("table"));
     if (readOnly) {
       setSelectionToolbar(null);
       return;
@@ -1427,6 +1452,50 @@ export function RichTextEditor({
 
       <EditorContent editor={editor} />
 
+      <AnimatePresence>
+        {editor && tableActive && !readOnly ? (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
+            className="sticky bottom-2 z-40 mx-auto flex w-fit max-w-full flex-wrap items-center gap-0.5 rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1 text-[var(--creed-text-primary)] shadow-[0_6px_20px_rgba(28,28,26,0.10)]"
+            onMouseDown={(event) => {
+              // Keep the table cell selection alive when a control is pressed.
+              event.preventDefault();
+            }}
+          >
+            <TableToolbarButton onClick={() => editor.chain().focus().addRowAfter().run()}>
+              <Plus className="h-3.5 w-3.5" />
+              Row
+            </TableToolbarButton>
+            <TableToolbarButton onClick={() => editor.chain().focus().addColumnAfter().run()}>
+              <Plus className="h-3.5 w-3.5" />
+              Column
+            </TableToolbarButton>
+            <ToolbarDivider />
+            <TableToolbarButton onClick={() => editor.chain().focus().deleteRow().run()}>
+              <Minus className="h-3.5 w-3.5" />
+              Row
+            </TableToolbarButton>
+            <TableToolbarButton onClick={() => editor.chain().focus().deleteColumn().run()}>
+              <Minus className="h-3.5 w-3.5" />
+              Column
+            </TableToolbarButton>
+            <ToolbarDivider />
+            <TableToolbarButton onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
+              <Table className="h-3.5 w-3.5" />
+              Header
+            </TableToolbarButton>
+            <ToolbarDivider />
+            <TableToolbarButton onClick={() => editor.chain().focus().deleteTable().run()}>
+              <Delete className="h-3.5 w-3.5" />
+              Delete
+            </TableToolbarButton>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
         <DialogContent className="rounded-[var(--radius-xl)] border-[var(--creed-border)] bg-[var(--creed-surface)]">
           <DialogHeader>
@@ -1594,6 +1663,26 @@ function ToolbarButton({
 
 function ToolbarDivider() {
   return <span aria-hidden className="mx-0.5 h-4 w-px bg-[var(--creed-border)]" />;
+}
+
+// Labelled control used by the in-table toolbar. Wider than ToolbarButton so
+// the icon-plus-text pairs (e.g. "+ Row" vs "- Row") stay unambiguous.
+function TableToolbarButton({
+  children,
+  onClick,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-100 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
+    >
+      {children}
+    </button>
+  );
 }
 
 // Anchored popup composer for creating a comment against the current text

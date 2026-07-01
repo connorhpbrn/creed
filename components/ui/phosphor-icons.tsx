@@ -62,6 +62,7 @@ import {
   Stack,
   Star,
   Stamp,
+  Table,
   Tag,
   TShirt,
   TextB,
@@ -160,6 +161,7 @@ const LogoutIcon = icon(SignOut);
 const SlidersHorizontalIcon = icon(SlidersHorizontal);
 const StarIcon = icon(Star);
 const StampIcon = icon(Stamp);
+const TableIcon = icon(Table);
 const StrikethroughIcon = icon(TextStrikethrough);
 const SquarePenIcon = icon(PencilSimple);
 const TagIcon = icon(Tag);
@@ -234,6 +236,7 @@ export {
   SlidersHorizontalIcon as SlidersHorizontal,
   SquarePenIcon as SquarePen,
   StampIcon as Stamp,
+  TableIcon as Table,
   StrikethroughIcon as Strikethrough,
   TagIcon as Tag,
   FolderTreeIcon as TreeStructure,

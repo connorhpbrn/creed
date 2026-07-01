@@ -75,6 +75,41 @@ test("inline bold and italic round-trip", () => {
   assert.ok(result.includes("<em>italic</em>"), `missing italic: ${result}`);
 });
 
+test("table round-trip preserves header and body cells", () => {
+  const editor =
+    `<table class="creed-table"><tbody>` +
+    `<tr><th><p>Tool</p></th><th><p>Use for</p></th></tr>` +
+    `<tr><td><p>Linear</p></td><td><p>Issue tracking</p></td></tr>` +
+    `<tr><td><p>Figma</p></td><td><p>Design</p></td></tr>` +
+    `</tbody></table>`;
+  const section = makeSection({ content: editor });
+  const markdown = sectionToMarkdown(section);
+  // Serializes to a GFM pipe table with a delimiter row.
+  assert.ok(markdown.includes("| Tool | Use for |"), `missing header row in: ${markdown}`);
+  assert.ok(markdown.includes("| --- | --- |"), `missing delimiter row in: ${markdown}`);
+  assert.ok(markdown.includes("| Linear | Issue tracking |"), `missing body row in: ${markdown}`);
+
+  const result = roundtripContent(editor);
+  assert.ok(result.includes("<table"), `missing table in: ${result}`);
+  assert.ok(result.includes("<th>Tool</th>"), `missing header cell in: ${result}`);
+  assert.ok(result.includes("<td>Linear</td>"), `missing body cell in: ${result}`);
+  assert.ok(result.includes("<td>Design</td>"), `missing body cell in: ${result}`);
+});
+
+test("table cell with a literal pipe is escaped and round-trips", () => {
+  const editor =
+    `<table class="creed-table"><tbody>` +
+    `<tr><th><p>Key</p></th><th><p>Value</p></th></tr>` +
+    `<tr><td><p>range</p></td><td><p>a | b</p></td></tr>` +
+    `</tbody></table>`;
+  const section = makeSection({ content: editor });
+  const markdown = sectionToMarkdown(section);
+  assert.ok(markdown.includes("a \\| b"), `pipe should be escaped in: ${markdown}`);
+
+  const result = roundtripContent(editor);
+  assert.ok(result.includes("<td>a | b</td>"), `literal pipe should survive: ${result}`);
+});
+
 test("multi-paragraph round-trip yields multiple paragraphs", () => {
   const result = roundtripContent("<p>First.</p><p>Second.</p><p>Third.</p>");
   const paragraphs = result.match(/<p>/g);

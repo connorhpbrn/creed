@@ -1156,6 +1156,33 @@ export function sectionToMarkdown(section: CreedSection) {
       `\n\`\`\`${lang ?? ""}\n${decodeEntities(body).trimEnd().replace(/^\n+/, "")}\n\`\`\`\n`
   );
 
+  // Tables - a `<table>` of `<tr>`/`<th>`/`<td>` becomes a GFM pipe table.
+  // Runs before the generic list / paragraph strippers so a cell's inner
+  // `<p>` wrapper doesn't get turned into stray newlines. Inline marks
+  // (bold / links / code) were already converted above, so cell text only
+  // needs its block tags stripped, newlines flattened, and pipes escaped.
+  text = text.replace(/<table\b[^>]*>([\s\S]*?)<\/table>/g, (_match, tableBody: string) => {
+    const rowMatches = Array.from(tableBody.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/g));
+    const rows = rowMatches.map((row) =>
+      Array.from(row[1].matchAll(/<(t[hd])\b[^>]*>([\s\S]*?)<\/\1>/g)).map((cell) =>
+        stripTags(cell[2]).replace(/\s*\n\s*/g, " ").replace(/\|/g, "\\|").trim()
+      )
+    );
+    if (rows.length === 0) return "";
+    const colCount = Math.max(...rows.map((cells) => cells.length));
+    const pad = (cells: string[]) => {
+      const padded = [...cells];
+      while (padded.length < colCount) padded.push("");
+      return padded;
+    };
+    const lines = [
+      `| ${pad(rows[0]).join(" | ")} |`,
+      `| ${Array.from({ length: colCount }, () => "---").join(" | ")} |`,
+      ...rows.slice(1).map((cells) => `| ${pad(cells).join(" | ")} |`),
+    ];
+    return `\n\n${lines.join("\n")}\n\n`;
+  });
+
   // Headings - shift down one level so they nest under the section's `## Name`.
   text = text.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/g, (_match, body: string) => `\n### ${stripTags(body).trim()}\n`);
   text = text.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/g, (_match, body: string) => `\n#### ${stripTags(body).trim()}\n`);
@@ -1578,6 +1605,18 @@ function buildHiddenAgentGuidanceMarkdown(
       "  When: command-line snippets, config blocks, file paths the user keeps re-typing, scheduled jobs. Anything that should not be reflowed.",
       "  Don't: wrap normal sentences in code. Don't use a code block as a 'fancy' callout.",
       "",
+      "**Tables** - compare items across a consistent set of attributes.",
+      "  Syntax: a GFM pipe table - a header row `| Attribute | Value |`, a delimiter row `| --- | --- |`, then one `| ... | ... |` row per item.",
+      "  When: three or more items that share the same fields (options weighed against criteria, tools vs. capabilities, a small matrix). A table is clearer than repeating the same shape as nested bullets.",
+      "  Don't: use a table for a single list of values (that's a bullet list) or for free-form prose. Keep cell text short; put long detail in prose above or below.",
+      "  Example:",
+      "  ```",
+      "  | Tool | Use for | Cost |",
+      "  | --- | --- | --- |",
+      "  | Linear | Issue tracking | Paid |",
+      "  | Figma | Design | Freemium |",
+      "  ```",
+      "",
       "**Diagrams (Mermaid)** - flows, sequences, architecture, decision trees, relationships.",
       "  Syntax: a fenced code block with the `mermaid` language hint - ```` ```mermaid ````, then valid Mermaid source (`flowchart`, `sequenceDiagram`, `erDiagram`, `journey`, `graph`, etc.), then ```` ``` ```` to close.",
       "  When: anything easier to grasp as a picture than as prose - a process with branches, a sequence of calls between systems, a data model, a user journey. Creed renders it as a live diagram in the editor and it renders natively on GitHub after a publish.",
@@ -1611,7 +1650,8 @@ function buildHiddenAgentGuidanceMarkdown(
       "- A long section earns one or two `---` dividers between major chunks.",
       "- A tool list is ALWAYS `#tag #tag #tag`. Never bullets of tool names.",
       "- A hard rule the AI should never break is ALWAYS a `> callout`. Never a bullet.",
-      "- A process, sequence, data model, or journey with branches is clearer as a ```mermaid diagram than as nested bullets.",
+      "- A process, sequence, data model, or journey with branches is clearer as a ```mermaid flow diagram (flowchart/sequenceDiagram/erDiagram/journey) than as nested bullets or a flat step list - draw the actual branches, don't just list steps.",
+      "- Items that share the same attributes (options vs. criteria, tools vs. capabilities) are clearer as a table than as repeated bullets. You choose the shape: table for comparisons, mermaid diagram for flows and relationships, lists for simple enumerations.",
       "",
       "Worked example - a Routines section that uses every component appropriately:",
       "```",

@@ -712,6 +712,53 @@
   color: var(--creed-surface);
 }
 
+/* Tables. The editor wraps resizable tables in `.tableWrapper`; on the read
+   side (markdownToRichHtml) a plain `<table class="creed-table">` renders with
+   the same borders so live editing and rendered Markdown match. */
+.ProseMirror .tableWrapper {
+  margin: 1em 0;
+  overflow-x: auto;
+}
+.ProseMirror table.creed-table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+  font-size: 0.95em;
+}
+.ProseMirror table.creed-table td,
+.ProseMirror table.creed-table th {
+  border: 1px solid var(--creed-border);
+  padding: 0.4em 0.6em;
+  vertical-align: top;
+  text-align: left;
+  position: relative;
+  min-width: 3em;
+}
+.ProseMirror table.creed-table th {
+  background: var(--creed-surface-raised);
+  font-weight: 600;
+}
+.ProseMirror table.creed-table p {
+  margin: 0;
+}
+.ProseMirror table.creed-table .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--creed-text-primary) 8%, transparent);
+  pointer-events: none;
+}
+.ProseMirror table.creed-table .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--creed-text-primary);
+  opacity: 0.35;
+  cursor: col-resize;
+}
+
 /* Syntax highlighting (lowlight / highlight.js classes). The token palette
    reads as a calm "GitHub-light" style so colour stays subtle in long blocks;
    the .dark block below adapts each hue for the dark canvas. */
