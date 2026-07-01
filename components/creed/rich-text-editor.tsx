@@ -1671,7 +1671,7 @@ export function RichTextEditor({
 
       {editor && tableToolbar && !readOnly ? (
         <div
-          className="absolute z-40 flex w-max flex-nowrap items-center gap-0.5 whitespace-nowrap rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1 text-[var(--creed-text-primary)] shadow-[0_6px_20px_rgba(28,28,26,0.10)]"
+          className="absolute z-10 flex w-max flex-nowrap items-center gap-0.5 whitespace-nowrap rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1 text-[var(--creed-text-primary)] shadow-[0_6px_20px_rgba(28,28,26,0.10)]"
           style={{
             left: tableToolbar.x,
             top: tableToolbar.y,
