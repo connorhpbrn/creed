@@ -10,7 +10,6 @@ import {
   FileText,
   Flag,
   Folder,
-  GripVertical,
   LayoutGrid,
   List,
   LoaderCircle,
@@ -88,10 +87,10 @@ const PROPERTY_OPTIONS = {
 } as const;
 
 const STATUS_ORDER: DocumentStatus[] = [
-  "not-started",
+  "backlog",
+  "planning",
   "in-progress",
-  "blocked",
-  "ready-for-review",
+  "review",
   "done",
 ];
 const PRIORITY_ORDER: DocumentPriority[] = ["urgent", "high", "medium", "low"];
@@ -184,21 +183,28 @@ function InlineSelect<T extends string>({
   label: string;
   onChange: (value: T) => void;
 }) {
+  const current = options.find((option) => option.value === value)?.label ?? value;
   return (
-    <label className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[var(--creed-border)] bg-[var(--creed-surface)] pl-2.5 pr-1.5 text-[12.5px] font-medium text-[var(--creed-text-secondary)] transition hover:bg-[var(--creed-surface-raised)]">
-      <span className="text-[var(--creed-text-tertiary)]">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value as T)}
-        className="cursor-pointer border-none bg-transparent pr-1 text-[12.5px] font-medium text-[var(--creed-text-primary)] outline-none"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[var(--creed-border)] bg-[var(--creed-surface)] px-2.5 text-[12.5px] font-medium text-[var(--creed-text-secondary)] transition hover:bg-[var(--creed-surface-raised)]"
+        >
+          <span className="text-[var(--creed-text-tertiary)]">{label}</span>
+          <span className="text-[var(--creed-text-primary)]">{current}</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[180px]">
+        <DropdownMenuRadioGroup value={value} onValueChange={(next) => onChange(next as T)}>
+          {options.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -273,9 +279,6 @@ function DocumentRow({
       onDragEnd={onDragEnd}
       className="group/row flex items-center gap-3 rounded-[8px] px-2.5 py-2 transition hover:bg-[var(--creed-surface-raised)]/60"
     >
-      <span className="flex h-5 w-5 shrink-0 cursor-grab items-center justify-center text-[var(--creed-text-tertiary)] opacity-0 transition group-hover/row:opacity-100">
-        <GripVertical className="h-4 w-4" strokeWidth={1.8} />
-      </span>
       <FileText className="h-4 w-4 shrink-0 text-[var(--creed-text-tertiary)]" strokeWidth={1.8} />
       <Link
         href={`/file?document=${encodeURIComponent(document.slug)}`}
@@ -346,9 +349,6 @@ function DocumentCard({
         >
           <span className="line-clamp-2">{document.title}</span>
         </Link>
-        <span className="flex h-6 w-6 shrink-0 cursor-grab items-center justify-center text-[var(--creed-text-tertiary)] opacity-0 transition group-hover/card:opacity-100">
-          <GripVertical className="h-4 w-4" strokeWidth={1.8} />
-        </span>
       </div>
 
       {document.description ? (
@@ -630,8 +630,9 @@ export function DocumentsDashboardScreen({
         </Button>
       </header>
 
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--creed-border)] px-5 py-2.5 md:px-8">
+      {/* Toolbar (floating) */}
+      <div className="px-5 pt-3 md:px-8">
+        <div className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 py-2 shadow-[0_8px_24px_rgba(28,28,26,0.06)]">
         <span className="relative min-w-[180px] flex-1 sm:max-w-xs">
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--creed-text-tertiary)]"
@@ -700,6 +701,7 @@ export function DocumentsDashboardScreen({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        </div>
       </div>
 
       {/* Folders strip */}
@@ -747,9 +749,7 @@ export function DocumentsDashboardScreen({
               >
                 {groupBy !== "none" ? (
                   <div className="mb-2.5 flex items-center gap-2">
-                    {groupBy === "status" ? (
-                      <span className={cn("h-2 w-2 rounded-full", DOCUMENT_TONE_DOT[documentPropertyTone("status", group.value)])} />
-                    ) : null}
+                    <span className={cn("h-2 w-2 rounded-full", DOCUMENT_TONE_DOT[documentPropertyTone(groupBy as DocumentPropertyKey, group.value)])} />
                     <h2 className="text-[13px] font-semibold text-[var(--creed-text-primary)]">
                       {group.label}
                     </h2>

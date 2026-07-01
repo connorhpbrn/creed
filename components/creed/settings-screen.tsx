@@ -572,7 +572,7 @@ export function SettingsScreen() {
         callbackUrl.searchParams.set("expected_email", data.user.email);
       }
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.linkIdentity({
         provider: "github",
         options: {
           redirectTo: callbackUrl.toString(),
@@ -990,9 +990,9 @@ export function SettingsScreen() {
             </div>
           </section>
 
-          <Separator className="my-10 bg-[var(--creed-border)]" />
+          <Separator className="my-10 hidden bg-[var(--creed-border)]" />
 
-          <section>
+          <section className="hidden">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-[16px] font-medium text-[var(--creed-text-primary)]">
                 Models

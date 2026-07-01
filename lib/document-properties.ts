@@ -29,10 +29,10 @@ export const DOCUMENT_LIFECYCLE_OPTIONS = [
 ] as const;
 
 export const DOCUMENT_STATUS_OPTIONS = [
-  { value: "not-started", label: "Not started" },
+  { value: "backlog", label: "Backlog" },
+  { value: "planning", label: "Planning" },
   { value: "in-progress", label: "In progress" },
-  { value: "blocked", label: "Blocked" },
-  { value: "ready-for-review", label: "Ready for review" },
+  { value: "review", label: "Review" },
   { value: "done", label: "Done" },
 ] as const;
 
@@ -204,10 +204,10 @@ export const DOCUMENT_TONE_DOT: Record<DocumentTone, string> = {
 };
 
 const DOCUMENT_STATUS_TONE: Record<DocumentStatus, DocumentTone> = {
-  "not-started": "slate",
-  "in-progress": "blue",
-  blocked: "red",
-  "ready-for-review": "yellow",
+  backlog: "slate",
+  planning: "sky",
+  "in-progress": "amber",
+  review: "violet",
   done: "emerald",
 };
 

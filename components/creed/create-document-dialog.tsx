@@ -124,7 +124,7 @@ export function CreateDocumentDialog({
   const [description, setDescription] = useState("");
   const [folderId, setFolderId] = useState("");
   const [documentType, setDocumentType] = useState<DocumentType>("feature");
-  const [status, setStatus] = useState<DocumentStatus>("not-started");
+  const [status, setStatus] = useState<DocumentStatus>("backlog");
   const [stage, setStage] = useState<DocumentStage>("discovery");
   const [lifecycle, setLifecycle] = useState<DocumentLifecycle>("ideation");
   const [priority, setPriority] = useState<DocumentPriority>("medium");
@@ -139,7 +139,7 @@ export function CreateDocumentDialog({
     setDescription("");
     setFolderId("");
     setDocumentType("feature");
-    setStatus("not-started");
+    setStatus("backlog");
     setStage("discovery");
     setLifecycle("ideation");
     setPriority("medium");

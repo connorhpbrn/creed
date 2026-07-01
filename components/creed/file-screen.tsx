@@ -2284,12 +2284,12 @@ export function FileScreen({
                       : "flex-col md:flex-row md:items-start md:justify-between"
                   )}
                 >
-                  <div className="flex min-w-0 items-start gap-2">
+                  <div className="relative flex min-w-0 items-start">
                     {documentMode ? (
                       <Link
                         href="/dashboard"
                         aria-label="Back to dashboard"
-                        className={cn("mt-0.5 inline-flex shrink-0 items-center justify-center transition-colors duration-150", documentHeaderIconButtonClass)}
+                        className={cn("absolute -left-8 top-0.5 inline-flex shrink-0 items-center justify-center transition-colors duration-150 md:-left-10", documentHeaderIconButtonClass)}
                       >
                         <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
                       </Link>

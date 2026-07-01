@@ -123,7 +123,12 @@ export function CreedShell({
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [liveSections, setLiveSections] = useState<CreedSection[] | null>(null);
   const documentOpen = pathname === "/file" && Boolean(searchParams.get("document"));
-  const visibleNavItems = documentOpen ? [] : navItems;
+  // The signed-in app sidebar stays identical on every route (matching
+  // /dashboard) so navigating into a document doesn't swap the nav out. The
+  // personal-creed section list is legacy and is never surfaced in the shared
+  // sidebar anymore.
+  const visibleNavItems = navItems;
+  const showLegacySections: boolean = false;
   const sidebarSections = liveSections ?? sections;
   const registerFileActions = useCallback((actions: ShellFileActions) => {
     fileActionsRef.current = actions;
@@ -284,7 +289,7 @@ export function CreedShell({
               </nav>
             ) : null}
 
-            {documentOpen ? (
+            {showLegacySections ? (
               <>
                 <Separator className="my-4 bg-[var(--creed-border)] lg:my-6" />
 
