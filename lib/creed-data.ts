@@ -1,6 +1,8 @@
 // Single source of truth for the accent vocabulary. The literal union below
 // is derived from this array so the runtime list (used by validators and by
 // the agent contract docs) can never drift from the compile-time type.
+import { MAX_SECTION_DEPTH, normalizeSectionDepths } from "./section-hierarchy.ts";
+
 // The order the accent picker renders cells in. Sorted along a colour
 // wheel - warm → cool → neutral - so the grid reads as a coherent
 // gradient rather than a random palette. `custom` is intentionally
@@ -98,6 +100,10 @@ export type CreedSection = {
   lastEditedBy: string;
   lastEditedType: ActorType;
   lastEditedLabel: string;
+  // Nesting depth (0 = top level, max 2). Hierarchy is implied by depth +
+  // position: a section's parent is the nearest preceding shallower section.
+  // See lib/section-hierarchy.ts for the rules. Absent means depth 0.
+  depth?: number;
   // Archived sections are kept in state (so they survive persistence) but are
   // hidden from the editor, the agent read payload, quality scoring, and the
   // markdown export. Restorable from Settings -> Archived.
@@ -1154,7 +1160,16 @@ export function sectionToMarkdown(section: CreedSection) {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  return cleaned ? `## ${section.name}\n\n${cleaned}\n` : `## ${section.name}\n`;
+  // Nesting is carried by an invisible HTML comment on the heading line so it
+  // round-trips through GitHub without changing the visible `##` heading level
+  // (heading depth is reserved for in-content sub-headings). See
+  // lib/section-hierarchy.ts and parseCreedMarkdown for the inverse.
+  const depth = Math.min(MAX_SECTION_DEPTH, Math.max(0, Math.floor(section.depth ?? 0)));
+  const depthMarker = depth > 0 ? ` <!-- creed:depth=${depth} -->` : "";
+
+  return cleaned
+    ? `## ${section.name}${depthMarker}\n\n${cleaned}\n`
+    : `## ${section.name}${depthMarker}\n`;
 }
 
 function stripTags(value: string) {
@@ -1174,9 +1189,10 @@ function decodeEntities(value: string) {
 
 export function buildVisibleCreedMarkdown(sections: CreedSection[]) {
   // One blank line between sections so the rendered file reads cleanly with
-  // a single visual gap, not a stack of trailing newlines.
-  return sections
-    .filter((section) => !section.archived)
+  // a single visual gap, not a stack of trailing newlines. Depths are
+  // normalized against the visible (non-archived) order so the serialized
+  // nesting markers are always valid.
+  return normalizeSectionDepths(sections.filter((section) => !section.archived))
     .map((section) => sectionToMarkdown(section).trim())
     .filter(Boolean)
     .join("\n\n")

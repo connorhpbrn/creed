@@ -26,6 +26,10 @@ Agents working through MCP must:
 - read current comments before changing a document when review context matters;
 - update document content with `expectedRevision` and re-read on conflicts;
 - use document metadata tools for status/type/stage/lifecycle/priority/size;
+- treat the YAML frontmatter in a document's `contentMarkdown` as the
+  version-controlled projection of its properties (title/type/status/stage/
+  lifecycle/priority/size). Supabase columns stay authoritative; the frontmatter
+  is written on push and parsed back on pull/update. `content` is body-only;
 - add comments for questions, uncertainty, review notes, and suggested changes
   that should not be applied silently;
 - mention a user only when their attention is actually needed;

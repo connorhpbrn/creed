@@ -1,94 +1,87 @@
 # Document Workspace Diff Review
 
-Date: 2026-06-30
-Scope: local working tree changes for invite auth, dashboard documents, `/file` document mode, comments/activity, BYOK-only settings, billing removal, Phosphor icon migration, and final pill palette updates.
+Date: 2026-07-01
+Scope: local working tree plus whole-repo review touchpoints for shared documents, document-mode `/file`, GitHub document sync, MCP document tools, BYOK/config cleanup, route auth, and deployment config.
 
 ## Outcome
 
-Status: issues found and fixed in this pass. No open blocking findings remain.
+Status: issues found and fixed. No open blocking findings remain.
 
 ## Findings Fixed
 
-### B1 - Google/GitHub connect used manual identity linking
+### B1 - Dirty document publish could continue after a failed save
 
 Severity: high
 
 Fix:
-- Invite Google connect and Settings Google/GitHub connect now use guarded OAuth sign-in instead of Supabase identity-link calls.
-- `/auth/callback` verifies `expected_email` before accepting the OAuth session or saving GitHub integration tokens.
-- Mismatched OAuth emails sign out and redirect back with `oauth_email_mismatch`.
+- `handleSaveDocument()` now returns the saved document or `null` on failure.
+- `handlePublishDocument()` aborts when the dirty save fails instead of publishing stale content.
+- Successful saves and publishes refresh local sync/status keys so the GitHub status badge does not stay stale.
 
-### B2 - Credits and payment paths stayed live after UI removal
+### B2 - Document GitHub sync mixed commit SHA and blob/content state
 
 Severity: high
 
 Fix:
-- Removed visible/runtime credits and payment app routes.
-- AI settings normalize to BYOK and reject non-BYOK writes.
-- AI credential resolution is BYOK-only.
-- Removed the Stripe SDK dependency and collapsed legacy entitlement checks to an explicit self-hosted allow shim.
-- Removed the old refund-only OAuth revoke helper that became dead code.
+- `pushGitHubFile()` now returns the GitHub content/blob SHA when available.
+- Document push conflict detection compares remote content hash against `lastSyncedContentHash`, avoiding false conflicts from old commit-SHA rows.
+- Shared document publish stamps the synced row only if the pushed revision still matches.
 
-### B3 - Dashboard grouping did not cover all document properties
+### B3 - Document pull/apply trusted client-provided remote content
+
+Severity: high
+
+Fix:
+- Document pull/apply now re-fetches the mapped GitHub file server-side.
+- Apply requires the previewed remote SHA and rejects if GitHub changed since preview.
+- A shared `lib/document-github.ts` helper centralizes mapped-document loading and remote fetches for document GitHub routes.
+
+### B4 - Archived shared documents could still be updated by content writes
 
 Severity: medium
 
 Fix:
-- Dashboard grouping now includes priority and t-shirt size.
-- Dragging between groups updates status/type/stage/lifecycle/priority/size.
-- Added a migration to extend dashboard preference `group_by` constraints.
+- `updateSharedDocumentContent()` now filters `archived_at is null`, matching metadata and pull writes.
+- `markSharedDocumentSynced()` also excludes archived rows and keeps the revision guard.
 
-### B4 - Group drag state could remain visually active
-
-Severity: medium
-
-Fix:
-- Document rows/cards clear drag state on `dragend`.
-- Drop handling clears drag state before applying a property update.
-
-### B5 - Document comments were panel-only
+### B5 - Shared document frontmatter was not the canonical API/GitHub surface
 
 Severity: medium
 
 Fix:
-- `/file` section cards now render lightweight live comment markers for open comments whose reference quote appears in that section.
-- Selecting a marker opens the existing comments panel on that comment.
+- Added `lib/document-markdown.ts` as the canonical document frontmatter parser/serializer.
+- Document create/update/pull split YAML frontmatter into property columns while keeping `content` body-only.
+- MCP `creed_read_document` returns `contentMarkdown` with frontmatter, and `creed_update_document` accepts that same representation.
 
-### B6 - Invalid `/file?document=` values fell back to the personal editor
+### B6 - Active runtime config still carried removed payment/credits defaults
 
 Severity: medium
 
 Fix:
-- `/file` now returns `notFound()` for unknown document slugs.
+- Removed stale Stripe and platform-credit env examples.
+- Removed Stripe origins and removed payment route cache entries from active Next config.
+- Removed the dead Vercel Stripe webhook function entry.
+- Removed personal branding fallbacks from source and documented the active optional env vars.
 
-### B7 - Product UI still mixed old icon wrappers with Phosphor icons
+### B7 - Fallow found a dead export in new hierarchy logic
 
 Severity: low
 
 Fix:
-- Active signed-in and login surfaces now use the local Phosphor adapter.
-- The shared action wrapper now accepts regular Phosphor icon components.
-- Fallow dead-code cleanup removed the orphaned old icon wrapper files.
-
-### B8 - New document API routes repeated auth/JSON/error boilerplate
-
-Severity: low
-
-Fix:
-- Added shared authenticated JSON parsing and result-error helpers in `lib/api-auth.ts`.
-- Updated document, folder, comment, notification, and dashboard-preference routes to use them.
+- Removed the unused `descendantCount` export while keeping it as an internal helper.
+- Added hierarchy round-trip tests covering orphan-depth normalization and valid nested depth preservation.
 
 ## Verification
 
 - `npx tsc --noEmit -p .` passed.
 - `npm run lint` passed with warnings only.
-- `npm test` passed, 23 tests.
-- `npm audit --json` passed with 0 vulnerabilities.
+- `npm test` passed, 25 tests.
 - `npm run build` passed.
+- `npm audit --json` passed with 0 vulnerabilities.
 - `git diff --check` passed.
-- Fallow dead-code passed with 0 issues in normal and production modes.
+- Fallow normal and production dead-code modes passed with 0 issues.
 
 ## Notes
 
-- Fallow health remains grade B because of existing large-file complexity hotspots in `components/creed/file-screen.tsx`, `lib/creed-backend.ts`, `components/creed/settings-screen.tsx`, and adjacent god files. This pass reduced dead code and duplication without rewriting those files.
-- Local `supabase db reset` could not run because Docker is not running.
+- Fallow health still flags structural complexity in large modules such as `components/creed/file-screen.tsx`, `lib/creed-backend.ts`, `lib/shared-documents.ts`, `app/mcp/route.ts`, and `components/creed/settings-screen.tsx`. Those are architectural follow-ups, not silent all-clear items.
+- No Supabase migrations were changed in this pass, so `supabase db reset` was not required.

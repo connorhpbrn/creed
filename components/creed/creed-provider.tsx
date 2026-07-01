@@ -44,6 +44,7 @@ import {
   type ProposalDraft,
 } from "@/lib/creed-data";
 import { normalizeRichTextInput } from "@/lib/rich-text";
+import { canIndentSection, canOutdentSection, normalizeSectionDepths, shiftSubtreeDepth } from "@/lib/section-hierarchy";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { toast } from "sonner";
 
@@ -55,6 +56,8 @@ type CreedContextValue = {
   reorderSections: (sectionIds: string[]) => void;
   addSection: (name: string, starter?: string) => CreedSection;
   addSectionAfter: (afterSectionId: string, name: string, starter?: string) => void;
+  indentSection: (sectionId: string) => void;
+  outdentSection: (sectionId: string) => void;
   renameSection: (sectionId: string, name: string) => void;
   setSectionAccent: (sectionId: string, accent: AccentKey) => void;
   duplicateSection: (sectionId: string) => void;
@@ -539,7 +542,31 @@ export function CreedProvider({
 
       return nextMutationTick({
         ...current,
-        sections: [...reordered, ...preserved],
+        // Re-normalize nesting depths against the new order so a drag can never
+        // leave an orphaned child (a section deeper than one below its parent).
+        sections: [...normalizeSectionDepths(reordered), ...preserved],
+      });
+    });
+  }
+
+  function indentSection(sectionId: string) {
+    commitState((current) => {
+      const index = current.sections.findIndex((section) => section.id === sectionId);
+      if (index === -1 || !canIndentSection(current.sections, index)) return current;
+      return nextMutationTick({
+        ...current,
+        sections: shiftSubtreeDepth(current.sections, index, 1),
+      });
+    });
+  }
+
+  function outdentSection(sectionId: string) {
+    commitState((current) => {
+      const index = current.sections.findIndex((section) => section.id === sectionId);
+      if (index === -1 || !canOutdentSection(current.sections, index)) return current;
+      return nextMutationTick({
+        ...current,
+        sections: shiftSubtreeDepth(current.sections, index, -1),
       });
     });
   }
@@ -589,11 +616,14 @@ export function CreedProvider({
     commitState((current) => {
       const index = current.sections.findIndex((section) => section.id === afterSectionId);
       const nextSections = [...current.sections];
-      nextSections.splice(index + 1, 0, newSection);
+      // New sections land as a sibling of the one they're added after (same
+      // depth), which is the least surprising place in a nested list.
+      const anchorDepth = index === -1 ? 0 : current.sections[index]?.depth ?? 0;
+      nextSections.splice(index + 1, 0, { ...newSection, depth: anchorDepth });
 
       return nextMutationTick({
         ...current,
-        sections: nextSections,
+        sections: normalizeSectionDepths(nextSections),
       });
     });
   }
@@ -1196,6 +1226,8 @@ export function CreedProvider({
       reorderSections,
       addSection,
       addSectionAfter,
+      indentSection,
+      outdentSection,
       renameSection,
       setSectionAccent,
       duplicateSection,
@@ -1231,6 +1263,8 @@ export function CreedProvider({
       reorderSections,
       addSection,
       addSectionAfter,
+      indentSection,
+      outdentSection,
       renameSection,
       setSectionAccent,
       duplicateSection,

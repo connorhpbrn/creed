@@ -239,7 +239,7 @@ export async function pushGitHubFile(args: {
   }
 
   return {
-    sha: payload.commit?.sha ?? payload.content?.sha ?? "",
+    sha: payload.content?.sha ?? payload.commit?.sha ?? "",
     message: payload.commit?.commit?.message ?? args.message,
     committedAt: payload.commit?.commit?.committer?.date,
     contentHash: hashContent(args.content),

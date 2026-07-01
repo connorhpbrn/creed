@@ -1,5 +1,6 @@
 import type { AccentKey, CreedSection } from "./creed-data.ts";
 import { markdownToRichHtml } from "./rich-text.ts";
+import { MAX_SECTION_DEPTH, normalizeSectionDepths } from "./section-hierarchy.ts";
 
 type ParseResult = {
   sections: CreedSection[];
@@ -99,6 +100,7 @@ function parseSectionBody(
   id: string,
   name: string,
   body: string,
+  depth: number,
   _index: number
 ): CreedSection {
   const normalizedBody = body.trim();
@@ -111,6 +113,7 @@ function parseSectionBody(
       name,
       accent: inferAccent(name),
       content,
+      depth,
       // Pulled sections must be agent-writable, matching every other
       // creation path (onboarding, in-app create, agent-create). If this
       // is `false`, the MCP contract reports `editable_sections: []` and
@@ -167,15 +170,21 @@ export function parseCreedMarkdown(markdown: string): ParseResult {
 
   const usedIds = new Set<string>();
   const sections = headingMatches.map((match, index) => {
-    const name = match[1]?.trim() || `Section ${index + 1}`;
+    const rawName = match[1]?.trim() || `Section ${index + 1}`;
+    // Nesting marker written by sectionToMarkdown: `## Name <!-- creed:depth=N -->`.
+    const depthMatch = rawName.match(/<!--\s*creed:depth=(\d+)\s*-->/);
+    const depth = depthMatch
+      ? Math.min(MAX_SECTION_DEPTH, Math.max(0, Number.parseInt(depthMatch[1], 10) || 0))
+      : 0;
+    const name = rawName.replace(/<!--\s*creed:depth=\d+\s*-->/, "").trim() || `Section ${index + 1}`;
     const start = (match.index ?? 0) + match[0].length;
     const end = headingMatches[index + 1]?.index ?? normalized.length;
     const body = normalized.slice(start, end).trim();
     const slug = slugify(name);
     const baseId = KNOWN_SECTION_IDS[name.toLowerCase()] ?? (slug || `section-${index + 1}`);
     const id = uniqueSectionId(baseId, usedIds);
-    return parseSectionBody(id, name, body, index);
+    return parseSectionBody(id, name, body, depth, index);
   });
 
-  return { sections, warnings };
+  return { sections: normalizeSectionDepths(sections), warnings };
 }

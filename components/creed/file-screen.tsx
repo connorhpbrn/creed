@@ -14,6 +14,7 @@ import { AnimatePresence, Reorder, motion, useDragControls } from "framer-motion
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   Archive,
   Check,
   ChevronDown,
@@ -150,6 +151,16 @@ import type {
   WorkspaceUser,
 } from "@/lib/document-collaboration";
 import type { SharedDocument } from "@/lib/shared-documents";
+import {
+  canIndentSection,
+  canOutdentSection,
+  collapsedHiddenIds,
+  normalizeSectionDepths,
+  reconcileReorderedIds,
+  sectionDepth,
+  sectionHasChildren,
+  shiftSubtreeDepth,
+} from "@/lib/section-hierarchy";
 import { cn } from "@/lib/utils";
 
 const activityStatuses: Array<{ label: string; value: "all" | ActivityStatus }> = [
@@ -657,6 +668,7 @@ type GitHubPullPreview = {
   remoteMessage?: string | null;
   remoteCommittedAt?: string | null;
   remoteContentHash?: string | null;
+  remoteContent?: string;
   warnings: string[];
   sections: CreedSection[];
 };
@@ -899,6 +911,8 @@ export function FileScreen({
     reorderSections,
     addSection,
     addSectionAfter,
+    indentSection,
+    outdentSection,
     renameSection,
     setSectionAccent,
     duplicateSection,
@@ -1011,6 +1025,28 @@ export function FileScreen({
     [editorSections]
   );
   useCreedShellLiveSections(documentMode ? visibleSections : null);
+  // Collapse is a view-only concern (never serialized). A collapsed section
+  // hides its whole subtree from the rendered list; the rows still live in
+  // state so they persist and keep their nesting.
+  const [collapsedSectionIds, setCollapsedSectionIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>()
+  );
+  const toggleSectionCollapsed = useCallback((sectionId: string) => {
+    setCollapsedSectionIds((current) => {
+      const next = new Set(current);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  }, []);
+  const hiddenSectionIds = useMemo(
+    () => collapsedHiddenIds(visibleSections, collapsedSectionIds),
+    [visibleSections, collapsedSectionIds]
+  );
+  const renderSections = useMemo(
+    () => visibleSections.filter((section) => !hiddenSectionIds.has(section.id)),
+    [visibleSections, hiddenSectionIds]
+  );
   const pendingProposals = useMemo(
     () => (documentMode ? [] : state.proposals.filter((proposal) => proposal.status === "pending")),
     [documentMode, state.proposals]
@@ -1112,6 +1148,7 @@ export function FileScreen({
   const editorScrollRef = useRef<HTMLDivElement | null>(null);
   const composerAreaRef = useRef<HTMLDivElement | null>(null);
   const qualityBaselineLoadedRef = useRef(false);
+  const lastDocumentStatusKeyRef = useRef<string | null>(null);
   const currentFullFingerprintRef = useRef<string | null>(null);
   const sectionFingerprintByIdRef = useRef<Map<string, string>>(new Map());
   // `exportMarkdown` is re-created by the provider whenever state changes,
@@ -1172,7 +1209,7 @@ export function FileScreen({
   // commit. The pull-preview API always fetches fresh from the GitHub
   // contents endpoint (no caching - see `githubRequest` in lib/github.ts)
   // so the dialog shows the true current state of the remote.
-  const pullDisabled = documentMode ? true : !githubConfigured || versionStatusBusy;
+  const pullDisabled = !githubConfigured || versionStatusBusy;
   const primaryVersionAction =
     versionStatus?.syncStatus === "remote-ahead" || versionStatus?.syncStatus === "diverged"
       ? "pull"
@@ -1195,11 +1232,57 @@ export function FileScreen({
 
     async function loadVersionStatus() {
       if (documentMode) {
-        setVersionStatus({
-          connected: state.settings.integrations.github.status === "connected",
-          configured: githubConfigured,
-          syncStatus: (currentDocument?.syncStatus as GitHubVersionStatus["syncStatus"] | undefined) ?? "unknown",
-        });
+        if (!currentDocument || !githubConfigured) {
+          lastDocumentStatusKeyRef.current = null;
+          setVersionStatus({
+            connected: state.settings.integrations.github.status === "connected",
+            configured: githubConfigured,
+            syncStatus: githubConfigured ? "unknown" : "not-configured",
+          });
+          return;
+        }
+
+        // Document status is derived from the SAVED Supabase content, not the
+        // in-editor draft, so only refetch when the document identity or its
+        // revision changes - not on every keystroke (localMarkdown is a dep).
+        const statusKey = `${currentDocument.id}:${currentDocument.revision}`;
+        if (lastDocumentStatusKeyRef.current === statusKey) {
+          return;
+        }
+        lastDocumentStatusKeyRef.current = statusKey;
+
+        try {
+          setVersionStatusBusy(true);
+          const response = await fetch(
+            `/api/app/documents/${encodeURIComponent(currentDocument.id)}/github/status`,
+            { method: "GET", cache: "no-store" }
+          );
+          const payload = (await response.json()) as GitHubVersionStatus & { error?: string };
+          if (!response.ok) {
+            throw new Error(payload?.error || "Could not load document GitHub status");
+          }
+          if (!cancelled) {
+            setVersionStatus(payload);
+          }
+        } catch {
+          // Fall back to the document's stored sync status so the control still
+          // reflects something sensible if the live check fails. Clear the key
+          // so a later render retries.
+          lastDocumentStatusKeyRef.current = null;
+          if (!cancelled) {
+            setVersionStatus({
+              connected: state.settings.integrations.github.status === "connected",
+              configured: githubConfigured,
+              syncStatus:
+                (currentDocument?.syncStatus as GitHubVersionStatus["syncStatus"] | undefined) ??
+                "unknown",
+            });
+          }
+        } finally {
+          if (!cancelled) {
+            setVersionStatusBusy(false);
+          }
+        }
         return;
       }
 
@@ -1250,7 +1333,7 @@ export function FileScreen({
       cancelled = true;
     };
   }, [
-    currentDocument?.syncStatus,
+    currentDocument,
     documentMode,
     githubConfigured,
     localMarkdown,
@@ -1542,17 +1625,19 @@ export function FileScreen({
     setDocumentSections((current) => {
       const nextSection = createDocumentSection(name, starter);
       if (!afterSectionId) {
-        return [...current, nextSection];
+        return normalizeSectionDepths([...current, nextSection]);
       }
       const index = current.findIndex((section) => section.id === afterSectionId);
       if (index === -1) {
-        return [...current, nextSection];
+        return normalizeSectionDepths([...current, nextSection]);
       }
-      return [
+      // Insert as a sibling of the anchor section (same depth).
+      const anchorDepth = current[index]?.depth ?? 0;
+      return normalizeSectionDepths([
         ...current.slice(0, index + 1),
-        nextSection,
+        { ...nextSection, depth: anchorDepth },
         ...current.slice(index + 1),
-      ];
+      ]);
     });
   }
 
@@ -1560,6 +1645,22 @@ export function FileScreen({
     setDocumentSections((current) =>
       current.map((section) => section.id === sectionId ? { ...section, ...patch } : section)
     );
+  }
+
+  function indentDocumentSection(sectionId: string) {
+    setDocumentSections((current) => {
+      const index = current.findIndex((section) => section.id === sectionId);
+      if (index === -1 || !canIndentSection(current, index)) return current;
+      return shiftSubtreeDepth(current, index, 1);
+    });
+  }
+
+  function outdentDocumentSection(sectionId: string) {
+    setDocumentSections((current) => {
+      const index = current.findIndex((section) => section.id === sectionId);
+      if (index === -1 || !canOutdentSection(current, index)) return current;
+      return shiftSubtreeDepth(current, index, -1);
+    });
   }
 
   function reorderDocumentSections(ids: string[]) {
@@ -1570,8 +1671,25 @@ export function FileScreen({
         return section ? [section] : [];
       });
       const missing = current.filter((section) => !ids.includes(section.id));
-      return [...ordered, ...missing];
+      // Keep the tree valid after a drag - see reorderSections in the provider.
+      return normalizeSectionDepths([...ordered, ...missing]);
     });
+  }
+
+  // Drag reorders only the VISIBLE rows. Reconcile hidden (collapsed) children
+  // back next to their parent so a collapsed subtree drags as one unit, then
+  // route to the right mode's reorder handler.
+  function handleSectionReorder(reorderedVisibleIds: string[]) {
+    const fullOrder = reconcileReorderedIds(
+      visibleSections,
+      reorderedVisibleIds,
+      collapsedSectionIds
+    );
+    if (documentMode) {
+      reorderDocumentSections(fullOrder);
+    } else {
+      reorderSections(fullOrder);
+    }
   }
 
   function submitComposer() {
@@ -1661,9 +1779,9 @@ export function FileScreen({
     }
   }
 
-  async function handleSaveDocument() {
+  async function handleSaveDocument(): Promise<SharedDocument | null> {
     if (!currentDocument || documentSaving || !documentDirty) {
-      return;
+      return currentDocument;
     }
 
     try {
@@ -1686,10 +1804,24 @@ export function FileScreen({
         setDocumentSections(parsed);
         setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, payload.document.title));
         await reloadDocumentActivity(payload.document.id);
+        lastDocumentStatusKeyRef.current = null;
+        setVersionStatus((current) =>
+          current
+            ? {
+                ...current,
+                syncStatus:
+                  (payload.document?.syncStatus as GitHubVersionStatus["syncStatus"] | undefined) ??
+                  current.syncStatus,
+              }
+            : current
+        );
+        toast.success("Document saved");
+        return payload.document;
       }
-      toast.success("Document saved");
+      throw new Error("Save did not return the updated document.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save document.");
+      return null;
     } finally {
       setDocumentSaving(false);
     }
@@ -1701,24 +1833,49 @@ export function FileScreen({
     }
 
     try {
+      let documentToPublish = currentDocument;
       if (documentDirty) {
-        await handleSaveDocument();
+        const savedDocument = await handleSaveDocument();
+        if (!savedDocument) {
+          return;
+        }
+        documentToPublish = savedDocument;
       }
 
       setDocumentPublishing(true);
-      const response = await fetch(`/api/app/documents/${encodeURIComponent(currentDocument.id)}/github/push`, {
+      const response = await fetch(`/api/app/documents/${encodeURIComponent(documentToPublish.id)}/github/push`, {
         method: "POST",
       });
       if (!response.ok) {
         throw new Error(await readError(response, "Could not publish document."));
       }
-      const payload = (await response.json()) as { document?: SharedDocument };
+      const payload = (await response.json()) as { document?: SharedDocument; synced?: boolean };
       if (payload.document) {
         setCurrentDocument(payload.document);
-        setSavedDocumentMarkdown(documentSectionsToMarkdown(documentSections, payload.document.title));
+        const parsed = parseDocumentSections(payload.document.content, payload.document.title);
+        setDocumentSections(parsed);
+        setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, payload.document.title));
+        lastDocumentStatusKeyRef.current = null;
+        setVersionStatus((current) =>
+          current
+            ? {
+                ...current,
+                syncStatus:
+                  (payload.document?.syncStatus as GitHubVersionStatus["syncStatus"] | undefined) ??
+                  current.syncStatus,
+                remoteSha: payload.document?.lastRemoteSha ?? current.remoteSha,
+                remoteContentHash:
+                  payload.document?.lastSyncedContentHash ?? current.remoteContentHash,
+              }
+            : current
+        );
         await reloadDocumentActivity(payload.document.id);
       }
-      toast.success("Published to GitHub");
+      if (payload.synced === false) {
+        toast.success("Published to GitHub. You have newer local edits - publish again to sync them.");
+      } else {
+        toast.success("Published to GitHub");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not publish document.");
     } finally {
@@ -1923,6 +2080,59 @@ export function FileScreen({
 
   async function handleOpenPullReview() {
     if (documentMode) {
+      if (!currentDocument) {
+        return;
+      }
+      try {
+        setSelectedVersionAction("pull");
+        setPullBusy(true);
+        setPullDialogOpen(true);
+        setPullPreview(null);
+
+        const response = await fetch(
+          `/api/app/documents/${encodeURIComponent(currentDocument.id)}/github/pull/preview`,
+          { method: "POST" }
+        );
+        const payload = (await response.json()) as {
+          syncStatus?: GitHubPullPreview["syncStatus"];
+          remoteSha?: string | null;
+          remoteMessage?: string | null;
+          remoteCommittedAt?: string | null;
+          remoteContentHash?: string | null;
+          remoteContent?: string;
+          remoteBody?: string;
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(payload?.error || "Could not preview GitHub import");
+        }
+
+        // The remote body (frontmatter already stripped server-side) is parsed
+        // into sections purely to render the incoming-changes diff.
+        const remoteSections = parseDocumentSections(
+          payload.remoteBody ?? "",
+          currentDocument.title
+        );
+        setPullPreview({
+          syncStatus: payload.syncStatus ?? "unknown",
+          remoteSha: payload.remoteSha ?? null,
+          remoteMessage: payload.remoteMessage ?? null,
+          remoteCommittedAt: payload.remoteCommittedAt ?? null,
+          remoteContentHash: payload.remoteContentHash ?? null,
+          remoteContent: payload.remoteContent ?? "",
+          warnings: [],
+          sections: remoteSections,
+        });
+        setPullPreviewRenderKey((current) => current + 1);
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Could not preview GitHub import"
+        );
+        setPullDialogOpen(false);
+      } finally {
+        setPullBusy(false);
+      }
       return;
     }
 
@@ -1964,6 +2174,51 @@ export function FileScreen({
 
   async function handleApplyPull() {
     if (!pullPreview) {
+      return;
+    }
+
+    if (documentMode) {
+      if (!currentDocument) {
+        return;
+      }
+      try {
+        setPullBusy(true);
+        const response = await fetch(
+          `/api/app/documents/${encodeURIComponent(currentDocument.id)}/github/pull/apply`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              remoteContent: pullPreview.remoteContent ?? "",
+              remoteSha: pullPreview.remoteSha,
+              expectedRevision: currentDocument.revision,
+            }),
+          }
+        );
+        const payload = (await response.json()) as { document?: SharedDocument; error?: string };
+
+        if (!response.ok) {
+          throw new Error(payload.error || "Could not import document from GitHub");
+        }
+
+        if (payload.document) {
+          setCurrentDocument(payload.document);
+          const parsed = parseDocumentSections(payload.document.content, payload.document.title);
+          setDocumentSections(parsed);
+          setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, payload.document.title));
+          await reloadDocumentActivity(payload.document.id);
+        }
+
+        toast.success("Pulled document from GitHub");
+        setPullDialogOpen(false);
+        setPullPreview(null);
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Could not import document from GitHub"
+        );
+      } finally {
+        setPullBusy(false);
+      }
       return;
     }
 
@@ -2415,7 +2670,7 @@ export function FileScreen({
                           !githubConfigured && "text-[var(--creed-text-tertiary)]"
                         )}
                         onClick={() => {
-                          if (selectedVersionAction === "pull") {
+                          if (!documentMode && selectedVersionAction === "pull") {
                             if (!pullDisabled) {
                               void handleOpenPullReview();
                             }
@@ -2426,15 +2681,42 @@ export function FileScreen({
                             void handleOpenPushReview();
                           }
                         }}
-                        disabled={selectedVersionAction === "pull" ? pullDisabled : pushDisabled}
+                        disabled={
+                          documentMode
+                            ? pushDisabled
+                            : selectedVersionAction === "pull"
+                              ? pullDisabled
+                              : pushDisabled
+                        }
                       >
-                        {selectedVersionAction === "pull" ? (
+                        {!documentMode && selectedVersionAction === "pull" ? (
                           <CloudDownload className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none" />
                         ) : (
                           <CloudUpload className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none" />
                         )}
                         {documentMode ? null : selectedVersionAction === "pull" ? "Pull" : "Push"}
                       </Button>
+
+                      {documentMode ? (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Pull from GitHub"
+                          title="Pull from GitHub"
+                          className={documentHeaderIconButtonClass}
+                          disabled={pullDisabled || pullBusy}
+                          onClick={() => {
+                            setSelectedVersionAction("pull");
+                            void handleOpenPullReview();
+                          }}
+                        >
+                          {pullBusy ? (
+                            <LoaderCircle className="inline-flex h-3.5 w-3.5 shrink-0 animate-spin" />
+                          ) : (
+                            <CloudDownload className="inline-flex h-3.5 w-3.5 shrink-0" />
+                          )}
+                        </Button>
+                      ) : null}
 
                       {!documentMode ? (
                       <DropdownMenu>
@@ -2724,14 +3006,20 @@ export function FileScreen({
 
               <Reorder.Group
                 axis="y"
-                values={visibleSections.map((section) => section.id)}
-                onReorder={documentMode ? reorderDocumentSections : reorderSections}
+                values={renderSections.map((section) => section.id)}
+                onReorder={handleSectionReorder}
                 className="space-y-10 md:space-y-16"
               >
-                {visibleSections.map((section) => {
+                {renderSections.map((section) => {
                   const quality = sectionQualityById.get(section.id);
                   const analyzedFingerprint = analyzedSectionFingerprints[section.id];
                   const currentFingerprint = sectionFingerprintById.get(section.id);
+                  const editorIndex = visibleSections.findIndex((item) => item.id === section.id);
+                  const depth = sectionDepth(section);
+                  const hasChildren = sectionHasChildren(visibleSections, editorIndex);
+                  const collapsed = collapsedSectionIds.has(section.id);
+                  const canIndent = canIndentSection(visibleSections, editorIndex);
+                  const canOutdent = canOutdentSection(visibleSections, editorIndex);
 
                   const isOverridden = !documentMode && state.sectionLockOverrides.includes(section.id);
                   const sectionLocked = documentMode
@@ -2741,6 +3029,20 @@ export function FileScreen({
                     <SectionCard
                       key={section.id}
                       section={section}
+                      depth={depth}
+                      hasChildren={hasChildren}
+                      collapsed={collapsed}
+                      onToggleCollapse={() => toggleSectionCollapsed(section.id)}
+                      canIndent={canIndent}
+                      canOutdent={canOutdent}
+                      onIndent={() => {
+                        if (documentMode) indentDocumentSection(section.id);
+                        else indentSection(section.id);
+                      }}
+                      onOutdent={() => {
+                        if (documentMode) outdentDocumentSection(section.id);
+                        else outdentSection(section.id);
+                      }}
                       locked={sectionLocked}
                       globalLocked={documentMode ? documentLocked : state.locked}
                       onToggleLock={
@@ -3069,7 +3371,14 @@ export function FileScreen({
           <DialogHeader>
             <DialogTitle>Pull from GitHub</DialogTitle>
             <DialogDescription>
-              Review the remote <span className="font-mono text-[13px]">creed.md</span> before it replaces your local file.
+              {documentMode ? (
+                <>Review the remote file before it replaces this document.</>
+              ) : (
+                <>
+                  Review the remote <span className="font-mono text-[13px]">creed.md</span> before it
+                  replaces your local file.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           {pullBusy && !pullPreview ? (
@@ -3086,9 +3395,9 @@ export function FileScreen({
 
               <SectionChangeList
                 changes={computeSectionChanges(
-                  state.sections,
+                  editorSections,
                   pullPreview.sections,
-                  state.sections
+                  editorSections
                 )}
                 heading="Incoming changes"
                 show={showPullPreview}
@@ -3105,7 +3414,7 @@ export function FileScreen({
               onClick={() => void handleApplyPull()}
               disabled={pullBusy || !pullPreview}
             >
-              {pullBusy ? "Importing" : "Import remote Creed"}
+              {pullBusy ? "Importing" : documentMode ? "Import remote document" : "Import remote Creed"}
               {pullBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
             </Button>
           </DialogFooter>
@@ -3249,6 +3558,14 @@ export function FileScreen({
 
 function SectionCard({
   section,
+  depth,
+  hasChildren,
+  collapsed,
+  onToggleCollapse,
+  canIndent,
+  canOutdent,
+  onIndent,
+  onOutdent,
   locked,
   globalLocked,
   onToggleLock,
@@ -3271,6 +3588,14 @@ function SectionCard({
   onSelectComment,
 }: {
   section: CreedSection;
+  depth: number;
+  hasChildren: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  canIndent: boolean;
+  canOutdent: boolean;
+  onIndent: () => void;
+  onOutdent: () => void;
   locked: boolean;
   globalLocked: boolean;
   onToggleLock: () => void;
@@ -3315,8 +3640,17 @@ function SectionCard({
       data-section-id={section.id}
       id={section.id}
       className="scroll-mt-24"
+      style={depth > 0 ? { paddingLeft: depth * 28 } : undefined}
     >
       <section className="group relative">
+        {depth > 0 ? (
+          // Subtle rail marking a nested subtree, aligned to the indent.
+          <span
+            aria-hidden
+            className="absolute -left-px top-1 bottom-1 w-px bg-[var(--creed-border)]"
+            style={{ left: -14 }}
+          />
+        ) : null}
         <button
           type="button"
           onPointerDown={(event) => dragControls.start(event)}
@@ -3328,6 +3662,20 @@ function SectionCard({
         <div className="mb-6 flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3">
+              {hasChildren ? (
+                <button
+                  type="button"
+                  onClick={onToggleCollapse}
+                  aria-expanded={!collapsed}
+                  aria-label={collapsed ? `Expand ${section.name}` : `Collapse ${section.name}`}
+                  className="-ml-1 shrink-0 rounded p-0.5 text-[var(--creed-text-secondary)] transition-colors hover:text-[var(--creed-text-primary)]"
+                >
+                  <ChevronDown
+                    className={cn(CHEVRON_CLASS, collapsed ? "-rotate-90" : "rotate-0")}
+                    style={{ color: accent }}
+                  />
+                </button>
+              ) : null}
               <span
                 className="inline-block h-9 w-[3px] rounded-full"
                 style={{ backgroundColor: accent }}
@@ -3401,6 +3749,22 @@ function SectionCard({
                 onSelect={onRename}
               >
                 Rename
+              </AnimatedMenuIconItem>
+              <AnimatedMenuIconItem
+                icon={ArrowRight}
+                className="text-sm"
+                disabled={!canIndent}
+                onSelect={() => onIndent()}
+              >
+                Nest
+              </AnimatedMenuIconItem>
+              <AnimatedMenuIconItem
+                icon={ArrowLeft}
+                className="text-sm"
+                disabled={!canOutdent}
+                onSelect={() => onOutdent()}
+              >
+                Un-nest
               </AnimatedMenuIconItem>
               {/*
                 Colour sub-menu. Hover-driven on desktop via Radix's default

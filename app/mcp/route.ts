@@ -38,6 +38,7 @@ import {
   listSharedDocuments,
   readSharedDocument,
   readSharedDocumentById,
+  serializeSharedDocument,
   updateSharedDocumentContent,
 } from "@/lib/shared-documents";
 import {
@@ -454,7 +455,7 @@ const tools = [
   {
     name: "creed_read_document",
     description:
-      "Read one shared Markdown document by id or slug. Returns contentMarkdown and revision. Use the returned revision as expectedRevision when updating.",
+      "Read one shared Markdown document by id or slug. contentMarkdown includes YAML frontmatter carrying the document properties (title, type, status, stage, lifecycle, priority, size) - this is the version-controlled representation pushed to GitHub. Structured property fields are also returned. Use the returned revision as expectedRevision when updating.",
     inputSchema: {
       type: "object",
       properties: {
@@ -479,7 +480,7 @@ const tools = [
   {
     name: "creed_create_document",
     description:
-      "Create a shared Markdown document in Supabase. It is visible immediately in Creed and to other MCP agents. GitHub sync happens separately from the latest Supabase state.",
+      "Create a shared Markdown document in Supabase. It is visible immediately in Creed and to other MCP agents. contentMarkdown may include YAML frontmatter for properties, or set them via the structured fields below. GitHub sync happens separately from the latest Supabase state; on push, properties are serialized into frontmatter at the top of the file.",
     inputSchema: {
       type: "object",
       properties: {
@@ -501,7 +502,7 @@ const tools = [
   {
     name: "creed_update_document",
     description:
-      "Update a shared Markdown document in Supabase using optimistic concurrency. Requires expectedRevision from creed_read_document; if another agent saved first, this returns a conflict and you must re-read before retrying.",
+      "Update a shared Markdown document in Supabase using optimistic concurrency. contentMarkdown may include YAML frontmatter (title/type/status/stage/lifecycle/priority/size); if present it is parsed out and applied to the document properties, and only the body is stored as content. Requires expectedRevision from creed_read_document; if another agent saved first, this returns a conflict and you must re-read before retrying.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1187,9 +1188,12 @@ async function handleToolCall(
     if (!document) {
       throw new Error("Document not found.");
     }
+    // `contentMarkdown` includes the property frontmatter (the version-
+    // controlled representation). The structured property fields are also
+    // spread for convenience, but the columns remain authoritative.
     return jsonToolResult({
       ...document,
-      contentMarkdown: document.content,
+      contentMarkdown: serializeSharedDocument(document),
     });
   }
 

@@ -26,6 +26,7 @@ import {
   isDocumentType,
   isDocumentViewMode,
 } from "@/lib/document-properties";
+import { parseDocumentFile, serializeDocumentFile } from "@/lib/document-markdown";
 import type { SupabaseLikeClient } from "@/lib/supabase/types";
 
 export type SharedDocumentFolder = {
@@ -489,14 +490,18 @@ export async function createSharedDocument(
   const githubRepoOwner = input.githubRepoOwner?.trim() || documentGithubDefault("OWNER");
   const githubRepoName = input.githubRepoName?.trim() || documentGithubDefault("REPO");
   const githubBranch = input.githubBranch?.trim() || documentGithubDefault("BRANCH") || "main";
-  const content = input.content ?? `# ${title}\n`;
+  // Incoming content may carry property frontmatter (e.g. from an agent that
+  // read the serialized file). Split it so `content` stays body-only and the
+  // frontmatter seeds properties. Explicit structured args take precedence.
+  const parsed = parseDocumentFile(input.content ?? "");
+  const content = (input.content !== undefined ? parsed.body : "") || `# ${title}\n`;
   const metadata = cleanMetadataPatch({
-    documentType: input.documentType,
-    stage: input.stage,
-    lifecycle: input.lifecycle,
-    status: input.status,
-    priority: input.priority,
-    size: input.size,
+    documentType: input.documentType ?? parsed.metadata.documentType,
+    stage: input.stage ?? parsed.metadata.stage,
+    lifecycle: input.lifecycle ?? parsed.metadata.lifecycle,
+    status: input.status ?? parsed.metadata.status,
+    priority: input.priority ?? parsed.metadata.priority,
+    size: input.size ?? parsed.metadata.size,
   });
   if (!metadata.ok) {
     return { ok: false, code: "invalid", error: metadata.error };
@@ -566,12 +571,22 @@ export async function updateSharedDocumentContent(
     return { ok: false, code: "invalid", error: "A valid expectedRevision is required." };
   }
 
+  // Content arrives from the editor (body only) or from an agent/API caller
+  // that may include YAML frontmatter. Parse it out so property columns stay
+  // authoritative and the `content` column always holds body-only Markdown.
+  const { metadata, body } = parseDocumentFile(input.content);
+  const cleaned = cleanMetadataPatch(metadata);
+  if (!cleaned.ok) {
+    return { ok: false, code: "invalid", error: cleaned.error };
+  }
+
   const now = nowIso();
   const db = client as SupabaseLikeClient;
   const { data, error } = (await db
     .from("creed_documents")
     .update({
-      content: input.content,
+      content: body,
+      ...cleaned.patch,
       revision: input.expectedRevision + 1,
       sync_status: "local-ahead",
       last_synced_content_hash: null,
@@ -582,6 +597,7 @@ export async function updateSharedDocumentContent(
     })
     .eq("id", input.id)
     .eq("revision", input.expectedRevision)
+    .is("archived_at", null)
     .select(DOCUMENT_COLUMNS)
     .maybeSingle()) as {
     data: SharedDocumentRow | null;
@@ -904,12 +920,21 @@ export async function saveDocumentDashboardPreferences(
   return { ok: true, value: mapDashboardPreferences(data) };
 }
 
+export function hashDocumentContent(content: string) {
+  return contentHash(content);
+}
+
+// The canonical GitHub representation of a document: property frontmatter
+// followed by the body. This is what we push and what we hash for sync-status.
+export function serializeSharedDocument(document: SharedDocument) {
+  return serializeDocumentFile(document, document.content);
+}
+
 export async function markSharedDocumentSynced(
   client: unknown,
   input: {
     id: string;
     remoteSha: string;
-    remoteMessage?: string | null;
     content: string;
     revision: number;
     actorUserId?: string | null;
@@ -917,6 +942,9 @@ export async function markSharedDocumentSynced(
 ): Promise<MutationResult<SharedDocument>> {
   const now = nowIso();
   const db = client as SupabaseLikeClient;
+  // Guard on the revision we pushed. If a concurrent Creed edit moved the
+  // document on while the push was in flight, no row matches and we must not
+  // stamp "up-to-date" over content that is actually ahead of GitHub.
   const { data, error } = (await db
     .from("creed_documents")
     .update({
@@ -928,6 +956,8 @@ export async function markSharedDocumentSynced(
       updated_at: now,
     })
     .eq("id", input.id)
+    .eq("revision", input.revision)
+    .is("archived_at", null)
     .select(DOCUMENT_COLUMNS)
     .maybeSingle()) as {
     data: SharedDocumentRow | null;
@@ -938,7 +968,77 @@ export async function markSharedDocumentSynced(
     return { ok: false, code: "invalid", error: error.message };
   }
   if (!data) {
-    return { ok: false, code: "not-found", error: "Document not found." };
+    return {
+      ok: false,
+      code: "conflict",
+      error: "Document changed in Creed during publish. Publish again to sync the latest revision.",
+    };
+  }
+
+  return { ok: true, value: { ...mapDocumentSummary(data), content: data.content ?? "" } };
+}
+
+// Pull is authoritative: the remote Markdown replaces the Supabase content
+// wholesale, mirroring the creed.md pull/apply behaviour. Property frontmatter
+// from the remote file is applied to the columns in the same write. Guarded on
+// `expectedRevision` so a concurrent Creed edit can't be silently clobbered.
+export async function applyRemoteDocumentPull(
+  client: unknown,
+  input: {
+    id: string;
+    content: string;
+    metadata: DocumentMetadataPatch;
+    syncedContentHash: string;
+    remoteSha: string;
+    expectedRevision: number;
+    actorUserId?: string | null;
+  }
+): Promise<MutationResult<SharedDocument>> {
+  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
+    return { ok: false, code: "invalid", error: "A valid expectedRevision is required." };
+  }
+
+  const cleaned = cleanMetadataPatch(input.metadata);
+  if (!cleaned.ok) {
+    return { ok: false, code: "invalid", error: cleaned.error };
+  }
+
+  const now = nowIso();
+  const nextRevision = input.expectedRevision + 1;
+  const db = client as SupabaseLikeClient;
+  const { data, error } = (await db
+    .from("creed_documents")
+    .update({
+      content: input.content,
+      ...cleaned.patch,
+      revision: nextRevision,
+      last_remote_sha: input.remoteSha,
+      last_synced_content_hash: input.syncedContentHash,
+      last_synced_revision: nextRevision,
+      sync_status: "up-to-date",
+      updated_by: input.actorUserId ?? null,
+      updated_at: now,
+      last_edited_by: input.actorUserId ?? null,
+      last_edited_via: "github",
+    })
+    .eq("id", input.id)
+    .eq("revision", input.expectedRevision)
+    .is("archived_at", null)
+    .select(DOCUMENT_COLUMNS)
+    .maybeSingle()) as {
+    data: SharedDocumentRow | null;
+    error: { message: string } | null;
+  };
+
+  if (error) {
+    return { ok: false, code: "invalid", error: error.message };
+  }
+  if (!data) {
+    return {
+      ok: false,
+      code: "conflict",
+      error: "Document changed since it was previewed. Re-open the pull and try again.",
+    };
   }
 
   return { ok: true, value: { ...mapDocumentSummary(data), content: data.content ?? "" } };

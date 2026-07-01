@@ -1,33 +1,45 @@
 # Fallow Audit
 
-Date: 2026-06-30
+Date: 2026-07-01
 Branch: `main`
 
 ## Result
 
+- Normal Fallow check: 0 issues.
 - Dead-code, normal mode: 0 issues.
 - Dead-code, production mode: 0 issues.
-- Health score: B, 76.5.
-- Duplication: 4.9996%, 49 clone groups.
+- Dependency audit: 0 vulnerabilities.
+- Exact duplication: 5.2947%, 57 clone groups, 121 clone instances.
+- Semantic duplication advisory scan: 18.2076%, 234 clone groups.
+- Health advisory scan: 307 functions above threshold; average maintainability 91.8; 114 critical, 85 high, 108 moderate findings.
 
 ## Actions Taken
 
-- Removed unused marketing, onboarding, public route, old icon, billing, Stripe, roadmap, and service-worker code.
-- Removed unused package dependencies, including Stripe.
-- Pruned the last dead billing export found after the payment cleanup.
-- Added a shared authenticated JSON route helper, reducing API duplication below Fallow's duplication penalty threshold.
-- Kept a single inline suppression for the generated Next route import in `next-env.d.ts`.
+- Removed the unused `descendantCount` export in `lib/section-hierarchy.ts`.
+- Added document GitHub route helper extraction in `lib/document-github.ts`, reducing route-mapping duplication.
+- Removed stale active Stripe/CSP/Vercel config that survived the earlier billing removal.
+- Tightened sync helpers so Fallow's clean dead-code result is not hiding stale parameters or unused runtime surfaces.
 
 ## Accepted Structural Debt
 
-Fallow health still flags complexity in pre-existing large modules:
+Fallow health still flags complexity in large modules:
 
 - `components/creed/file-screen.tsx`
-- `components/creed/creed-provider.tsx`
-- `lib/creed-backend.ts`
-- `components/creed/shell.tsx`
 - `components/creed/settings-screen.tsx`
-- `lib/ai/quality.ts`
+- `lib/creed-backend.ts`
+- `lib/shared-documents.ts`
+- `components/creed/documents-dashboard-screen.tsx`
+- `app/mcp/route.ts`
 - `lib/creed-data.ts`
+- `lib/ai/quality.ts`
 
-Those are architectural follow-up candidates. Refactoring them was out of scope for this branch because the user's requested behavior depends on keeping the existing `/file` surface and settings wiring intact.
+Those are architectural follow-up candidates. Refactoring them wholesale in this pass would carry more risk than the scoped correctness fixes above.
+
+## Verification
+
+- `npx --yes fallow --format json --quiet --explain` passed with 0 check issues.
+- `npx --yes fallow dead-code --production --format json --quiet --explain` passed with 0 issues.
+- `npm test` passed.
+- `npx tsc --noEmit -p .` passed.
+- `npm run lint` passed with warnings only.
+- `npm run build` passed.

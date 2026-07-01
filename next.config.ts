@@ -8,15 +8,12 @@ const isDev = process.env.NODE_ENV !== "production";
 const csp = [
   "default-src 'self'",
   // Scripts: same-origin + Next runtime needs eval in dev; loosen to unsafe-inline so we don't break inline boot
-  `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://*.supabase.co https://js.stripe.com https://checkout.stripe.com`,
+  `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://*.supabase.co`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co https://*.supabase.in https://api.openrouter.ai https://openrouter.ai https://api.github.com https://api.stripe.com https://checkout.stripe.com",
-  // Stripe Checkout embeds an iframe back to checkout.stripe.com on the
-  // redirect-based flow's intermediate states (3DS, etc.) — `frame-src`
-  // needs to allow it.
-  "frame-src 'self' https://js.stripe.com https://checkout.stripe.com https://hooks.stripe.com",
+  "connect-src 'self' https://*.supabase.co https://*.supabase.in https://api.openrouter.ai https://openrouter.ai https://api.github.com",
+  "frame-src 'self'",
   "frame-ancestors 'self'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -52,7 +49,6 @@ const NO_STORE_PATHS = [
   "/onboarding/:path*",
   "/connections/:path*",
   "/settings/:path*",
-  "/payment/success/:path*",
 ];
 
 const noStoreHeader = {

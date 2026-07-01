@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
-import { getGitHubFileSnapshot, pushGitHubFile } from "@/lib/github";
+import { pushGitHubFile } from "@/lib/github";
 import { withAuthenticatedGitHubAccess } from "@/lib/github-version-control";
 import { recordDocumentActivity } from "@/lib/document-collaboration";
-import { markSharedDocumentSynced, readSharedDocumentById } from "@/lib/shared-documents";
+import { readMappedDocumentGitHubFile, readMappedSharedDocument } from "@/lib/document-github";
+import { markSharedDocumentSynced, readSharedDocumentById, serializeSharedDocument } from "@/lib/shared-documents";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(
@@ -17,24 +18,15 @@ export async function POST(
     const { id } = await params;
     const payload = await withAuthenticatedGitHubAccess(async ({ user, integration }) => {
       const admin = getSupabaseAdminClient();
-      const document = await readSharedDocumentById(admin, id);
-      if (!document) {
-        throw new Error("Document not found.");
-      }
-      if (!document.githubRepoOwner || !document.githubRepoName || !document.githubBranch || !document.githubPath) {
-        throw new Error("Document is not mapped to GitHub yet.");
-      }
-
-      const remoteFile = await getGitHubFileSnapshot(
-        integration.access_token!,
-        document.githubRepoOwner,
-        document.githubRepoName,
-        document.githubPath,
-        document.githubBranch
-      );
+      const document = await readMappedSharedDocument(admin, id);
+      const remoteFile = await readMappedDocumentGitHubFile(integration.access_token!, document);
 
       const remoteChangedSinceLastSync =
-        Boolean(document.lastRemoteSha && remoteFile?.sha && remoteFile.sha !== document.lastRemoteSha);
+        Boolean(
+          document.lastSyncedContentHash &&
+            remoteFile?.contentHash &&
+            remoteFile.contentHash !== document.lastSyncedContentHash
+        );
       const localChangedSinceLastSync =
         document.lastSyncedRevision !== null && document.revision !== document.lastSyncedRevision;
 
@@ -44,6 +36,11 @@ export async function POST(
         );
       }
 
+      // Serialize property columns into YAML frontmatter so they travel with
+      // the body into version control. This exact string is both what we push
+      // and what we hash as the synced content.
+      const fileContent = serializeSharedDocument(document);
+
       const pushResult = await pushGitHubFile({
         accessToken: integration.access_token!,
         owner: document.githubRepoOwner,
@@ -51,20 +48,23 @@ export async function POST(
         branch: document.githubBranch,
         path: document.githubPath,
         message: `Update ${document.path}`,
-        content: document.content,
+        content: fileContent,
         currentSha: remoteFile?.sha ?? null,
       });
 
       const synced = await markSharedDocumentSynced(admin, {
         id: document.id,
         remoteSha: pushResult.sha,
-        remoteMessage: pushResult.message,
-        content: document.content,
+        content: fileContent,
         revision: document.revision,
         actorUserId: user.id,
       });
 
-      if (!synced.ok) {
+      // A "conflict" here means the push to GitHub succeeded but a concurrent
+      // Creed edit moved the document on before we could stamp it synced. That
+      // is not a failure - the commit landed - so we surface the latest row
+      // with `synced: false` instead of throwing. Any other failure is real.
+      if (!synced.ok && synced.code !== "conflict") {
         throw new Error(synced.error);
       }
 
@@ -81,9 +81,12 @@ export async function POST(
         },
       });
 
+      const latest = synced.ok ? synced.value : await readSharedDocumentById(admin, document.id);
+
       return {
         ok: true,
-        document: synced.value,
+        synced: synced.ok,
+        document: latest,
         remoteSha: pushResult.sha,
         remoteMessage: pushResult.message,
         remoteCommittedAt: pushResult.committedAt,

@@ -88,3 +88,40 @@ test("does not collapse paragraphs into bullet list", () => {
   assert.ok(!result.includes("<ul"), `unexpected list in: ${result}`);
   assert.ok(!result.includes("<li>"), `unexpected list item in: ${result}`);
 });
+
+test("section depth marker round-trips through markdown without changing the heading", () => {
+  const section = makeSection({
+    content: "<p>Nested body.</p>",
+    depth: 2,
+  });
+  const markdown = sectionToMarkdown(section);
+
+  assert.match(markdown, /^## Test Section <!-- creed:depth=2 -->/);
+
+  const { sections } = parseCreedMarkdown(markdown);
+
+  assert.equal(sections.length, 1, "round-trip should yield exactly one section");
+  assert.equal(sections[0].name, "Test Section");
+  assert.equal(sections[0].depth, 0, "a first section cannot be orphaned at depth 2");
+});
+
+test("valid nested section order preserves child depth", () => {
+  const parent = makeSection({
+    id: "parent",
+    name: "Parent",
+    content: "<p>Parent body.</p>",
+  });
+  const child = makeSection({
+    id: "child",
+    name: "Child",
+    content: "<p>Child body.</p>",
+    depth: 1,
+  });
+
+  const markdown = `${sectionToMarkdown(parent).trim()}\n\n${sectionToMarkdown(child).trim()}\n`;
+  const { sections } = parseCreedMarkdown(markdown);
+
+  assert.equal(sections.length, 2);
+  assert.equal(sections[0].depth, 0);
+  assert.equal(sections[1].depth, 1);
+});
