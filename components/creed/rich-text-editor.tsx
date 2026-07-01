@@ -1027,6 +1027,10 @@ export function RichTextEditor({
   // short hide delay so the pointer can travel from the table onto the bar.
   const hoveredTableRef = useRef<HTMLElement | null>(null);
   const tableHideTimerRef = useRef<number | null>(null);
+  // True while the pointer is over the toolbar itself. Checked when the hide
+  // timer fires so the bar never vanishes out from under the cursor even if the
+  // editor's mouseleave races ahead of the toolbar's mouseenter.
+  const overTableToolbarRef = useRef(false);
 
   const clearTableHideTimer = useCallback(() => {
     if (tableHideTimerRef.current !== null) {
@@ -1038,6 +1042,8 @@ export function RichTextEditor({
   const scheduleTableToolbarHide = useCallback(() => {
     clearTableHideTimer();
     tableHideTimerRef.current = window.setTimeout(() => {
+      // Don't hide if the pointer is resting on the toolbar (ordering-safe).
+      if (overTableToolbarRef.current) return;
       hoveredTableRef.current = null;
       setTableToolbar(null);
     }, 260);
@@ -1679,8 +1685,14 @@ export function RichTextEditor({
               ? "translate(-100%, 0)"
               : "translate(-100%, -100%)",
           }}
-          onMouseEnter={clearTableHideTimer}
-          onMouseLeave={scheduleTableToolbarHide}
+          onMouseEnter={() => {
+            overTableToolbarRef.current = true;
+            clearTableHideTimer();
+          }}
+          onMouseLeave={() => {
+            overTableToolbarRef.current = false;
+            scheduleTableToolbarHide();
+          }}
           onMouseDown={(event) => {
             // Keep the table cell selection alive when a control is pressed.
             event.preventDefault();
