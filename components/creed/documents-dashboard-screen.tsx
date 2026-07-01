@@ -158,7 +158,11 @@ function sortDocuments(
   });
 }
 
-function groupedDocuments(documents: DashboardDocument[], groupBy: DocumentGroupKey) {
+function groupedDocuments(
+  documents: DashboardDocument[],
+  groupBy: DocumentGroupKey,
+  groupValueFilter?: string[]
+) {
   if (groupBy === "none") {
     return [{ key: "all", label: "All documents", value: "", documents }];
   }
@@ -170,7 +174,15 @@ function groupedDocuments(documents: DashboardDocument[], groupBy: DocumentGroup
   }
 
   const options = PROPERTY_OPTIONS[groupBy];
-  return options.map((option) => ({
+  // When the grouped-by property is also being filtered, only render the
+  // groups whose value is included in the filter. This keeps empty,
+  // filtered-out groups (and their "Drop documents here" placeholders) from
+  // showing up alongside the ones the user actually selected.
+  const visibleOptions =
+    groupValueFilter && groupValueFilter.length > 0
+      ? options.filter((option) => groupValueFilter.includes(option.value))
+      : options;
+  return visibleOptions.map((option) => ({
     key: option.value,
     label: groupLabel(groupBy, option.value),
     value: option.value,
@@ -588,8 +600,13 @@ export function DocumentsDashboardScreen({
   }, [allFolders]);
 
   const groups = useMemo(
-    () => groupedDocuments(filteredDocuments, groupBy),
-    [filteredDocuments, groupBy]
+    () =>
+      groupedDocuments(
+        filteredDocuments,
+        groupBy,
+        groupBy === "none" ? undefined : propertyFilters[groupBy]
+      ),
+    [filteredDocuments, groupBy, propertyFilters]
   );
 
   function currentPreferences() {
@@ -818,7 +835,7 @@ export function DocumentsDashboardScreen({
       </header>
 
       {/* Toolbar (floating) */}
-      <div className="flex flex-wrap items-center gap-2 px-5 pt-3 md:px-8">
+      <div className="flex flex-wrap items-center gap-2 px-5 pt-3 pb-4 md:px-8">
         <span className="relative min-w-[200px] flex-1">
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--creed-text-tertiary)]"

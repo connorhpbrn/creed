@@ -6,7 +6,7 @@ import {
   listPendingCommentsForUser,
   listWorkspaceUsers,
 } from "@/lib/document-collaboration";
-import { readSharedDocument } from "@/lib/shared-documents";
+import { listSharedDocumentFolders, readSharedDocument } from "@/lib/shared-documents";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -36,7 +36,7 @@ export default async function FilePage({
   } = await supabase.auth.getUser();
 
   const admin = getSupabaseAdminClient();
-  const [comments, activity, users, pendingComments] = await Promise.all([
+  const [comments, activity, users, pendingComments, folders] = await Promise.all([
     listDocumentComments(admin, document.id),
     listDocumentActivity(admin, document.id),
     listWorkspaceUsers(admin),
@@ -45,7 +45,21 @@ export default async function FilePage({
     user?.id
       ? listPendingCommentsForUser(admin, document.id, user.id)
       : Promise.resolve([]),
+    // Only needed to resolve the parent folder's slug for back-navigation.
+    document.folderId ? listSharedDocumentFolders(supabase) : Promise.resolve([]),
   ]);
+
+  // Back-navigation returns to the parent folder when the document lives in one,
+  // otherwise to the dashboard root.
+  const parentFolder = document.folderId
+    ? folders.find((folder) => folder.id === document.folderId) ?? null
+    : null;
+  const back = parentFolder
+    ? {
+        href: `/dashboard/folder/${encodeURIComponent(parentFolder.slug)}`,
+        label: `Back to ${parentFolder.name}`,
+      }
+    : { href: "/dashboard", label: "Back to dashboard" };
 
   return (
     <FileScreen
@@ -57,6 +71,7 @@ export default async function FilePage({
         users,
         currentUserId: user?.id ?? null,
         activeCommentId: params.comment ?? null,
+        back,
       }}
     />
   );

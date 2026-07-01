@@ -652,6 +652,7 @@ type SharedDocumentFilePayload = {
   users: WorkspaceUser[];
   currentUserId: string | null;
   activeCommentId: string | null;
+  back?: { href: string; label: string };
 };
 
 type DocumentPropertyName = DocumentPropertyKey;
@@ -2142,8 +2143,8 @@ export function FileScreen({
                   <div className="relative flex min-w-0 items-start">
                     {documentMode ? (
                       <Link
-                        href="/dashboard"
-                        aria-label="Back to dashboard"
+                        href={sharedDocument?.back?.href ?? "/dashboard"}
+                        aria-label={sharedDocument?.back?.label ?? "Back to dashboard"}
                         className={cn("absolute -left-8 top-0.5 inline-flex shrink-0 items-center justify-center transition-colors duration-150 md:-left-10", documentHeaderIconButtonClass)}
                       >
                         <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
