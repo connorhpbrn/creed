@@ -61,13 +61,14 @@ import { SearchableSelect } from "@/components/creed/searchable-select";
 import { useCreed } from "@/components/creed/creed-provider";
 import {
   clearSettingsCreditsCache,
+  clearSettingsOpenRouterBalanceCache,
   clearSettingsRepoCache,
   clearSettingsUsageCache,
   hashSettingsMarkdown,
   loadSettingsAiSettings,
-  loadSettingsAiModels,
   loadSettingsBranches,
   loadSettingsCredits,
+  loadSettingsOpenRouterBalance,
   loadSettingsRepos,
   loadSettingsUsage,
   loadSettingsVersionStatus,
@@ -77,21 +78,15 @@ import {
   type AiUsageSummary,
   type BranchOption,
   type CreditsState,
+  type OpenRouterBalance,
   type PublicAiSettings,
   type RepoOption,
   type VersionControlStatus,
 } from "@/components/creed/settings-preload";
 import { AddCreditsDialog } from "@/components/creed/add-credits-dialog";
 import { CreditsHistoryDialog } from "@/components/creed/credits-history-dialog";
-import { CREDIT_MARKUP } from "@/lib/ai/credit-config";
-import {
-  AI_MODEL_CATALOG,
-  AI_MODEL_QUALITY_META,
-  DEFAULT_AI_MODEL_ID,
-  formatModelCost,
-  type AiModelCatalogItem,
-  type AiModelQuality,
-} from "@/lib/ai/model-catalog";
+import { LOW_ALLOWANCE_RATIO } from "@/lib/ai/credit-config";
+import { AI_FEATURES, featureMeta } from "@/lib/ai/features";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   accentColorMap,
@@ -214,7 +209,6 @@ export function SettingsScreen() {
   const [githubRefreshTick, setGitHubRefreshTick] = useState(0);
   const [aiSettings, setAiSettings] = useState<PublicAiSettings>({
     provider: "openrouter",
-    selectedModelId: DEFAULT_AI_MODEL_ID,
     keyStatus: "missing",
     aiMode: "credits",
   });
@@ -222,13 +216,27 @@ export function SettingsScreen() {
   const [aiSaving, setAiSaving] = useState(false);
   // aiNotice was an inline error string under the API key field. Replaced
   // by toast notifications - see toast.error/.success calls in the handlers.
-  const [usageRange, setUsageRange] = useState<AiUsageRange>("7d");
+  const [usageRange, setUsageRange] = useState<AiUsageRange>("90d");
   const [usage, setUsage] = useState<AiUsageSummary | null>(null);
-  const [aiModels, setAiModels] = useState<AiModelCatalogItem[]>(AI_MODEL_CATALOG);
   const [credits, setCredits] = useState<CreditsState | null>(null);
+  const [openRouterBalance, setOpenRouterBalance] = useState<OpenRouterBalance | null>(null);
   const [addCreditsOpen, setAddCreditsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const canSaveAiKey = looksLikeApiKey(aiKeyDraft) && !aiSaving;
+
+  // Two-bucket credits display: the allowance as spent / total, a separate
+  // roll-over "extra credits" card beneath it, and a quiet "low" nudge once the
+  // combined balance drops to <= 20% of the allowance. Kept minimal on purpose.
+  const grantedUsd = credits?.grantedUsd ?? 0;
+  const purchasedUsd = credits?.purchasedUsd ?? 0;
+  const balanceUsd = credits?.balanceUsd ?? 0;
+  const allTimeSpentUsd = credits?.allTimeSpentUsd ?? 0;
+  const allowanceUsd = credits?.allowanceUsd ?? 0;
+  const allowanceResets = credits?.allowanceResets ?? false;
+  const allowanceSpentUsd = Math.max(0, allowanceUsd - grantedUsd);
+  // Low once the combined balance drops to <= 20% of the allowance, so a large
+  // extra-credits buffer suppresses the nudge.
+  const lowOnAllowance = allowanceUsd > 0 && balanceUsd <= allowanceUsd * LOW_ALLOWANCE_RATIO;
 
   // The global control reflects the shared level of all non-hidden sections,
   // or nothing when they differ (mixed). Hidden sections are ignored here.
@@ -374,15 +382,9 @@ export function SettingsScreen() {
 
     async function loadAiSettings() {
       try {
-        const [settings, models] = await Promise.all([
-          loadSettingsAiSettings(),
-          loadSettingsAiModels(),
-        ]);
+        const settings = await loadSettingsAiSettings();
         if (!cancelled && settings) {
           setAiSettings(settings);
-        }
-        if (!cancelled && models.length) {
-          setAiModels(models);
         }
       } catch {
         return;
@@ -437,6 +439,26 @@ export function SettingsScreen() {
       cancelled = true;
     };
   }, []);
+
+  // The BYOK card shows the user's live OpenRouter balance, but only when a
+  // valid key is saved. Clears in credits mode or when the key is gone.
+  useEffect(() => {
+    if (aiSettings.aiMode !== "byok" || aiSettings.keyStatus !== "valid") {
+      setOpenRouterBalance(null);
+      return;
+    }
+    let cancelled = false;
+    void loadSettingsOpenRouterBalance()
+      .then((balance) => {
+        if (!cancelled) setOpenRouterBalance(balance);
+      })
+      .catch(() => {
+        if (!cancelled) setOpenRouterBalance(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [aiSettings.aiMode, aiSettings.keyStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -687,7 +709,6 @@ export function SettingsScreen() {
         },
         body: JSON.stringify({
           apiKey: aiKeyDraft.trim() || undefined,
-          modelId: aiSettings.selectedModelId,
         }),
       });
       const payload = (await response.json()) as {
@@ -705,6 +726,11 @@ export function SettingsScreen() {
         clearSettingsUsageCache();
       }
       setAiKeyDraft("");
+      // A freshly saved key has a new OpenRouter balance to show.
+      clearSettingsOpenRouterBalanceCache();
+      void loadSettingsOpenRouterBalance()
+        .then(setOpenRouterBalance)
+        .catch(() => setOpenRouterBalance(null));
       toast.success("API key saved");
     } catch {
       toast.error("Couldn't save API key");
@@ -721,7 +747,6 @@ export function SettingsScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clearApiKey: true,
-          modelId: aiSettings.selectedModelId,
         }),
       });
       const payload = (await response.json()) as {
@@ -737,51 +762,13 @@ export function SettingsScreen() {
         clearSettingsUsageCache();
       }
       setAiKeyDraft("");
+      clearSettingsOpenRouterBalanceCache();
+      setOpenRouterBalance(null);
       toast.success("API key cleared");
     } catch {
       toast.error("Couldn't clear API key");
     } finally {
       setAiSaving(false);
-    }
-  }
-
-  async function handleModelChange(modelId: string) {
-    setAiSettings((current) => ({
-      ...current,
-      selectedModelId: modelId,
-    }));
-
-    // Persist when there's a usable key (BYOK) or when on credits, where the
-    // platform key runs the selected model. Skip only for BYOK with no key.
-    if (aiSettings.keyStatus !== "valid" && aiSettings.aiMode !== "credits") {
-      return;
-    }
-
-    try {
-      const response = await fetch("/api/app/ai/settings", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          modelId,
-        }),
-      });
-      const payload = (await response.json()) as {
-        settings?: PublicAiSettings;
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error || "Could not save model.");
-      }
-
-      if (payload.settings) {
-        setAiSettings(payload.settings);
-        setCachedSettingsAiSettings(payload.settings);
-      }
-    } catch {
-      toast.error("Couldn't save model");
     }
   }
 
@@ -795,7 +782,7 @@ export function SettingsScreen() {
       const response = await fetch("/api/app/ai/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelId: aiSettings.selectedModelId, aiMode: mode }),
+        body: JSON.stringify({ aiMode: mode }),
       });
       const payload = (await response.json()) as {
         settings?: PublicAiSettings;
@@ -1033,7 +1020,7 @@ export function SettingsScreen() {
           <section>
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-[16px] font-medium text-[var(--creed-text-primary)]">
-                Credits and models
+                Model usage
               </h2>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -1071,16 +1058,67 @@ export function SettingsScreen() {
               <div className="grid gap-5 md:grid-cols-[1.1fr_0.9fr] md:items-stretch">
                 <div className="flex flex-col gap-4">
                   {aiSettings.aiMode === "credits" ? (
-                    <div className="rounded-[var(--radius-lg)] border border-[var(--creed-border)] px-4 py-3">
-                      <div className="text-[13px] font-medium text-[var(--creed-text-secondary)]">
-                        Credit balance
-                      </div>
-                      <div className="mt-0.5 text-[30px] font-medium tracking-[-0.03em] text-[var(--creed-text-primary)]">
-                        ${(credits?.balanceUsd ?? 0).toFixed(2)}
-                      </div>
-                    </div>
+                    allowanceResets ? (
+                      <>
+                        {/* Recurring allowance: this period's spend / total, plus
+                            the roll-over extra credits as a second bucket. */}
+                        <div className="rounded-[var(--radius-lg)] border border-[var(--creed-border)] px-4 py-3">
+                          <div className="text-[13px] font-medium text-[var(--creed-text-secondary)]">
+                            This month
+                          </div>
+                          <div className="mt-0.5 text-[30px] font-medium tracking-[-0.03em] text-[var(--creed-text-primary)]">
+                            ${allowanceSpentUsd.toFixed(2)}
+                            <span className="text-[var(--creed-text-tertiary)]">
+                              {" "}
+                              / ${allowanceUsd.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                        {/* Extra credits: top-ups that roll over and never reset. */}
+                        <div className="rounded-[var(--radius-lg)] border border-[var(--creed-border)] px-4 py-2.5">
+                          <div className="text-[13px] font-medium text-[var(--creed-text-secondary)]">
+                            Extra credits
+                          </div>
+                          <div className="mt-0.5 text-[22px] font-medium tracking-[-0.02em] text-[var(--creed-text-primary)]">
+                            ${purchasedUsd.toFixed(2)}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="rounded-[var(--radius-lg)] border border-[var(--creed-border)] px-4 py-3">
+                          <div className="text-[13px] font-medium text-[var(--creed-text-secondary)]">
+                            Credits left
+                          </div>
+                          <div className="mt-0.5 text-[30px] font-medium tracking-[-0.03em] text-[var(--creed-text-primary)]">
+                            ${balanceUsd.toFixed(2)}
+                          </div>
+                        </div>
+                        {/* Lifetime-only: total credits spent over all time. */}
+                        <div className="rounded-[var(--radius-lg)] border border-[var(--creed-border)] px-4 py-2.5">
+                          <div className="text-[13px] font-medium text-[var(--creed-text-secondary)]">
+                            All-time spend
+                          </div>
+                          <div className="mt-0.5 text-[22px] font-medium tracking-[-0.02em] text-[var(--creed-text-primary)]">
+                            ${allTimeSpentUsd.toFixed(2)}
+                          </div>
+                        </div>
+                      </>
+                    )
                   ) : (
                     <div>
+                      {openRouterBalance ? (
+                        <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--creed-border)] px-4 py-3">
+                          <div className="text-[13px] font-medium text-[var(--creed-text-secondary)]">
+                            OpenRouter balance
+                          </div>
+                          <div className="mt-0.5 text-[30px] font-medium tracking-[-0.03em] text-[var(--creed-text-primary)]">
+                            {openRouterBalance.remainingUsd != null
+                              ? `$${openRouterBalance.remainingUsd.toFixed(2)}`
+                              : "Unlimited"}
+                          </div>
+                        </div>
+                      ) : null}
                       <label className="mb-2 block text-[13px] font-medium text-[var(--creed-text-secondary)]">
                         OpenRouter API key
                       </label>
@@ -1100,18 +1138,6 @@ export function SettingsScreen() {
                     </div>
                   )}
 
-                  <div>
-                    <label className="mb-2 block text-[13px] font-medium text-[var(--creed-text-secondary)]">
-                      Model
-                    </label>
-                    <ModelSelect
-                      value={aiSettings.selectedModelId}
-                      onChange={(modelId) => void handleModelChange(modelId)}
-                      models={aiModels}
-                      aiMode={aiSettings.aiMode}
-                    />
-                  </div>
-
                   {aiSettings.aiMode === "credits" ? (
                     <div className="mt-auto flex items-center justify-between gap-2 pt-1">
                       <Button
@@ -1121,12 +1147,19 @@ export function SettingsScreen() {
                       >
                         View history
                       </Button>
-                      <Button
-                        className="rounded-md bg-[var(--creed-text-primary)] px-4 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
-                        onClick={() => setAddCreditsOpen(true)}
-                      >
-                        Add credits
-                      </Button>
+                      <div className="flex items-center gap-3">
+                        {lowOnAllowance ? (
+                          <span className="text-[12px] text-[#B45309] dark:text-[#F5A623]">
+                            Running low
+                          </span>
+                        ) : null}
+                        <Button
+                          className="rounded-md bg-[var(--creed-text-primary)] px-4 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
+                          onClick={() => setAddCreditsOpen(true)}
+                        >
+                          Add credits
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     <div className="mt-auto flex items-center justify-between gap-2 pt-1">
@@ -1156,7 +1189,12 @@ export function SettingsScreen() {
                   )}
                 </div>
 
-                <UsageCard usage={usage} range={usageRange} onRangeChange={setUsageRange} />
+                <UsageCard
+                  usage={usage}
+                  range={usageRange}
+                  onRangeChange={setUsageRange}
+                  mode={aiSettings.aiMode}
+                />
               </div>
             </div>
 
@@ -1170,6 +1208,7 @@ export function SettingsScreen() {
               open={historyOpen}
               onOpenChange={setHistoryOpen}
               transactions={credits?.transactions ?? []}
+              allowanceResets={allowanceResets}
             />
           </section>
 
@@ -1693,92 +1732,50 @@ function IntegrationRow({
   );
 }
 
-function ModelSelect({
-  value,
-  onChange,
-  models,
-  aiMode,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  models: AiModelCatalogItem[];
-  aiMode: AiMode;
-}) {
-  // Credits run on the platform key at a markup, so the dropdown shows the
-  // effective (marked-up) price. BYOK is at-cost, so it shows the raw list price.
-  const multiplier = aiMode === "credits" ? CREDIT_MARKUP : 1;
-  return (
-    <SearchableSelect
-      value={value}
-      onChange={onChange}
-      placeholder="Choose a model"
-      searchPlaceholder="Search models..."
-      options={models.map((model) => ({
-        key: model.id,
-        value: model.id,
-        label: model.name,
-        description: `${model.provider} · ${AI_MODEL_QUALITY_META[model.quality].label} · ${formatModelCost(model, multiplier)}`,
-        search: `${model.name} ${model.provider} ${model.id} ${AI_MODEL_QUALITY_META[model.quality].label}`,
-      }))}
-      renderOption={(option) => {
-        const model = models.find((item) => item.id === option.value) ?? models[0];
-        const quality = AI_MODEL_QUALITY_META[model.quality];
-
-        return (
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ backgroundColor: quality.color }} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[14px] font-medium text-[var(--creed-text-primary)]">
-                {model.name}
-              </div>
-              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--creed-text-secondary)]">
-                <span>{model.provider}</span>
-                <span>·</span>
-                <span>{quality.label}</span>
-                <span>·</span>
-                <span>{formatModelCost(model, multiplier)}</span>
-              </div>
-            </div>
-          </div>
-        );
-      }}
-    />
-  );
-}
-
 function UsageCard({
   usage,
   range,
   onRangeChange,
+  mode,
 }: {
   usage: AiUsageSummary | null;
   range: AiUsageRange;
   onRangeChange: (range: AiUsageRange) => void;
+  mode: AiMode;
 }) {
   const total = usage?.totalCostUsd ?? 0;
 
-  // Quality tiers present in the range, in fixed order. Each day's cost is
-  // stacked by tier - same recharts pattern as the /connections charts.
-  const qualityOrder: AiModelQuality[] = ["excellent", "good", "weak", "uncertain"];
-  const present = qualityOrder.filter((quality) =>
-    (usage?.days ?? []).some((day) => day.segments.some((s) => s.quality === quality && s.costUsd > 0))
-  );
+  // Features present in the range, known features first. Each day's spend is
+  // stacked by feature - same recharts pattern as the /connections charts.
+  const featureOrder: readonly string[] = AI_FEATURES;
+  const present = Array.from(
+    new Set(
+      (usage?.days ?? []).flatMap((day) =>
+        day.segments.filter((s) => s.costUsd > 0).map((s) => s.feature)
+      )
+    )
+  ).sort((a, b) => {
+    const ai = featureOrder.indexOf(a);
+    const bi = featureOrder.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
   const chartData = (usage?.days ?? [])
     .map((day) => {
       const row: Record<string, number | string> = { date: day.date };
-      for (const quality of present) row[quality] = 0;
+      for (const feature of present) row[feature] = 0;
       for (const segment of day.segments) {
-        if (present.includes(segment.quality)) {
-          row[segment.quality] = (Number(row[segment.quality]) || 0) + segment.costUsd;
+        if (present.includes(segment.feature)) {
+          row[segment.feature] = (Number(row[segment.feature]) || 0) + segment.costUsd;
         }
       }
       return row;
     })
     // Only plot days that actually have spend.
-    .filter((row) => present.reduce((sum, quality) => sum + Number(row[quality] ?? 0), 0) > 0);
+    .filter((row) => present.reduce((sum, feature) => sum + Number(row[feature] ?? 0), 0) > 0);
   const chartConfig: ChartConfig = {};
-  present.forEach((quality) => {
-    chartConfig[quality] = { label: AI_MODEL_QUALITY_META[quality].label, color: AI_MODEL_QUALITY_META[quality].color };
+  present.forEach((feature) => {
+    const meta = featureMeta(feature);
+    chartConfig[feature] = { label: meta.label, color: meta.color };
   });
 
   return (
@@ -1786,7 +1783,7 @@ function UsageCard({
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="text-[13px] font-medium text-[var(--creed-text-secondary)]">
-            Estimated spend
+            {mode === "credits" ? "Credits spend" : "BYOK spend"}
           </div>
           <div className="mt-2 text-[30px] font-medium tracking-[-0.04em] text-[var(--creed-text-primary)]">
             ${total.toFixed(total < 10 ? 2 : 0)}
@@ -1866,13 +1863,13 @@ function UsageCard({
                       />
                     }
                   />
-                  {present.map((quality) => (
+                  {present.map((feature) => (
                     <Bar
-                      key={quality}
-                      dataKey={quality}
+                      key={feature}
+                      dataKey={feature}
                       stackId="cost"
-                      fill={`var(--color-${quality})`}
-                      shape={<StackTopBar orderedKeys={present} dataKey={quality} />}
+                      fill={`var(--color-${feature})`}
+                      shape={<StackTopBar orderedKeys={present} dataKey={feature} />}
                     />
                   ))}
                 </BarChart>

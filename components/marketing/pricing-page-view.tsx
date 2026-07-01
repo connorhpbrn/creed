@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { Check, Star, X } from "lucide-react";
 import {
@@ -9,16 +9,22 @@ import {
   type ArrowUpRightIconHandle,
 } from "@/components/ui/arrow-up-right";
 import { AnimatedPageTitle } from "@/components/marketing/animated-page-title";
-import { MarketingFooter, MarketingHeroBanner } from "@/components/marketing/site-chrome";
+import {
+  MarketingFooter,
+  MarketingHeroBanner,
+} from "@/components/marketing/site-chrome";
 import { useLandingAuthState } from "@/components/marketing/use-landing-auth-state";
-import { useStripeCheckout, type CheckoutPlan } from "@/components/marketing/use-stripe-checkout";
+import {
+  useStripeCheckout,
+  type CheckoutPlan,
+} from "@/components/marketing/use-stripe-checkout";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { GITHUB_URL } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
 type Feature = { label: string; included: boolean; star?: boolean };
 
-type BillingCycle = "monthly" | "lifetime";
+type BillingCycle = "monthly" | "yearly" | "lifetime";
 
 const SHARED_FEATURES: Feature[] = [
   { label: "Full Creed editor with rich components", included: true },
@@ -44,9 +50,53 @@ const COMPANY_FEATURES: Feature[] = [
   { label: "Shared Company Creed", included: true, star: true },
   { label: "Per-employee Work Creeds", included: true, star: true },
   { label: "Admin controls for members", included: true, star: true },
-  { label: "Pooled company credits for AI features", included: true, star: true },
+  {
+    label: "Pooled company credits for AI features",
+    included: true,
+    star: true,
+  },
   { label: "Priority support and updates", included: true, star: true },
 ];
+
+// Per-cycle price + copy for the Personal and Company cards. Company is
+// display-only (Coming Soon); its prices are placeholders until the tier ships.
+type CardPricing = { price: string; cadence: string; tagline: string };
+
+const PERSONAL_PRICING: Record<BillingCycle, CardPricing> = {
+  monthly: {
+    price: "$12",
+    cadence: "/mo",
+    tagline: "Solo access, billed monthly.",
+  },
+  yearly: {
+    price: "$99",
+    cadence: "/yr",
+    tagline: "Solo access, billed yearly.",
+  },
+  lifetime: {
+    price: "$199",
+    cadence: "one-time",
+    tagline: "Solo access, hosted and yours forever.",
+  },
+};
+
+const COMPANY_PRICING: Record<BillingCycle, CardPricing> = {
+  monthly: {
+    price: "$199",
+    cadence: "/mo",
+    tagline: "Team access, billed monthly.",
+  },
+  yearly: {
+    price: "$1,999",
+    cadence: "/yr",
+    tagline: "Team access, billed yearly.",
+  },
+  lifetime: {
+    price: "$2,999",
+    cadence: "one-time",
+    tagline: "Team access, hosted and yours forever.",
+  },
+};
 
 export function PricingPageView() {
   const [scrolled, setScrolled] = useState(false);
@@ -65,24 +115,21 @@ export function PricingPageView() {
   }, []);
 
   const githubHref = GITHUB_URL ?? "https://github.com";
-  const monthly = cycle === "monthly";
+  const personal = PERSONAL_PRICING[cycle];
+  const company = COMPANY_PRICING[cycle];
 
   return (
     <div className="min-h-screen bg-[var(--creed-background)] text-[var(--creed-text-primary)]">
       <MarketingHeroBanner configured scrolled={scrolled} />
 
-      <main
-        className="mx-auto max-w-6xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10"
-      >
+      <main className="mx-auto max-w-6xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
         <div className="flex flex-col gap-6 border-b border-[var(--creed-border)] pb-8 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <AnimatedPageTitle
               text="Pricing"
               className="t-section text-[var(--creed-text-primary)]"
             />
-            <p
-              className="mt-5 max-w-2xl text-[18px] leading-8 text-[var(--creed-text-secondary)]"
-            >
+            <p className="mt-5 max-w-2xl text-[18px] leading-8 text-[var(--creed-text-secondary)]">
               Run Creed yourself for free, or skip the setup and let us host it.
             </p>
           </div>
@@ -113,26 +160,26 @@ export function PricingPageView() {
             <PricingCard
               name="Personal"
               nameClassName="text-[#2563EB]"
-              price={monthly ? "$7" : "$49"}
-              originalPrice={monthly ? undefined : "$79"}
-              cadence={monthly ? "/mo" : "one-time"}
-              tagline={monthly ? "Solo access build monthly." : "Solo access, hosted and yours forever."}
+              price={personal.price}
+              cadence={personal.cadence}
+              tagline={personal.tagline}
               features={[...SHARED_FEATURES, ...PRO_EXTRAS]}
               cta={{ kind: "plan", plan: "personal", cycle }}
             />
             <PricingCard
               name="Company"
               nameClassName="text-[#F59E0B] dark:text-[#F5A623]"
-              price={monthly ? "$179" : "$1,799"}
-              cadence={monthly ? "/mo" : "one-time"}
-              tagline={monthly ? "Team access build monthly." : "Team access, hosted and yours forever."}
+              price={company.price}
+              cadence={company.cadence}
+              tagline={company.tagline}
               features={COMPANY_FEATURES}
               cta={{ kind: "coming-soon", label: "Coming Soon" }}
             />
           </div>
 
           <p className="mt-7 text-center text-[13px] leading-6 text-[var(--creed-text-tertiary)]">
-            All plans let you use Creed credits or bring your own OpenRouter API key for model spend.
+            All plans let you use Creed credits or bring your own OpenRouter API
+            key for model spend.
           </p>
         </section>
       </main>
@@ -151,6 +198,7 @@ function BillingToggle({
 }) {
   const options: { value: BillingCycle; label: string }[] = [
     { value: "monthly", label: "Monthly" },
+    { value: "yearly", label: "Yearly" },
     { value: "lifetime", label: "Lifetime" },
   ];
 
@@ -175,7 +223,7 @@ function BillingToggle({
             ) : null}
             <span
               className={cn(
-                active ? "text-white" : "text-[var(--creed-text-secondary)]"
+                active ? "text-white" : "text-[var(--creed-text-secondary)]",
               )}
             >
               {option.label}
@@ -188,7 +236,12 @@ function BillingToggle({
 }
 
 type PricingCardCta =
-  | { kind: "external"; label: string; href: string; style: "solid" | "outline" }
+  | {
+      kind: "external";
+      label: string;
+      href: string;
+      style: "solid" | "outline";
+    }
   | { kind: "plan"; plan: CheckoutPlan; cycle: BillingCycle }
   | { kind: "coming-soon"; label: string };
 
@@ -196,7 +249,6 @@ function PricingCard({
   name,
   nameClassName,
   price,
-  originalPrice,
   cadence,
   tagline,
   features,
@@ -205,7 +257,6 @@ function PricingCard({
   name: string;
   nameClassName: string;
   price: string;
-  originalPrice?: string;
   cadence: string;
   tagline: string;
   features: Feature[];
@@ -217,13 +268,13 @@ function PricingCard({
         <div
           className={cn(
             "text-[40px] font-semibold leading-none tracking-[-0.02em]",
-            nameClassName
+            nameClassName,
           )}
         >
           {name}
         </div>
         <div className="mt-5">
-          <PriceRow price={price} originalPrice={originalPrice} cadence={cadence} />
+          <PriceRow price={price} cadence={cadence} />
         </div>
         <p className="mt-3 text-[14px] leading-6 text-[var(--creed-text-secondary)]">
           {tagline}
@@ -258,7 +309,7 @@ function PricingCard({
                 "text-[14px] leading-6",
                 feature.included
                   ? "text-[var(--creed-text-primary)]"
-                  : "text-[var(--creed-text-tertiary)]"
+                  : "text-[var(--creed-text-tertiary)]",
               )}
             >
               {feature.label}
@@ -284,7 +335,13 @@ function PricingCard({
 // blur when it changes. The invisible sizer reserves the box (width + baseline)
 // so the absolutely-positioned animated copies land in place and never shift
 // the surrounding layout off-baseline.
-function RollingValue({ value, className }: { value: string; className?: string }) {
+function RollingValue({
+  value,
+  className,
+}: {
+  value: string;
+  className?: string;
+}) {
   return (
     <span className={cn("relative inline-block align-baseline", className)}>
       <span aria-hidden className="invisible whitespace-nowrap">
@@ -309,57 +366,18 @@ function RollingValue({ value, className }: { value: string; className?: string 
   );
 }
 
-// Price cluster: optional struck original price, the price, and the cadence.
-// When the cycle flips, the price + cadence roll (slot-machine blur) while the
-// struck original blurs in and pushes the price to the right via layout.
-function PriceRow({
-  price,
-  originalPrice,
-  cadence,
-}: {
-  price: string;
-  originalPrice?: string;
-  cadence: string;
-}) {
-  const ease = [0.22, 1, 0.36, 1] as const;
+// Price cluster: the price and the cadence, each rolling with a slot-machine
+// blur (via RollingValue) when the billing cycle flips.
+function PriceRow({ price, cadence }: { price: string; cadence: string }) {
   return (
-    <LayoutGroup>
-      <div className="flex items-baseline gap-2">
-        {/* popLayout pops the struck price out of flow the instant it's
-            removed, so the price + cadence (layout="position", siblings outside
-            this AnimatePresence) slide back left symmetrically. No `layout` on
-            the struck itself - that's the layout-inside-popLayout combo the
-            design notes warn against. */}
-        <AnimatePresence initial={false} mode="popLayout">
-          {originalPrice ? (
-            <motion.span
-              key="original"
-              initial={{ opacity: 0, filter: "blur(7px)", y: 4 }}
-              animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
-              exit={{ opacity: 0, filter: "blur(7px)", y: 4 }}
-              transition={{ duration: 0.6, ease }}
-              className="text-[20px] font-medium leading-none text-[var(--creed-text-tertiary)] line-through"
-            >
-              {originalPrice}
-            </motion.span>
-          ) : null}
-        </AnimatePresence>
-        <motion.span
-          layout="position"
-          transition={{ duration: 0.6, ease }}
-          className="text-[36px] font-semibold leading-none tracking-[-0.02em] text-[var(--creed-text-primary)]"
-        >
-          <RollingValue value={price} />
-        </motion.span>
-        <motion.span
-          layout="position"
-          transition={{ duration: 0.6, ease }}
-          className="text-[13px] font-medium text-[var(--creed-text-tertiary)]"
-        >
-          <RollingValue value={cadence} />
-        </motion.span>
-      </div>
-    </LayoutGroup>
+    <div className="flex items-baseline gap-2">
+      <span className="text-[36px] font-semibold leading-none tracking-[-0.02em] text-[var(--creed-text-primary)]">
+        <RollingValue value={price} />
+      </span>
+      <span className="text-[13px] font-medium text-[var(--creed-text-tertiary)]">
+        <RollingValue value={cadence} />
+      </span>
+    </div>
   );
 }
 
@@ -412,7 +430,10 @@ function useBillingSummary(): {
   billingMode: string | null;
 } {
   const authState = useLandingAuthState();
-  const [summary, setSummary] = useState<{ access: boolean; billingMode: string | null }>({
+  const [summary, setSummary] = useState<{
+    access: boolean;
+    billingMode: string | null;
+  }>({
     access: false,
     billingMode: null,
   });
@@ -427,7 +448,10 @@ function useBillingSummary(): {
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { paid?: boolean; billingMode?: string | null } | null) => {
         if (active && data) {
-          setSummary({ access: Boolean(data.paid), billingMode: data.billingMode ?? null });
+          setSummary({
+            access: Boolean(data.paid),
+            billingMode: data.billingMode ?? null,
+          });
         }
       })
       .catch(() => {
@@ -444,16 +468,15 @@ function useBillingSummary(): {
 /**
  * CTA for a purchasable plan. Resolves to one of:
  *
- *   lifetime owner            → "Owned" → /file (both cards)
- *   subscriber, lifetime card → "Own it for $49" (upgrade-to-own)
- *   subscriber, monthly card  → "Current plan" → /file
- *   signed-in, unpaid         → "Get Started" → checkout(plan, mode)
- *   signed-out                → Google sign-in → /onboarding
+ *   lifetime owner             → "Owned" → /file (all cycles)
+ *   subscriber, lifetime tab   → "Own it for $199" (upgrade-to-own)
+ *   subscriber, monthly/yearly → "Current plan" → /file
+ *   signed-in, unpaid          → "Get Started" → checkout(plan, cadence)
+ *   signed-out                 → Google sign-in → /onboarding
  */
 function PlanCta({ plan, cycle }: { plan: CheckoutPlan; cycle: BillingCycle }) {
   const { authState, access, billingMode } = useBillingSummary();
   const { startCheckout, submitting } = useStripeCheckout();
-  const mode = cycle === "lifetime" ? "lifetime" : "subscription";
 
   // Owned outright - terminal state, no further purchase possible.
   if (access && billingMode === "lifetime") {
@@ -471,15 +494,15 @@ function PlanCta({ plan, cycle }: { plan: CheckoutPlan; cycle: BillingCycle }) {
   // Active subscriber. The lifetime card offers the upgrade; the monthly card
   // shows their current plan and routes into the app.
   if (access && billingMode === "subscription") {
-    if (mode === "lifetime") {
+    if (cycle === "lifetime") {
       return (
         <button
           type="button"
-          onClick={() => void startCheckout({ plan, mode: "lifetime" })}
+          onClick={() => void startCheckout({ plan, cadence: "lifetime" })}
           disabled={submitting}
           className={ctaClass("solid")}
         >
-          {submitting ? "Starting" : "Own it for $49"}
+          {submitting ? "Starting" : "Own it for $199"}
         </button>
       );
     }
@@ -494,8 +517,8 @@ function PlanCta({ plan, cycle }: { plan: CheckoutPlan; cycle: BillingCycle }) {
   }
 
   // Signed out: hand off to Google sign-in, then the onboarding funnel (which
-  // can't carry the chosen mode through OAuth, so it defaults to the monthly
-  // try-it path with its own "own it for $49" link).
+  // can't carry the chosen cycle through OAuth, so it always starts on the
+  // monthly try-it path; yearly and lifetime are picked later once signed in).
   if (authState === "signed-out") {
     return (
       <GoogleSignInButton
@@ -512,7 +535,7 @@ function PlanCta({ plan, cycle }: { plan: CheckoutPlan; cycle: BillingCycle }) {
   return (
     <button
       type="button"
-      onClick={() => void startCheckout({ plan, mode })}
+      onClick={() => void startCheckout({ plan, cadence: cycle })}
       disabled={submitting}
       className={ctaClass("solid")}
     >

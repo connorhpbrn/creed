@@ -1,26 +1,22 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { encryptSecret } from "@/lib/secret-crypto";
-import { CREDIT_MARKUP } from "@/lib/ai/credit-config";
-import {
-  AI_MODEL_CATALOG,
-  DEFAULT_AI_MODEL_ID,
-  getAiModel,
-  getOpenRouterModelCatalog,
-  type AiModelQuality,
-} from "@/lib/ai/model-catalog";
+import type { AiModelQuality } from "@/lib/ai/model-catalog";
+import { normalizeFeature } from "@/lib/ai/features";
 
 import type { SupabaseLikeClient } from "@/lib/supabase/types";
 
-// Which key pays for first-party AI. 'credits' runs on Creed's platform key
-// and bills the user's prepaid balance; 'byok' runs on the user's own key at
-// no markup. The toggle lives in Settings; default is 'credits'.
+const MICRO_PER_USD = 1_000_000;
+
+// Which key pays for first-party AI. 'credits' runs on Creed's platform key and
+// bills the user's prepaid balance; 'byok' runs on the user's own key at no
+// markup. The toggle lives in Settings; default is 'credits'. The model itself
+// is server-selected per feature and hidden from the user in both modes.
 export type AiMode = "credits" | "byok";
 
 type AiSettingsRow = {
   user_id: string;
   provider: "openrouter";
-  selected_model_id: string;
   encrypted_api_key: string | null;
   api_key_last_four: string | null;
   key_status: "missing" | "valid" | "invalid";
@@ -32,7 +28,6 @@ type AiSettingsRow = {
 
 export type PublicAiSettings = {
   provider: "openrouter";
-  selectedModelId: string;
   keyStatus: "missing" | "valid" | "invalid";
   aiMode: AiMode;
   keyLastFour?: string;
@@ -41,30 +36,26 @@ export type PublicAiSettings = {
 
 export type AiUsageRange = "7d" | "30d" | "90d";
 
+// The spend chart is tagged by feature (Analysis today; Tab/CMD-K later), not by
+// model, since the model is hidden. Costs are the amounts actually charged
+// (marked-up in credits mode, at-cost in BYOK), summed from creed_ai_usage.
 export type AiUsageSummary = {
   range: AiUsageRange;
   totalCostUsd: number;
   totalInputTokens: number;
   totalOutputTokens: number;
-  byQuality: Array<{
-    quality: AiModelQuality;
-    costUsd: number;
-  }>;
-  byModel: Array<{
-    modelId: string;
-    modelName: string;
-    quality: AiModelQuality;
-    costUsd: number;
-  }>;
+  byFeature: Array<{ feature: string; costUsd: number }>;
   days: Array<{
     date: string;
-    segments: Array<{
-      modelId: string;
-      modelName: string;
-      quality: AiModelQuality;
-      costUsd: number;
-    }>;
+    segments: Array<{ feature: string; costUsd: number }>;
   }>;
+};
+
+export type OpenRouterBalance = {
+  usageUsd: number;
+  // null limit means an unlimited key (OpenRouter returns limit: null).
+  limitUsd: number | null;
+  remainingUsd: number | null;
 };
 
 function assertNoError(error: { message: string } | null, fallback: string) {
@@ -76,7 +67,6 @@ function assertNoError(error: { message: string } | null, fallback: string) {
 export function buildPublicAiSettings(row?: AiSettingsRow | null): PublicAiSettings {
   return {
     provider: "openrouter",
-    selectedModelId: row?.selected_model_id ?? DEFAULT_AI_MODEL_ID,
     keyStatus: row?.key_status ?? "missing",
     aiMode: row?.ai_mode ?? "credits",
     keyLastFour: row?.api_key_last_four ?? undefined,
@@ -103,29 +93,26 @@ export async function readPublicAiSettings(client: unknown, userId: string) {
 export async function upsertAiSettings({
   client,
   userId,
-  modelId,
   apiKey,
   clearApiKey,
   aiMode,
 }: {
   client: unknown;
   userId: string;
-  modelId: string;
   apiKey?: string;
   clearApiKey?: boolean;
   aiMode?: AiMode;
 }) {
   const db = client as SupabaseLikeClient;
   const existing = await readAiSettings(db, userId);
-  const model = await getAiModel(modelId);
   const now = new Date().toISOString();
   const trimmedKey = apiKey?.trim();
   const nextMode: AiMode = aiMode ?? existing?.ai_mode ?? "credits";
 
-  // No key-required guard here. This endpoint also handles credits-mode model
-  // changes and the credits/byok toggle, none of which involve a key. The
-  // "you need a key" check happens at AI-call time (resolveAiCredential), and
-  // the Save button is disabled client-side when the field is empty.
+  // No key-required guard here. This endpoint also handles the credits/byok
+  // toggle, which involves no key. The "you need a key" check happens at
+  // AI-call time (resolveAiCredential), and Save is disabled client-side when
+  // the field is empty.
   if (trimmedKey) {
     await validateOpenRouterKey(trimmedKey);
   }
@@ -133,7 +120,6 @@ export async function upsertAiSettings({
   const row = {
     user_id: userId,
     provider: "openrouter" as const,
-    selected_model_id: model.id,
     encrypted_api_key: clearApiKey
       ? null
       : trimmedKey
@@ -144,8 +130,8 @@ export async function upsertAiSettings({
       : trimmedKey
         ? trimmedKey.slice(-4)
         : existing?.api_key_last_four ?? null,
-    // Preserve key_status on a model/mode-only save; only a new key flips it
-    // to valid and a clear flips it to missing.
+    // Preserve key_status on a mode-only save; only a new key flips it to valid
+    // and a clear flips it to missing.
     key_status: clearApiKey
       ? ("missing" as const)
       : trimmedKey
@@ -165,18 +151,33 @@ export async function upsertAiSettings({
   return buildPublicAiSettings(row);
 }
 
-async function validateOpenRouterKey(apiKey: string) {
+// Read a BYOK user's live OpenRouter balance for the settings card. Throws on a
+// bad/expired key so the caller can surface a clean error.
+export async function fetchOpenRouterBalance(apiKey: string): Promise<OpenRouterBalance> {
   const response = await fetch("https://openrouter.ai/api/v1/key", {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { Authorization: `Bearer ${apiKey}` },
     cache: "no-store",
   });
 
   if (!response.ok) {
-    throw new Error("OpenRouter could not validate that API key");
+    throw new Error("OpenRouter could not read that key");
   }
+
+  const payload = (await response.json().catch(() => null)) as {
+    data?: { usage?: number; limit?: number | null };
+  } | null;
+
+  const usageUsd = Number(payload?.data?.usage) || 0;
+  const rawLimit = payload?.data?.limit;
+  const limitUsd = typeof rawLimit === "number" ? rawLimit : null;
+  const remainingUsd = limitUsd != null ? Math.max(0, limitUsd - usageUsd) : null;
+  return { usageUsd, limitUsd, remainingUsd };
+}
+
+async function validateOpenRouterKey(apiKey: string) {
+  // Reuse the balance fetch; it hits GET /api/v1/key and throws on a bad key.
+  await fetchOpenRouterBalance(apiKey);
 }
 
 export async function recordAiUsage({
@@ -187,7 +188,8 @@ export async function recordAiUsage({
   modelQuality,
   inputTokens,
   outputTokens,
-  estimatedCostUsd,
+  costUsd,
+  chargedMicroUsd,
   aiMode,
 }: {
   client: unknown;
@@ -197,7 +199,12 @@ export async function recordAiUsage({
   modelQuality: AiModelQuality;
   inputTokens: number;
   outputTokens: number;
-  estimatedCostUsd: number;
+  // The real (at-cost) OpenRouter cost of the call.
+  costUsd: number;
+  // The amount actually charged, in micro-USD: marked-up in credits mode,
+  // at-cost in BYOK. The spend chart sums this so it never re-prices on a
+  // markup change.
+  chargedMicroUsd: number;
   aiMode: AiMode;
 }) {
   const db = client as SupabaseLikeClient;
@@ -211,7 +218,8 @@ export async function recordAiUsage({
     ai_mode: aiMode,
     input_tokens: Math.max(0, Math.round(inputTokens)),
     output_tokens: Math.max(0, Math.round(outputTokens)),
-    estimated_cost_usd: Number(estimatedCostUsd.toFixed(6)),
+    estimated_cost_usd: Number(costUsd.toFixed(6)),
+    charged_micro_usd: Math.max(0, Math.round(chargedMicroUsd)),
     created_at: new Date().toISOString(),
   });
 
@@ -231,12 +239,9 @@ export async function readAiUsageSummary(
   mode: AiMode
 ) {
   const db = client as SupabaseLikeClient;
-  // Credits are billed at the markup, so the credits view shows what actually
-  // left the balance; BYOK is at-cost.
-  const markup = mode === "credits" ? CREDIT_MARKUP : 1;
   const { data, error } = await db
     .from("creed_ai_usage")
-    .select("*")
+    .select("feature, charged_micro_usd, estimated_cost_usd, input_tokens, output_tokens, created_at")
     .eq("user_id", userId)
     .eq("ai_mode", mode)
     .gte("created_at", getRangeStart(range))
@@ -246,11 +251,11 @@ export async function readAiUsageSummary(
 
   const rows =
     (data as Array<{
-      model_id: string;
-      model_quality: AiModelQuality;
+      feature: string;
+      charged_micro_usd: number | string | null;
+      estimated_cost_usd: number | string;
       input_tokens: number;
       output_tokens: number;
-      estimated_cost_usd: number | string;
       created_at: string;
     }> | null) ?? [];
 
@@ -259,62 +264,46 @@ export async function readAiUsageSummary(
     totalCostUsd: 0,
     totalInputTokens: 0,
     totalOutputTokens: 0,
-    byQuality: [],
-    byModel: [],
+    byFeature: [],
     days: [],
   };
-  const qualityTotals = new Map<AiModelQuality, number>();
-  const modelTotals = new Map<string, { modelId: string; quality: AiModelQuality; costUsd: number }>();
-  // (date, modelId) → cost, so the per-day tooltip can break down by model.
-  const dayTotals = new Map<string, Map<string, { quality: AiModelQuality; costUsd: number }>>();
-  const models = await getOpenRouterModelCatalog();
+  const featureTotals = new Map<string, number>();
+  // (date, feature) → cost, so the per-day tooltip can break down by feature.
+  const dayTotals = new Map<string, Map<string, number>>();
 
   for (const row of rows) {
-    const cost = (Number(row.estimated_cost_usd) || 0) * markup;
-    const quality = row.model_quality;
+    // Prefer the charged amount (already marked-up in credits mode); fall back
+    // to the at-cost value for any legacy row missing the column.
+    const cost =
+      row.charged_micro_usd != null
+        ? (Number(row.charged_micro_usd) || 0) / MICRO_PER_USD
+        : Number(row.estimated_cost_usd) || 0;
+    // Fold legacy keys (e.g. "quality_analysis") onto the canonical feature so
+    // the chart shows one series, not two.
+    const feature = normalizeFeature(row.feature || "analysis");
     const date = row.created_at.slice(0, 10);
-    const model = models.find((item) => item.id === row.model_id);
-    const effectiveQuality = model?.quality ?? quality;
 
     summary.totalCostUsd += cost;
     summary.totalInputTokens += row.input_tokens ?? 0;
     summary.totalOutputTokens += row.output_tokens ?? 0;
-    qualityTotals.set(quality, (qualityTotals.get(quality) ?? 0) + cost);
-    modelTotals.set(row.model_id, {
-      modelId: row.model_id,
-      quality: effectiveQuality,
-      costUsd: (modelTotals.get(row.model_id)?.costUsd ?? 0) + cost,
-    });
+    featureTotals.set(feature, (featureTotals.get(feature) ?? 0) + cost);
 
     if (!dayTotals.has(date)) {
       dayTotals.set(date, new Map());
     }
-    const day = dayTotals.get(date) as Map<string, { quality: AiModelQuality; costUsd: number }>;
-    const existing = day.get(row.model_id);
-    day.set(row.model_id, {
-      quality: effectiveQuality,
-      costUsd: (existing?.costUsd ?? 0) + cost,
-    });
+    const day = dayTotals.get(date) as Map<string, number>;
+    day.set(feature, (day.get(feature) ?? 0) + cost);
   }
 
-  summary.byQuality = Array.from(qualityTotals.entries()).map(([quality, costUsd]) => ({
-    quality,
+  summary.byFeature = Array.from(featureTotals.entries()).map(([feature, costUsd]) => ({
+    feature,
     costUsd,
-  }));
-  summary.byModel = Array.from(modelTotals.values()).map((entry) => ({
-    ...entry,
-    modelName: models.find((model) => model.id === entry.modelId)?.name ?? AI_MODEL_CATALOG.find((model) => model.id === entry.modelId)?.name ?? entry.modelId,
   }));
   summary.days = Array.from(dayTotals.entries()).map(([date, segments]) => ({
     date,
-    segments: Array.from(segments.entries()).map(([modelId, entry]) => ({
-      modelId,
-      modelName:
-        models.find((model) => model.id === modelId)?.name ??
-        AI_MODEL_CATALOG.find((model) => model.id === modelId)?.name ??
-        modelId,
-      quality: entry.quality,
-      costUsd: entry.costUsd,
+    segments: Array.from(segments.entries()).map(([feature, costUsd]) => ({
+      feature,
+      costUsd,
     })),
   }));
 

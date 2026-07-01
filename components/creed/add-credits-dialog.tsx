@@ -20,10 +20,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MAX_TOPUP_USD, MIN_TOPUP_USD } from "@/lib/ai/credit-config";
+import { MAX_TOPUP_USD, MIN_TOPUP_USD, PRESET_TOPUPS_USD } from "@/lib/ai/credit-config";
 import { cn } from "@/lib/utils";
 
-const PRESETS = [5, 10, 25, 50];
+const PRESETS = PRESET_TOPUPS_USD;
 
 function formatUsd(value: number) {
   return `$${value.toFixed(2)}`;
@@ -108,7 +108,7 @@ export function AddCreditsDialog({
         <DialogHeader>
           <DialogTitle>Add credits</DialogTitle>
           <DialogDescription>
-            {`${formatUsd(currentBalanceUsd)} available. Credits pay for Creed's AI features.`}
+            {`${formatUsd(currentBalanceUsd)} available. Top-ups roll over and never expire.`}
           </DialogDescription>
         </DialogHeader>
 

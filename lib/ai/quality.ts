@@ -650,7 +650,7 @@ export async function analyzeCreedQuality({
     return { report: reportWithHashes, contentHash, sectionHashes, cached: false, creditBalanceUsd: null };
   }
 
-  const credential = await resolveAiCredential(client, userId);
+  const credential = await resolveAiCredential(client, userId, "analysis");
   const result = await callOpenRouter({
     apiKey: credential.apiKey,
     modelId: credential.modelId,
@@ -714,13 +714,18 @@ export async function analyzeCreedQuality({
   // Now that we have a valid report, bill prepaid credits - before the report /
   // usage writes so a later DB hiccup can't skip the charge. No-op for BYOK.
   let creditBalanceUsd: number | null = null;
+  let chargedMicroUsd: number | null = null;
   if (credential.mode === "credits") {
-    creditBalanceUsd = await deductCredits({
+    const debit = await deductCredits({
       userId,
-      costUsd: result.estimatedCostUsd,
-      feature: "quality_analysis",
+      costUsd: result.costUsd,
+      feature: "analysis",
       modelId: credential.modelId,
     });
+    if (debit) {
+      creditBalanceUsd = debit.balanceUsd;
+      chargedMicroUsd = debit.chargedMicroUsd;
+    }
   }
 
   await persistQualityReport({
@@ -740,12 +745,15 @@ export async function analyzeCreedQuality({
       await recordAiUsage({
         client,
         userId,
-        feature: "quality_analysis",
+        feature: "analysis",
         modelId: credential.modelId,
         modelQuality: result.modelQuality,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
-        estimatedCostUsd: result.estimatedCostUsd,
+        costUsd: result.costUsd,
+        // Credits mode charges the marked-up amount the debit returned; BYOK is
+        // at-cost (the user paid their own key).
+        chargedMicroUsd: chargedMicroUsd ?? Math.round(result.costUsd * 1_000_000),
         aiMode: credential.mode,
       });
     } catch {

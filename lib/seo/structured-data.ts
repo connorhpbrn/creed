@@ -60,8 +60,9 @@ export function websiteSchema() {
   };
 }
 
-// The product itself. Offers mirror the live pricing (free self-host, $7/mo
-// Personal) so a price quoted in an AI answer matches the pricing page.
+// The product itself. Offers mirror the live pricing (free self-host, $12/mo
+// Personal, $99/yr, $199 lifetime) so a price quoted in an AI answer matches
+// the pricing page.
 export function softwareApplicationSchema() {
   const url = base();
 
@@ -83,8 +84,22 @@ export function softwareApplicationSchema() {
       },
       {
         "@type": "Offer",
-        name: "Personal",
-        price: "7",
+        name: "Personal (monthly)",
+        price: "12",
+        priceCurrency: "USD",
+        url: `${url}/pricing`,
+      },
+      {
+        "@type": "Offer",
+        name: "Personal (yearly)",
+        price: "99",
+        priceCurrency: "USD",
+        url: `${url}/pricing`,
+      },
+      {
+        "@type": "Offer",
+        name: "Personal (lifetime)",
+        price: "199",
         priceCurrency: "USD",
         url: `${url}/pricing`,
       },

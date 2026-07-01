@@ -52,7 +52,15 @@ export function getStripeClient(): Stripe {
 // but the pricing UI keeps Company "Coming Soon" and the checkout route
 // refuses Company sessions until the Company price ids are set.
 export type CreedPlan = "personal" | "company";
+// The persisted billing shape (creed_entitlements.billing_mode): a recurring
+// subscription, or a one-time lifetime purchase. A yearly plan is still a
+// "subscription" here; monthly-vs-yearly is a separate axis (PurchaseCadence)
+// that only decides which price is charged.
 export type BillingMode = "subscription" | "lifetime";
+// What the buyer picks at checkout. Monthly and yearly are both subscriptions
+// (Stripe mode "subscription") on different recurring prices; lifetime is a
+// one-time payment. This axis selects the Stripe price.
+export type PurchaseCadence = "monthly" | "yearly" | "lifetime";
 
 // Prices are referenced by Stripe lookup key, not a pinned `price_...` id.
 // A lookup key is a stable, non-secret label attached to a price in the Stripe
@@ -61,19 +69,21 @@ export type BillingMode = "subscription" | "lifetime";
 // same keys resolve to the right price in test vs live, since each mode has its
 // own prices carrying the same lookup keys. Company keys aren't assigned yet,
 // so Company stays "Coming Soon".
-const PRICE_LOOKUP_KEYS: Record<CreedPlan, Record<BillingMode, string | null>> = {
+const PRICE_LOOKUP_KEYS: Record<CreedPlan, Record<PurchaseCadence, string | null>> = {
   personal: {
-    subscription: "creed_personal_monthly",
-    lifetime: "creed_personal_lifetime_early",
+    monthly: "creed_personal_monthly",
+    yearly: "creed_personal_yearly",
+    lifetime: "creed_personal_lifetime",
   },
   company: {
-    subscription: null,
+    monthly: null,
+    yearly: null,
     lifetime: null,
   },
 };
 
-function lookupKeyFor(plan: CreedPlan, mode: BillingMode): string | null {
-  return PRICE_LOOKUP_KEYS[plan][mode];
+function lookupKeyFor(plan: CreedPlan, cadence: PurchaseCadence): string | null {
+  return PRICE_LOOKUP_KEYS[plan][cadence];
 }
 
 // Resolved lookup_key → price_id, cached for the process lifetime. Prices are
@@ -81,15 +91,15 @@ function lookupKeyFor(plan: CreedPlan, mode: BillingMode): string | null {
 const priceIdCache = new Map<string, string>();
 
 /**
- * Resolve the live Stripe price id for a (plan, mode) pair via its lookup key.
+ * Resolve the live Stripe price id for a (plan, cadence) pair via its lookup key.
  * Throws if the tier has no key configured or no active price carries it, so a
  * misconfigured tier fails loudly at checkout rather than charging the wrong
  * price. The lookup is cached, so steady state is one Stripe call per key.
  */
-export async function resolvePriceId(plan: CreedPlan, mode: BillingMode): Promise<string> {
-  const key = lookupKeyFor(plan, mode);
+export async function resolvePriceId(plan: CreedPlan, cadence: PurchaseCadence): Promise<string> {
+  const key = lookupKeyFor(plan, cadence);
   if (!key) {
-    throw new Error(`No Stripe price configured for ${plan}/${mode}.`);
+    throw new Error(`No Stripe price configured for ${plan}/${cadence}.`);
   }
 
   const cached = priceIdCache.get(key);
@@ -109,9 +119,9 @@ export async function resolvePriceId(plan: CreedPlan, mode: BillingMode): Promis
   return price.id;
 }
 
-/** True when both lookup keys for a plan are configured (used to gate Company). */
+/** True when a plan's core lookup keys are configured (used to gate Company). */
 export function isPlanPurchasable(plan: CreedPlan): boolean {
-  return Boolean(lookupKeyFor(plan, "subscription") && lookupKeyFor(plan, "lifetime"));
+  return Boolean(lookupKeyFor(plan, "monthly") && lookupKeyFor(plan, "lifetime"));
 }
 
 export function getStripePublishableKey(): string {
@@ -182,6 +192,7 @@ export type CreedEntitlement = {
   status: EntitlementStatus;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
+  billingInterval: string | null;
   paidAt: string;
   updatedAt: string;
 };
@@ -201,6 +212,7 @@ type EntitlementRow = {
   status: EntitlementStatus;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
+  billing_interval: string | null;
   paid_at: string;
   updated_at: string;
 };
@@ -221,6 +233,7 @@ function rowToEntitlement(row: EntitlementRow): CreedEntitlement {
     status: row.status,
     currentPeriodEnd: row.current_period_end,
     cancelAtPeriodEnd: row.cancel_at_period_end,
+    billingInterval: row.billing_interval,
     paidAt: row.paid_at,
     updatedAt: row.updated_at,
   };
@@ -341,13 +354,25 @@ function readPeriodEnd(subscription: Stripe.Subscription): string | null {
   return unixToIso(sub.items?.data?.[0]?.current_period_end);
 }
 
+// The recurring interval of a subscription's price ("month" | "year"). This is
+// the only thing that distinguishes a monthly plan from a yearly one, since
+// both persist as billing_mode "subscription". Returns null when there is no
+// recurring price (a lifetime purchase) or the shape is unexpected.
+function readInterval(subscription: Stripe.Subscription): string | null {
+  const sub = subscription as unknown as {
+    items?: { data?: Array<{ price?: { recurring?: { interval?: string } } }> };
+  };
+  const interval = sub.items?.data?.[0]?.price?.recurring?.interval;
+  return interval === "month" || interval === "year" ? interval : null;
+}
+
 /**
  * Idempotent upsert from a completed Checkout Session. Handles BOTH billing
  * modes:
  *
  *   payment (lifetime)   → status 'paid', billing_mode 'lifetime'. If the
  *                          user had an active subscription, it's canceled
- *                          (you can't own it and keep paying monthly).
+ *                          (you can't own it and keep paying a subscription).
  *   subscription         → status mirrors the live Stripe subscription,
  *                          billing_mode 'subscription'.
  *
@@ -371,7 +396,6 @@ export async function upsertEntitlementFromSession(
   }
 
   const plan: CreedPlan = session.metadata?.plan === "company" ? "company" : "personal";
-  const priceId = await resolvePriceId(plan, mode);
   const customerId =
     typeof session.customer === "string" ? session.customer : session.customer?.id ?? null;
   const paymentIntentId =
@@ -394,6 +418,11 @@ export async function upsertEntitlementFromSession(
   let status: EntitlementStatus = "paid";
   let currentPeriodEnd: string | null = null;
   let cancelAtPeriodEnd = false;
+  let billingInterval: string | null = null;
+  // A subscription is monthly or yearly; both persist as billing_mode
+  // "subscription", so the cadence (and thus the price to store) is derived
+  // from the live subscription's recurring interval. Lifetime stays "lifetime".
+  let cadence: PurchaseCadence = "lifetime";
 
   if (mode === "subscription" && subscriptionId) {
     // Pull the live subscription so the row reflects real status + renewal,
@@ -402,7 +431,13 @@ export async function upsertEntitlementFromSession(
     status = mapStripeSubStatus(subscription.status);
     currentPeriodEnd = readPeriodEnd(subscription);
     cancelAtPeriodEnd = Boolean(subscription.cancel_at_period_end);
+    billingInterval = readInterval(subscription);
+    cadence = billingInterval === "year" ? "yearly" : "monthly";
   }
+
+  // Resolve the price id for the row from the cadence, so a yearly purchase
+  // stores the yearly price id rather than the monthly one.
+  const priceId = await resolvePriceId(plan, cadence);
 
   const admin = getSupabaseAdminClient() as unknown as SupabaseLikeClient;
   const { data, error } = (await admin
@@ -423,6 +458,7 @@ export async function upsertEntitlementFromSession(
         status,
         current_period_end: currentPeriodEnd,
         cancel_at_period_end: cancelAtPeriodEnd,
+        billing_interval: billingInterval,
         updated_at: now,
       },
       { onConflict: "user_id" }
@@ -639,6 +675,7 @@ export async function syncSubscriptionFromStripe(
       status,
       current_period_end: readPeriodEnd(subscription),
       cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+      billing_interval: readInterval(subscription),
       updated_at: new Date().toISOString(),
     })
     .eq("user_id", row.user_id);
@@ -655,8 +692,9 @@ export async function syncSubscriptionFromStripe(
  * service-role RPC (idempotent on the PaymentIntent id).
  *
  * Returns false (no-op) when the PI is not a credits top-up or is missing the
- * fields we need. The $49 Checkout emits its own `payment_intent.succeeded`,
- * which lands here too and must be skipped - the `type === 'credits'` guard
+ * fields we need. The one-time lifetime Checkout emits its own
+ * `payment_intent.succeeded`, which lands here too and must be skipped - the
+ * `type === 'credits'` guard
  * does that (the Checkout PI carries no such metadata).
  */
 export async function creditBalanceFromPaymentIntent(

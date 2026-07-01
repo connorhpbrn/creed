@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const range = url.searchParams.get("range") as AiUsageRange | null;
-  const resolvedRange = range && ranges.has(range) ? range : "7d";
+  const resolvedRange = range && ranges.has(range) ? range : "90d";
   const modeParam = url.searchParams.get("mode");
   const mode: AiMode = modeParam === "byok" ? "byok" : "credits";
 

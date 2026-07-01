@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { requireApiAuth } from "@/lib/api-auth";
 import {
-  type BillingMode,
   type CreedPlan,
+  type PurchaseCadence,
   getEntitlement,
   getStripeClient,
   isPlanPurchasable,
@@ -31,8 +31,10 @@ function parsePlan(value: unknown): CreedPlan {
   return value === "company" ? "company" : "personal";
 }
 
-function parseMode(value: unknown): BillingMode {
-  return value === "lifetime" ? "lifetime" : "subscription";
+function parseCadence(value: unknown): PurchaseCadence {
+  if (value === "yearly") return "yearly";
+  if (value === "lifetime") return "lifetime";
+  return "monthly";
 }
 
 export async function POST(request: Request) {
@@ -47,9 +49,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json().catch(() => ({}))) as { plan?: unknown; mode?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { plan?: unknown; cadence?: unknown };
   const plan = parsePlan(body.plan);
-  const mode = parseMode(body.mode);
+  const cadence = parseCadence(body.cadence);
+  // Monthly and yearly are both Stripe subscriptions; only lifetime is a
+  // one-time payment. This boolean drives the mode + guard branches below.
+  const isSubscription = cadence !== "lifetime";
 
   // Company stays "Coming Soon" until its price ids are configured. Refuse the
   // session rather than charging the wrong price.
@@ -69,11 +74,13 @@ export async function POST(request: Request) {
       );
     }
     if (
-      mode === "subscription" &&
+      isSubscription &&
       existing &&
       existing.billingMode === "subscription" &&
       ["active", "trialing", "past_due"].includes(existing.status)
     ) {
+      // Already subscribed (monthly or yearly). Switching cadence goes through
+      // the Stripe billing portal, not a second checkout.
       return NextResponse.json(
         { error: "You already have an active subscription.", alreadySubscribed: true },
         { status: 409 }
@@ -81,13 +88,13 @@ export async function POST(request: Request) {
     }
 
     const stripe = getStripeClient();
-    const priceId = await resolvePriceId(plan, mode);
+    const priceId = await resolvePriceId(plan, cadence);
     const baseUrl = getSiteUrl();
     const email = user.email.trim().toLowerCase();
     const reuseCustomerId = existing?.stripeCustomerId ?? null;
 
     const params: Stripe.Checkout.SessionCreateParams = {
-      mode: mode === "subscription" ? "subscription" : "payment",
+      mode: isSubscription ? "subscription" : "payment",
       line_items: [{ price: priceId, quantity: 1 }],
       client_reference_id: user.id,
       metadata: {
@@ -95,7 +102,8 @@ export async function POST(request: Request) {
         email,
         product: "creed_hosted",
         plan,
-        billingMode: mode,
+        billingMode: isSubscription ? "subscription" : "lifetime",
+        cadence,
       },
       success_url: `${baseUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
       // Cancelling returns to onboarding, which resumes a composed-but-unpaid
@@ -112,14 +120,14 @@ export async function POST(request: Request) {
       params.customer = reuseCustomerId;
     } else {
       params.customer_email = email;
-      if (mode === "lifetime") {
+      if (!isSubscription) {
         params.customer_creation = "always";
       }
     }
 
-    if (mode === "subscription") {
+    if (isSubscription) {
       params.subscription_data = {
-        metadata: { supabaseUserId: user.id, plan },
+        metadata: { supabaseUserId: user.id, plan, cadence },
       };
     }
 
@@ -141,7 +149,7 @@ export async function POST(request: Request) {
   } catch (error) {
     log.error(
       "stripe_checkout_failed",
-      { userId: user.id, plan, mode },
+      { userId: user.id, plan, cadence },
       error instanceof Error ? error : new Error(String(error))
     );
     return NextResponse.json(

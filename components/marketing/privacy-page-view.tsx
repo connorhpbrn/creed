@@ -65,14 +65,14 @@ const sections: PrivacySection[] = [
       "from Stripe when payment-related events need to be confirmed for billing or account administration",
     ],
     paragraphs: [
-      "During onboarding synthesis, your onboarding answers are sent to OpenRouter so Creed can generate a refined onboarding draft.",
+      "When you run an AI feature such as quality analysis, the relevant parts of your Creed are sent to OpenRouter to generate the result. On credits this runs on Creed's platform key; with your own key (BYOK) it runs on your key.",
     ],
   },
   {
     id: "use",
     title: "Why Creed uses information",
     paragraphs: [
-      "Creed uses personal information to provide and run the service, including to create and manage accounts, authenticate users, generate and maintain Creed files, process onboarding synthesis, support connected agent reads and proposals, store proposal and activity history, manage tokens and connections, process payments, respond to support requests, and comply with legal obligations.",
+      "Creed uses personal information to provide and run the service, including to create and manage accounts, authenticate users, generate and maintain Creed files, run AI features such as quality analysis, support connected agent reads and proposals, store proposal and activity history, manage tokens and connections, process payments, respond to support requests, and comply with legal obligations.",
       "Under UK GDPR, the main lawful bases Creed is likely to rely on are performance of a contract where processing is needed to provide the service you asked for, legitimate interests where processing is needed to run and secure the service in a proportionate way, and legal obligation where processing is needed to comply with applicable law.",
       "Where a specific activity depends on consent, Creed will rely on consent for that activity.",
     ],
@@ -95,7 +95,7 @@ const sections: PrivacySection[] = [
     id: "sharing",
     title: "Sharing with service providers",
     paragraphs: [
-      "Creed uses third-party service providers to operate the service. At the time of writing, these include Supabase for database and auth-related backend services, Vercel for hosting, Google Auth for sign-in, OpenRouter for onboarding synthesis, and Stripe for payments.",
+      "Creed uses third-party service providers to operate the service. At the time of writing, these include Supabase for database and auth-related backend services, Vercel for hosting, Google Auth for sign-in, OpenRouter for AI features such as quality analysis, and Stripe for payments.",
       "Creed shares information with these providers only as needed to operate the service.",
       "Creed does not sell your personal information. Creed does not use your content to train models.",
     ],

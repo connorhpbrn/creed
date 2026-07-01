@@ -17,8 +17,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowUp, Check, ChevronDown, X } from "lucide-react";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
-import { DiffBadge, computeDiffParts, summarizeDiff } from "@/components/creed/inline-proposal-diff";
-import { QualityRing, qualityScoreColor } from "@/components/creed/file-quality-ui";
+import {
+  DiffBadge,
+  computeDiffParts,
+  summarizeDiff,
+} from "@/components/creed/inline-proposal-diff";
+import {
+  QualityRing,
+  qualityScoreColor,
+} from "@/components/creed/file-quality-ui";
 import { accentColorMap, accentTintMap } from "@/lib/creed-data";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +49,7 @@ function useInViewLoose(ref: React.RefObject<HTMLElement | null>) {
     if (!el || typeof IntersectionObserver === "undefined") return;
     const io = new IntersectionObserver(
       (entries) => setInView(entries[0]?.isIntersecting ?? true),
-      { threshold: 0.3 }
+      { threshold: 0.3 },
     );
     io.observe(el);
     return () => io.disconnect();
@@ -68,7 +75,7 @@ function useLoopSequence(durations: readonly number[], restStep: number) {
     }
     const timer = window.setTimeout(
       () => setStep((s) => (s + 1) % durations.length),
-      durations[step]
+      durations[step],
     );
     return () => window.clearTimeout(timer);
   }, [playing, step, reduce, restStep, durations]);
@@ -99,12 +106,18 @@ function CreedGlyph({ className }: { className?: string }) {
 
 // Shared demo card shell - the white surface card the UI floats on, matching
 // the proposal / quality cards used across the app.
-function DemoCard({ children, className }: { children: React.ReactNode; className?: string }) {
+function DemoCard({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
     <div
       className={cn(
         "flex w-full flex-col rounded-[14px] border border-[var(--creed-border)] bg-[var(--creed-surface)] p-4 shadow-[0_8px_24px_rgba(28,28,26,0.06)]",
-        className
+        className,
       )}
     >
       {children}
@@ -117,8 +130,18 @@ function DiffParts({ parts }: { parts: ReturnType<typeof computeDiffParts> }) {
   return (
     <>
       {parts.map((part, i) => {
-        if (part.added) return <span key={i} className="creed-diff-add">{part.value}</span>;
-        if (part.removed) return <span key={i} className="creed-diff-remove">{part.value}</span>;
+        if (part.added)
+          return (
+            <span key={i} className="creed-diff-add">
+              {part.value}
+            </span>
+          );
+        if (part.removed)
+          return (
+            <span key={i} className="creed-diff-remove">
+              {part.value}
+            </span>
+          );
         return <span key={i}>{part.value}</span>;
       })}
     </>
@@ -142,7 +165,11 @@ function WaterfallText({ text, play }: { text: string; play: boolean }) {
               ? { opacity: 1, y: 0, filter: "blur(0px)" }
               : { opacity: 0, y: 4, filter: "blur(3px)" }
           }
-          transition={{ duration: 0.32, delay: play ? i * 0.045 : 0, ease: EASE }}
+          transition={{
+            duration: 0.32,
+            delay: play ? i * 0.045 : 0,
+            ease: EASE,
+          }}
         >
           {word}
         </motion.span>
@@ -158,7 +185,10 @@ const READ_PROMPT = "Plan my week so I actually ship Helm v2.";
 const READ_STEPS = [2000, 600, 1100, 900, 3000] as const;
 
 export function ReadDemo() {
-  const { ref, step, playing } = useLoopSequence(READ_STEPS, READ_STEPS.length - 1);
+  const { ref, step, playing } = useLoopSequence(
+    READ_STEPS,
+    READ_STEPS.length - 1,
+  );
   const [typed, setTyped] = useState("");
 
   // Typewriter while on the first step; cleared otherwise (the bar shows its
@@ -178,7 +208,10 @@ export function ReadDemo() {
     return () => window.clearInterval(id);
   }, [playing, step]);
 
-  const reveal = (from: number) => ({ opacity: step >= from ? 1 : 0, y: step >= from ? 0 : 6 });
+  const reveal = (from: number) => ({
+    opacity: step >= from ? 1 : 0,
+    y: step >= from ? 0 : 6,
+  });
 
   return (
     <div ref={ref} className="w-full">
@@ -194,10 +227,14 @@ export function ReadDemo() {
             </div>
           </motion.div>
 
-          <motion.div animate={reveal(2)} transition={{ duration: 0.3, ease: EASE }} className="flex">
+          <motion.div
+            animate={reveal(2)}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="flex"
+          >
             <div className="inline-flex items-center gap-2 rounded-[14px] bg-[var(--creed-surface-raised)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--creed-text-secondary)]">
               <CreedGlyph className="h-3 w-3" />
-              <span>Read creed</span>
+              <span>Read creed.md</span>
               {step >= 3 ? (
                 <Check className="h-3 w-3 text-[var(--creed-success)]" />
               ) : (
@@ -228,7 +265,9 @@ export function ReadDemo() {
             {step === 0 && typed ? (
               typed
             ) : (
-              <span className="text-[var(--creed-text-tertiary)]">Ask anything…</span>
+              <span className="text-[var(--creed-text-tertiary)]">
+                Ask anything…
+              </span>
             )}
           </span>
           {/* Send button greys out when there's nothing to send (empty bar, or
@@ -239,7 +278,7 @@ export function ReadDemo() {
               "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] transition-colors duration-200",
               step === 0 && typed
                 ? "bg-[var(--creed-accent)] text-white"
-                : "bg-[var(--creed-surface-raised)] text-[var(--creed-text-tertiary)]"
+                : "bg-[var(--creed-surface-raised)] text-[var(--creed-text-tertiary)]",
             )}
           >
             <ArrowUp className="h-3.5 w-3.5" />
@@ -285,7 +324,10 @@ function MiniProposalDiff({
   onAccept: () => void;
   onReject: () => void;
 }) {
-  const parts = useMemo(() => computeDiffParts(base, proposed), [base, proposed]);
+  const parts = useMemo(
+    () => computeDiffParts(base, proposed),
+    [base, proposed],
+  );
   const stats = useMemo(() => summarizeDiff(parts), [parts]);
   return (
     <div className="rounded-[14px] border border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[0_8px_24px_rgba(28,28,26,0.04)]">
@@ -293,10 +335,15 @@ function MiniProposalDiff({
         <ChevronDown
           className={cn(
             "h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-300",
-            expanded ? "rotate-0" : "-rotate-90"
+            expanded ? "rotate-0" : "-rotate-90",
           )}
         />
-        <AgentIconStack agents={[agentName]} variant="inline" itemClassName="h-5 w-5" maxVisible={1} />
+        <AgentIconStack
+          agents={[agentName]}
+          variant="inline"
+          itemClassName="h-5 w-5"
+          maxVisible={1}
+        />
         <span className="text-[var(--creed-text-tertiary)]">proposed</span>
         <span className="text-[var(--creed-text-tertiary)]">·</span>
         <span className="inline-flex items-center gap-1">
@@ -353,7 +400,10 @@ export function UpdateDemo() {
     <div ref={ref} className="w-full">
       <DemoCard>
         <div className="flex items-center gap-2.5">
-          <span className="h-7 w-[3px] shrink-0 rounded-full" style={{ backgroundColor: accent }} />
+          <span
+            className="h-7 w-[3px] shrink-0 rounded-full"
+            style={{ backgroundColor: accent }}
+          />
           <span className="text-[15px] font-medium" style={{ color: accent }}>
             Routines
           </span>
@@ -382,7 +432,9 @@ export function UpdateDemo() {
               "--section-accent-tint": accentTintMap.workflows,
             } as React.CSSProperties
           }
-          dangerouslySetInnerHTML={{ __html: accepted ? ROUTINES_APPLIED_HTML : ROUTINES_BASE_HTML }}
+          dangerouslySetInnerHTML={{
+            __html: accepted ? ROUTINES_APPLIED_HTML : ROUTINES_BASE_HTML,
+          }}
         />
 
         <AnimatePresence initial={false}>
@@ -430,11 +482,27 @@ const TAG_TONE_CLASS: Record<ScoreTag["tone"], string> = {
   red: "bg-[#FEF2F2] text-[#B91C1C] dark:bg-[#3F1212]/55 dark:text-[#fca5a5]",
 };
 
-type ScoreNote = { tone: "good" | "mid" | "bad"; title: string; detail: string };
+type ScoreNote = {
+  tone: "good" | "mid" | "bad";
+  title: string;
+  detail: string;
+};
 const SCORE_NOTES: ScoreNote[] = [
-  { tone: "good", title: "Reads like a real person", detail: "Names the company, the role, and where you are." },
-  { tone: "mid", title: "One line stays generic", detail: "Tighten the opener so it could only describe you." },
-  { tone: "bad", title: "Contains a stray line", detail: "A leftover scratch note near the end reads like noise." },
+  {
+    tone: "good",
+    title: "Reads like a real person",
+    detail: "Names the company, the role, and where you are.",
+  },
+  {
+    tone: "mid",
+    title: "One line stays generic",
+    detail: "Tighten the opener so it could only describe you.",
+  },
+  {
+    tone: "bad",
+    title: "Contains a stray line",
+    detail: "A leftover scratch note near the end reads like noise.",
+  },
 ];
 
 // Eases a displayed integer from 0 -> target whenever `run` flips true. Skips the
@@ -467,7 +535,12 @@ function useCountUp(target: number, run: boolean, animate: boolean) {
 
 // One quality note: a row that opens to reveal its detail. `open` is controlled
 // by the demo loop so the notes play as an accordion (one open at a time).
-function ScoreNoteRow({ tone, title, detail, open }: ScoreNote & { open: boolean }) {
+function ScoreNoteRow({
+  tone,
+  title,
+  detail,
+  open,
+}: ScoreNote & { open: boolean }) {
   const color =
     tone === "good"
       ? "var(--creed-success)"
@@ -476,9 +549,18 @@ function ScoreNoteRow({ tone, title, detail, open }: ScoreNote & { open: boolean
         : "var(--creed-danger)";
   const symbol = tone === "good" ? "+" : tone === "mid" ? "/" : "−";
   return (
-    <div className={cn("overflow-hidden rounded-md transition-colors", open && "bg-[var(--creed-surface-raised)]")}>
+    <div
+      className={cn(
+        "overflow-hidden rounded-md transition-colors",
+        open && "bg-[var(--creed-surface-raised)]",
+      )}
+    >
       <div className="flex items-center gap-1.5 px-1.5 py-1">
-        <span aria-hidden className="shrink-0 font-mono text-[12px] font-medium leading-[1.2]" style={{ color }}>
+        <span
+          aria-hidden
+          className="shrink-0 font-mono text-[12px] font-medium leading-[1.2]"
+          style={{ color }}
+        >
           {symbol}
         </span>
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[var(--creed-text-primary)]">
@@ -487,7 +569,9 @@ function ScoreNoteRow({ tone, title, detail, open }: ScoreNote & { open: boolean
         <ChevronDown
           className={cn(
             "h-3 w-3 shrink-0 transition-all duration-200",
-            open ? "rotate-180 text-[var(--creed-text-primary)]" : "rotate-0 text-[var(--creed-text-tertiary)]"
+            open
+              ? "rotate-180 text-[var(--creed-text-primary)]"
+              : "rotate-0 text-[var(--creed-text-tertiary)]",
           )}
         />
       </div>
@@ -525,20 +609,34 @@ export function ScoreDemo() {
       <DemoCard>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <span className="h-7 w-[3px] shrink-0 rounded-full" style={{ backgroundColor: accent }} />
+            <span
+              className="h-7 w-[3px] shrink-0 rounded-full"
+              style={{ backgroundColor: accent }}
+            />
             <span className="text-[15px] font-medium" style={{ color: accent }}>
               Identity
             </span>
-            <QualityRing score={SCORE_TARGET} color={accent} loading={loading} size={18} />
+            <QualityRing
+              score={SCORE_TARGET}
+              color={accent}
+              loading={loading}
+              size={18}
+            />
           </div>
           <span className="flex items-baseline gap-1.5">
             <span
               className="font-mono text-[20px] font-medium leading-none tabular-nums"
-              style={{ color: loading ? "var(--creed-text-tertiary)" : qualityScoreColor(SCORE_TARGET) }}
+              style={{
+                color: loading
+                  ? "var(--creed-text-tertiary)"
+                  : qualityScoreColor(SCORE_TARGET),
+              }}
             >
               {loading ? "…" : shown}
             </span>
-            <span className="text-[12px] font-medium text-[var(--creed-text-primary)]">/ 100</span>
+            <span className="text-[12px] font-medium text-[var(--creed-text-primary)]">
+              / 100
+            </span>
           </span>
         </div>
 
@@ -547,10 +645,14 @@ export function ScoreDemo() {
             <motion.span
               key={tag.label}
               animate={{ opacity: resolved ? 1 : 0, y: resolved ? 0 : 4 }}
-              transition={{ duration: 0.26, delay: resolved ? index * 0.06 : 0, ease: EASE }}
+              transition={{
+                duration: 0.26,
+                delay: resolved ? index * 0.06 : 0,
+                ease: EASE,
+              }}
               className={cn(
                 "inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-[1.2]",
-                TAG_TONE_CLASS[tag.tone]
+                TAG_TONE_CLASS[tag.tone],
               )}
             >
               {tag.label}
@@ -571,7 +673,11 @@ export function ScoreDemo() {
               <motion.div
                 key={note.title}
                 animate={{ opacity: resolved ? 1 : 0, y: resolved ? 0 : 4 }}
-                transition={{ duration: 0.26, delay: resolved ? 0.08 + index * 0.06 : 0, ease: EASE }}
+                transition={{
+                  duration: 0.26,
+                  delay: resolved ? 0.08 + index * 0.06 : 0,
+                  ease: EASE,
+                }}
               >
                 <ScoreNoteRow {...note} open={openNote === index} />
               </motion.div>

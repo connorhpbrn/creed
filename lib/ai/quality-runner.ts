@@ -22,7 +22,12 @@
 
 import type { CreedQualityReport } from "@/components/creed/file-quality-ui";
 import type { CreedSection } from "@/lib/creed-data";
-import { LOW_BALANCE_USD } from "@/lib/ai/credit-config";
+import { GRANT_MONTHLY_USD, LOW_ALLOWANCE_RATIO } from "@/lib/ai/credit-config";
+
+// A completed analysis nudges the user to top up once the combined balance
+// falls below ~20% of a monthly allowance (about $1). The richer per-bucket
+// warning lives on the settings card, which knows the exact allowance.
+const LOW_BALANCE_THRESHOLD_USD = GRANT_MONTHLY_USD * LOW_ALLOWANCE_RATIO;
 
 type Listener = () => void;
 
@@ -171,7 +176,7 @@ export function runFullQuality(args: FullRunArgs): Promise<FullRunResult> {
         recordOutcome({
           ok: true,
           message: null,
-          lowCredits: typeof balance === "number" && balance < LOW_BALANCE_USD,
+          lowCredits: typeof balance === "number" && balance < LOW_BALANCE_THRESHOLD_USD,
         });
       }
       return payload;
@@ -244,7 +249,9 @@ export function runSectionQuality(
       recordOutcome({
         ok: true,
         message: null,
-        lowCredits: typeof payload.creditBalanceUsd === "number" && payload.creditBalanceUsd < LOW_BALANCE_USD,
+        lowCredits:
+          typeof payload.creditBalanceUsd === "number" &&
+          payload.creditBalanceUsd < LOW_BALANCE_THRESHOLD_USD,
       });
       return payload.report?.sections.find((entry) => entry.sectionId === args.section.id) ?? null;
     } catch (cause) {

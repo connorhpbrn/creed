@@ -265,7 +265,7 @@ const sections: DocsSection[] = [
     group: "Keep it sharp",
     title: "How Creed measures quality",
     paragraphs: [
-      "Creed can score how good your profile is, section by section, and surface where to sharpen it. Quality analysis runs on your own OpenRouter key (BYOK), so the cost is yours and never ours.",
+      "Creed can score how good your profile is, section by section, and surface where to sharpen it. Quality analysis runs on a monthly AI allowance included with your plan, with prepaid top-ups when you need more, or on your own OpenRouter key at cost.",
       "It judges how context is written, never what it is about. A section on work and a section on LEGO are held to the same bar. The only question is whether it helps the next AI know you better.",
     ],
   },
@@ -297,7 +297,7 @@ const sections: DocsSection[] = [
     ],
     bullets: [
       "One file, plain Markdown. It stays portable, and you can push or pull it to your own GitHub repo from Settings.",
-      "BYOK on AI, always. Quality analysis and model choice run on your own OpenRouter key. Creed never spends its own AI budget on your work.",
+      "Your call on AI spend. AI features run on a monthly allowance of prepaid credits, or on your own OpenRouter key. Your context is only ever sent to the model to run the feature you asked for.",
       "Secrets are encrypted. API keys and connection tokens are stored with AES-256-GCM, never in plain text.",
       "You only ever see your own data. Every table is row-level secured per user.",
       "Hidden sections never leave the app. Set a section to hidden and it is dropped from the agent payload entirely.",

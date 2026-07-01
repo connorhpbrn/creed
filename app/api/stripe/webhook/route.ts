@@ -118,9 +118,10 @@ export async function POST(request: Request) {
     }
 
     if (event.type === "payment_intent.succeeded") {
-      // Prepaid credits top-up. The $49 Checkout's own payment_intent.succeeded
-      // also lands here; creditBalanceFromPaymentIntent returns false for it
-      // (no `type: 'credits'` metadata) so it is acked without crediting.
+      // Prepaid credits top-up. The one-time lifetime Checkout's own
+      // payment_intent.succeeded also lands here; creditBalanceFromPaymentIntent
+      // returns false for it (no `type: 'credits'` metadata) so it is acked
+      // without crediting.
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const credited = await creditBalanceFromPaymentIntent(paymentIntent);
       if (!credited) {

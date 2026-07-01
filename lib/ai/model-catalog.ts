@@ -1,3 +1,5 @@
+import type { AiFeature } from "@/lib/ai/features";
+
 export type AiModelQuality = "excellent" | "good" | "weak" | "uncertain";
 
 export type AiModelCatalogItem = {
@@ -58,6 +60,20 @@ export const AI_MODEL_QUALITY_META: Record<
 };
 
 export const DEFAULT_AI_MODEL_ID = "openai/gpt-5.5";
+
+// Server-selected model per feature, hidden from the user (there is no in-app
+// model picker). Only Analysis is wired today; Tab and CMD-K read their env
+// vars once those features ship. Any unset var falls back to the internal
+// default. See project-context/roadmap.md.
+const FEATURE_MODEL_ENV: Record<AiFeature, string> = {
+  analysis: "ANALYSIS_MODEL",
+  tab: "TAB_MODEL",
+  cmdk: "CMDK_MODEL",
+};
+
+export function getFeatureModelId(feature: AiFeature): string {
+  return process.env[FEATURE_MODEL_ENV[feature]]?.trim() || DEFAULT_AI_MODEL_ID;
+}
 
 const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 const MODEL_CACHE_MS = 1000 * 60 * 60;
@@ -129,8 +145,6 @@ const seedModels: AiModelCatalogItem[] = [
     benchmark: { label: "Creed reasoning proxy", score: 58 },
   },
 ];
-
-export const AI_MODEL_CATALOG = seedModels;
 
 // Tiered scoring rules. The first match wins, so list specific high-signal
 // patterns (flagships) before broad ones (small variants). Score is a
@@ -417,21 +431,6 @@ export async function getOpenRouterModelCatalog({ force = false }: { force?: boo
 export async function getAiModel(modelId: string | null | undefined) {
   const models = await getOpenRouterModelCatalog();
   return models.find((model) => model.id === modelId) ?? models.find((model) => model.id === DEFAULT_AI_MODEL_ID) ?? seedModels[0];
-}
-
-export function getSeedAiModel(modelId: string | null | undefined) {
-  return seedModels.find((model) => model.id === modelId) ?? seedModels[0];
-}
-
-export function formatModelCost(
-  model: Pick<AiModelCatalogItem, "inputCostPerMillion" | "outputCostPerMillion">,
-  multiplier = 1
-) {
-  return `$${formatCost(model.inputCostPerMillion * multiplier)} / $${formatCost(model.outputCostPerMillion * multiplier)} pm`;
-}
-
-function formatCost(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 export async function estimateAiCostUsd({

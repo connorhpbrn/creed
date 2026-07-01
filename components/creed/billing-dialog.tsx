@@ -27,6 +27,7 @@ type BillingStatus = {
   paid: boolean;
   plan: string | null;
   billingMode: string | null;
+  interval: string | null;
   status: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
@@ -94,6 +95,10 @@ export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
   const isLifetime = status?.billingMode === "lifetime" && status.paid;
   const isSubscriber = status?.billingMode === "subscription" && status.paid;
   const renewalDate = formatDate(status?.currentPeriodEnd ?? null);
+  // Monthly and yearly both come back as billingMode "subscription"; the
+  // interval is the only discriminator. Default to monthly for legacy rows
+  // that predate the interval column.
+  const cadenceWord = status?.interval === "year" ? "yearly" : "monthly";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -104,7 +109,7 @@ export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
             {isLifetime
               ? "You own Creed."
               : isSubscriber
-                ? `${planLabel(status?.plan ?? null)} plan, billed monthly.`
+                ? `${planLabel(status?.plan ?? null)} plan, billed ${cadenceWord}.`
                 : "Manage your Creed plan."}
           </DialogDescription>
         </DialogHeader>
@@ -129,7 +134,7 @@ export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
             <div className="rounded-[12px] border border-[var(--creed-border)] bg-[var(--creed-surface-raised)] p-4">
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-[14px] font-medium text-[var(--creed-text-primary)]">
-                  {planLabel(status?.plan ?? null)} - monthly
+                  {planLabel(status?.plan ?? null)} - {cadenceWord}
                 </span>
                 {status?.status === "past_due" ? (
                   <span className="text-[12px] font-medium text-[#B45309] dark:text-[#F5A623]">
@@ -148,11 +153,11 @@ export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
 
             <div className="flex flex-col gap-2.5">
               <Button
-                onClick={() => void startCheckout({ plan: "personal", mode: "lifetime" })}
+                onClick={() => void startCheckout({ plan: "personal", cadence: "lifetime" })}
                 disabled={submitting}
                 className="h-10 w-full bg-[#2563EB] text-[14px] font-medium text-white hover:bg-[#1D4ED8] disabled:opacity-70"
               >
-                {submitting ? "Starting" : "Own it for life - $49"}
+                {submitting ? "Starting" : "Own it for life - $199"}
               </Button>
               <Button
                 variant="outline"

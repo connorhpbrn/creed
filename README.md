@@ -31,7 +31,7 @@ There's a small set of tools every AI-native person re-invents for themselves: a
 The file is plain Markdown. The app exists to:
 
 - help you write the first draft (4-vibe onboarding tuned to who you are)
-- score quality and surface gaps (BYOK OpenRouter — never our tab)
+- score quality and surface gaps (a monthly AI allowance, or bring your own OpenRouter key)
 - let agents read and propose updates without you copy-pasting
 - keep one canonical version across every tool you use
 
@@ -71,7 +71,7 @@ Every section is agent-writable. Every change goes through the review (or direct
 
 ## Status
 
-Creed is in active development. Free while pricing is shaped around real user feedback. The likely paid tier later wraps heavy AI use (synthesis, quality, model spend) — but Creed will stay BYOK on AI, so you control the cost.
+Creed is in active development. Paid plans include a monthly AI allowance for first-party features like quality analysis, billed as prepaid credits, with an optional bring-your-own-OpenRouter-key mode.
 
 ---
 
@@ -125,7 +125,7 @@ This creates every table Creed needs (sections, proposals, activity, tokens, MCP
 
 ### 4. (Optional) Wire up Stripe
 
-The hosted Creed gates `/file` and `/onboarding` behind a one-time $49 entitlement. For local development you can either:
+The hosted Creed gates `/file` and `/onboarding` behind a paid entitlement (Personal is $12/mo, $99/yr, or $199 lifetime). For local development you can either:
 
 - **Skip it** — leave `STRIPE_*` env vars unset. The app still boots; signed-in users without an entitlement row are redirected to `/pricing` by the layout guard. Useful when you only want to work on marketing pages or non-paid flows.
 - **Run the full flow** — add the four `STRIPE_*` variables from `.env.example` using your sandbox/test keys, then in a second terminal run:
@@ -177,7 +177,7 @@ MCP uses OAuth 2.1: Creed is its own authorization server (`/authorize`, `/token
 - **Tiptap** for the rich-text editor
 - **Framer Motion** for the calmer-than-normal interactions
 - **Supabase** for auth, Postgres, RLS, realtime
-- **OpenRouter** for BYOK AI
+- **OpenRouter** for first-party AI (managed credits or BYOK)
 
 A complete tour of the public stack lives at [creed.md/stack](https://creed.md/stack).
 

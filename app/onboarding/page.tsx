@@ -11,8 +11,8 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 // copy-paste prompt, preview); the paywall is the hosted app, not onboarding.
 // We pass two signals to the screen:
 //   - paid: switches the final CTA between the checkout path ("Start for
-//     $7/mo" + an "or own it for $49" link) and "Go to my Creed" (straight
-//     into the app) once they already have access.
+//     $12/mo") and "Go to my Creed" (straight into the app) once they
+//     already have access.
 //   - initialStage: resume point. A composed Creed resumes on the preview; a
 //     claimed-but-not-composed seed resumes on the prompt step; otherwise the
 //     screen starts at step 0.

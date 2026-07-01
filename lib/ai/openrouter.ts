@@ -19,6 +19,9 @@ type OpenRouterResponse = {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    // OpenRouter's authoritative billed cost for the call, present when usage
+    // accounting is requested (usage: { include: true }).
+    cost?: number;
   };
 };
 
@@ -84,6 +87,9 @@ export async function callOpenRouter({
         temperature,
         max_tokens: maxTokens,
         messages,
+        // Ask OpenRouter to return the authoritative billed cost so we charge
+        // the true post-call amount rather than re-deriving it from the catalog.
+        usage: { include: true },
         ...(responseFormat ? { response_format: responseFormat } : {}),
       }),
       signal: controller.signal,
@@ -135,15 +141,23 @@ export async function callOpenRouter({
       throw new Error("OpenRouter returned no content");
     }
 
-  const inputTokens = payload.usage?.prompt_tokens ?? 0;
-  const outputTokens = payload.usage?.completion_tokens ?? 0;
+    const inputTokens = payload.usage?.prompt_tokens ?? 0;
+    const outputTokens = payload.usage?.completion_tokens ?? 0;
     const model = await getAiModel(modelId);
+
+    // Prefer OpenRouter's authoritative billed cost; fall back to pricing the
+    // real returned token counts off our catalog if it isn't present.
+    const reportedCost = payload.usage?.cost;
+    const costUsd =
+      typeof reportedCost === "number" && reportedCost > 0
+        ? reportedCost
+        : await estimateAiCostUsd({ modelId, inputTokens, outputTokens });
 
     return {
       content,
       inputTokens,
       outputTokens,
-      estimatedCostUsd: await estimateAiCostUsd({ modelId, inputTokens, outputTokens }),
+      costUsd,
       modelQuality: model.quality,
     };
   } finally {

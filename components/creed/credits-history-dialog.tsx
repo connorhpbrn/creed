@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { CreditTransaction } from "@/components/creed/settings-preload";
+import { featureMeta } from "@/lib/ai/features";
 import { cn } from "@/lib/utils";
 
 function formatUsd(value: number) {
@@ -25,18 +26,21 @@ function formatWhen(iso: string) {
 }
 
 function labelForDebit(feature: string | null) {
-  if (feature === "quality_analysis") return "Quality analysis";
-  return feature ? feature.replace(/_/g, " ") : "AI usage";
+  return feature ? featureMeta(feature).label : "AI usage";
 }
 
 export function CreditsHistoryDialog({
   open,
   onOpenChange,
   transactions,
+  allowanceResets,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   transactions: CreditTransaction[];
+  // Whether the plan's allowance recurs (subscriptions) or is a one-time grant
+  // (lifetime), so grant rows read correctly for each.
+  allowanceResets: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -53,29 +57,34 @@ export function CreditsHistoryDialog({
           <div className="max-h-[320px] overflow-y-auto">
             <ul className="flex flex-col">
               {transactions.map((tx) => {
-                const isTopup = tx.type === "topup";
+                const isCredit = tx.type === "topup" || tx.type === "grant";
+                const label =
+                  tx.type === "topup"
+                    ? "Added credits"
+                    : tx.type === "grant"
+                      ? allowanceResets
+                        ? "Monthly allowance"
+                        : "Welcome credits"
+                      : labelForDebit(tx.feature);
                 return (
                   <li
                     key={tx.id}
                     className="flex items-center justify-between gap-4 border-b border-[var(--creed-border)] py-2.5 last:border-b-0"
                   >
                     <div className="min-w-0">
-                      <div className="text-[13px] text-[var(--creed-text-primary)]">
-                        {isTopup ? "Added credits" : labelForDebit(tx.feature)}
-                      </div>
+                      <div className="text-[13px] text-[var(--creed-text-primary)]">{label}</div>
                       <div className="truncate text-[11px] text-[var(--creed-text-tertiary)]">
                         {formatWhen(tx.createdAt)}
-                        {!isTopup && tx.modelId ? ` · ${tx.modelId}` : ""}
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
                       <div
                         className={cn(
                           "font-mono text-[13px]",
-                          isTopup ? "text-[#16A34A]" : "text-[var(--creed-text-primary)]"
+                          isCredit ? "text-[#16A34A]" : "text-[var(--creed-text-primary)]"
                         )}
                       >
-                        {isTopup ? "+" : "-"}
+                        {isCredit ? "+" : "-"}
                         {formatUsd(tx.amountUsd)}
                       </div>
                       <div className="font-mono text-[11px] text-[var(--creed-text-tertiary)]">

@@ -587,32 +587,21 @@ export function OnboardingScreen({
               <ArrowRightIcon className="h-4 w-4" size={16} />
             </Button>
           ) : (
-            // Subscription-first: the primary button starts the $7/mo plan
-            // (the low-friction "try it" path), with a quiet link to buy it
-            // outright for life.
-            <div className="flex flex-col items-end gap-2">
-              <Button
-                style={{ borderRadius: "0.875rem" }}
-                className="bg-[var(--creed-text-primary)] px-5 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)] disabled:bg-[var(--creed-border-strong)] disabled:text-[var(--creed-text-tertiary)]"
-                onClick={() => void startCheckout({ plan: "personal", mode: "subscription" })}
-                disabled={checkoutSubmitting}
-              >
-                {checkoutSubmitting ? "Starting" : "Start for $7/mo"}
-                {checkoutSubmitting ? (
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ArrowRightIcon className="h-4 w-4" size={16} />
-                )}
-              </Button>
-              <button
-                type="button"
-                onClick={() => void startCheckout({ plan: "personal", mode: "lifetime" })}
-                disabled={checkoutSubmitting}
-                className="text-[12px] text-[var(--creed-text-tertiary)] underline-offset-4 transition-colors hover:text-[var(--creed-text-secondary)] hover:underline disabled:opacity-60"
-              >
-                or own it for $49
-              </button>
-            </div>
+            // Subscription-first: a single low-friction monthly checkout. Yearly
+            // and lifetime are chosen later on /pricing or in the billing dialog.
+            <Button
+              style={{ borderRadius: "0.875rem" }}
+              className="bg-[var(--creed-text-primary)] px-5 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)] disabled:bg-[var(--creed-border-strong)] disabled:text-[var(--creed-text-tertiary)]"
+              onClick={() => void startCheckout({ plan: "personal", cadence: "monthly" })}
+              disabled={checkoutSubmitting}
+            >
+              {checkoutSubmitting ? "Starting" : "Start for $12/mo"}
+              {checkoutSubmitting ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowRightIcon className="h-4 w-4" size={16} />
+              )}
+            </Button>
           )}
         </div>
       </div>

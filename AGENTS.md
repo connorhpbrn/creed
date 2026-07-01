@@ -24,7 +24,7 @@ wrong change.
 ```
 Next.js 16 (App Router, Turbopack)   React 19   TypeScript (strict)
 Tailwind v4   shadcn/ui   Tiptap   Framer Motion / motion
-Supabase (Postgres + RLS + auth)   OpenRouter (BYOK)
+Supabase (Postgres + RLS + auth)   OpenRouter (credits + BYOK)
 ```
 
 ---
@@ -40,7 +40,7 @@ app/                Next routes
 ├── mcp/route.ts    MCP protocol endpoint
 ├── home/           public landing (/home)
 ├── docs|pricing|privacy|terms|stack/   marketing
-├── onboarding/     7-step BYOK onboarding
+├── onboarding/     guided onboarding flow
 ├── layout.tsx      root layout — skips loadCreedState for marketing
 └── proxy.ts        sets x-request-id + x-pathname
 
@@ -56,7 +56,7 @@ lib/
 ├── creed-markdown.ts         Markdown ↔ section parser
 ├── rich-text.ts              Tiptap content normalization
 ├── ai/quality{,-runner,-rubric}.ts   quality analysis
-├── ai/openrouter.ts          BYOK call helper
+├── ai/openrouter.ts          OpenRouter call helper (credits + BYOK)
 ├── ai/model-catalog.ts       OpenRouter model list + tier scoring
 ├── onboarding/{compile,refine,validate}.ts   synthesizer pipeline
 ├── supabase/{server,browser,admin}.ts        per-runtime clients

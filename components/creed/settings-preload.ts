@@ -1,8 +1,5 @@
 "use client";
 
-import type { AiModelQuality } from "@/lib/ai/model-catalog";
-import type { AiModelCatalogItem } from "@/lib/ai/model-catalog";
-
 export type RepoOption = {
   id: number;
   owner: string;
@@ -35,7 +32,6 @@ export type AiMode = "credits" | "byok";
 
 export type PublicAiSettings = {
   provider: "openrouter";
-  selectedModelId: string;
   keyStatus: "missing" | "valid" | "invalid";
   aiMode: AiMode;
   keyLastFour?: string;
@@ -44,40 +40,46 @@ export type PublicAiSettings = {
 
 export type AiUsageRange = "7d" | "30d" | "90d";
 
+// Spend is tagged by feature (Analysis today; Tab/CMD-K later), not by model,
+// and each cost is the amount actually charged.
 export type AiUsageSummary = {
   range: AiUsageRange;
   totalCostUsd: number;
-  byModel: Array<{
-    modelId: string;
-    modelName: string;
-    quality: AiModelQuality;
-    costUsd: number;
-  }>;
+  byFeature: Array<{ feature: string; costUsd: number }>;
   days: Array<{
     date: string;
-    segments: Array<{
-      modelId: string;
-      modelName: string;
-      quality: AiModelQuality;
-      costUsd: number;
-    }>;
+    segments: Array<{ feature: string; costUsd: number }>;
   }>;
 };
 
 export type CreditTransaction = {
   id: string;
-  type: "topup" | "debit";
+  type: "topup" | "debit" | "grant";
   amountUsd: number;
   balanceAfterUsd: number;
   feature: string | null;
   modelId: string | null;
+  bucket: string | null;
   createdAt: string;
 };
 
 export type CreditsState = {
+  grantedMicroUsd: number;
+  purchasedMicroUsd: number;
   balanceMicroUsd: number;
+  grantedUsd: number;
+  purchasedUsd: number;
   balanceUsd: number;
+  allowanceUsd: number;
+  allowanceResets: boolean;
+  allTimeSpentUsd: number;
   transactions: CreditTransaction[];
+};
+
+export type OpenRouterBalance = {
+  usageUsd: number;
+  limitUsd: number | null;
+  remainingUsd: number | null;
 };
 
 type CacheEntry<T> = {
@@ -88,9 +90,9 @@ type CacheEntry<T> = {
 const reposCache: CacheEntry<RepoOption[]> = { value: null, promise: null };
 const branchesCache = new Map<string, CacheEntry<BranchOption[]>>();
 const aiSettingsCache: CacheEntry<PublicAiSettings | null> = { value: null, promise: null };
-const aiModelsCache: CacheEntry<AiModelCatalogItem[]> = { value: null, promise: null };
 const usageCache = new Map<string, CacheEntry<AiUsageSummary | null>>();
 const creditsCache: CacheEntry<CreditsState | null> = { value: null, promise: null };
+const openRouterBalanceCache: CacheEntry<OpenRouterBalance | null> = { value: null, promise: null };
 const versionStatusCache = new Map<string, CacheEntry<VersionControlStatus | null>>();
 let activeCacheScope = "";
 
@@ -99,12 +101,12 @@ function clearAllSettingsCaches() {
   reposCache.promise = null;
   aiSettingsCache.value = null;
   aiSettingsCache.promise = null;
-  aiModelsCache.value = null;
-  aiModelsCache.promise = null;
   branchesCache.clear();
   usageCache.clear();
   creditsCache.value = null;
   creditsCache.promise = null;
+  openRouterBalanceCache.value = null;
+  openRouterBalanceCache.promise = null;
   versionStatusCache.clear();
 }
 
@@ -186,10 +188,9 @@ export function loadSettingsAiSettings() {
   }
 
   if (!aiSettingsCache.promise) {
-    aiSettingsCache.promise = readJson<{ settings?: PublicAiSettings; models?: AiModelCatalogItem[] }>("/api/app/ai/settings")
+    aiSettingsCache.promise = readJson<{ settings?: PublicAiSettings }>("/api/app/ai/settings")
       .then((payload) => {
         aiSettingsCache.value = payload.settings ?? null;
-        aiModelsCache.value = payload.models ?? aiModelsCache.value;
         return aiSettingsCache.value;
       })
       .finally(() => {
@@ -198,26 +199,6 @@ export function loadSettingsAiSettings() {
   }
 
   return aiSettingsCache.promise;
-}
-
-export function loadSettingsAiModels() {
-  if (aiModelsCache.value) {
-    return Promise.resolve(aiModelsCache.value);
-  }
-
-  if (!aiModelsCache.promise) {
-    aiModelsCache.promise = readJson<{ settings?: PublicAiSettings; models?: AiModelCatalogItem[] }>("/api/app/ai/settings")
-      .then((payload) => {
-        aiSettingsCache.value = payload.settings ?? aiSettingsCache.value;
-        aiModelsCache.value = payload.models ?? [];
-        return aiModelsCache.value;
-      })
-      .finally(() => {
-        aiModelsCache.promise = null;
-      });
-  }
-
-  return aiModelsCache.promise;
 }
 
 export function setCachedSettingsAiSettings(settings: PublicAiSettings) {
@@ -269,6 +250,30 @@ export function clearSettingsCreditsCache() {
   creditsCache.promise = null;
 }
 
+// The BYOK user's live OpenRouter balance. Volatile like credits, so it always
+// refetches; returns null when no valid key is saved or the read failed.
+export function loadSettingsOpenRouterBalance() {
+  if (!openRouterBalanceCache.promise) {
+    openRouterBalanceCache.promise = readJson<{ balance?: OpenRouterBalance | null }>(
+      "/api/app/ai/openrouter-balance"
+    )
+      .then((payload) => {
+        openRouterBalanceCache.value = payload.balance ?? null;
+        return openRouterBalanceCache.value;
+      })
+      .finally(() => {
+        openRouterBalanceCache.promise = null;
+      });
+  }
+
+  return openRouterBalanceCache.promise;
+}
+
+export function clearSettingsOpenRouterBalanceCache() {
+  openRouterBalanceCache.value = null;
+  openRouterBalanceCache.promise = null;
+}
+
 export function loadSettingsVersionStatus(localHash: string) {
   const cached = versionStatusCache.get(localHash) ?? { value: null, promise: null };
   versionStatusCache.set(localHash, cached);
@@ -316,8 +321,11 @@ export function preloadSettingsData({
   }
 
   void loadSettingsAiSettings().catch(() => null);
-  void loadSettingsUsage("7d", "credits").catch(() => null);
+  void loadSettingsUsage("90d", "credits").catch(() => null);
   void loadSettingsCredits().catch(() => null);
+  // The OpenRouter balance is only shown for a valid BYOK key (the minority
+  // path), so the settings screen fetches it lazily on demand rather than
+  // eagerly here where it would be a wasted call for every credits-mode user.
 
   if (!githubConnected) {
     return;
