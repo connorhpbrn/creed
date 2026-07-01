@@ -1100,16 +1100,14 @@ export function FileScreen({
     () => (documentMode ? documentMarkdown : exportMarkdown()),
     [documentMarkdown, documentMode, exportMarkdown]
   );
-  const githubConfigured = documentMode
-    ? state.settings.integrations.github.status === "connected" &&
-      Boolean(currentDocument?.githubRepoOwner) &&
-      Boolean(currentDocument?.githubRepoName) &&
-      Boolean(currentDocument?.githubBranch) &&
-      Boolean(currentDocument?.githubPath)
-    : state.settings.integrations.github.status === "connected" &&
-      Boolean(state.settings.versionControl.repoOwner) &&
-      Boolean(state.settings.versionControl.repoName) &&
-      Boolean(state.settings.versionControl.branch);
+  // Documents are Supabase-only (no GitHub sync); GitHub version control here
+  // only applies to the profile creed.md file, never to shared documents.
+  const githubConfigured =
+    !documentMode &&
+    state.settings.integrations.github.status === "connected" &&
+    Boolean(state.settings.versionControl.repoOwner) &&
+    Boolean(state.settings.versionControl.repoName) &&
+    Boolean(state.settings.versionControl.branch);
 
   const pushDisabled =
     !githubConfigured ||
@@ -1821,51 +1819,6 @@ export function FileScreen({
 
   async function handleApplyPull() {
     if (!pullPreview) {
-      return;
-    }
-
-    if (documentMode) {
-      if (!currentDocument) {
-        return;
-      }
-      try {
-        setPullBusy(true);
-        const response = await fetch(
-          `/api/app/documents/${encodeURIComponent(currentDocument.id)}/github/pull/apply`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              remoteContent: pullPreview.remoteContent ?? "",
-              remoteSha: pullPreview.remoteSha,
-              expectedRevision: currentDocument.revision,
-            }),
-          }
-        );
-        const payload = (await response.json()) as { document?: SharedDocument; error?: string };
-
-        if (!response.ok) {
-          throw new Error(payload.error || "Could not import document from GitHub");
-        }
-
-        if (payload.document) {
-          setCurrentDocument(payload.document);
-          const parsed = parseDocumentSections(payload.document.content, payload.document.title);
-          setDocumentSections(parsed);
-          setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, payload.document.title));
-          await reloadDocumentActivity(payload.document.id);
-        }
-
-        toast.success("Pulled document from GitHub");
-        setPullDialogOpen(false);
-        setPullPreview(null);
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Could not import document from GitHub"
-        );
-      } finally {
-        setPullBusy(false);
-      }
       return;
     }
 

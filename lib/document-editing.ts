@@ -21,11 +21,6 @@ export type DocumentEditAuthor = {
   agentLabel?: string | null;
 };
 
-export type DocumentEditDraft = {
-  kind: "document-content";
-  content: string;
-};
-
 export type DocumentProposal = {
   id: string;
   documentId: string;
@@ -108,7 +103,7 @@ function mapProposal(row: DocumentProposalRow): DocumentProposal {
 // Apply a whole-content change to a document (guarded on `expectedRevision`),
 // then append a version. Shared by direct edits and accepted proposals so the
 // versioning + concurrency behaviour lives in one place.
-export async function applyDocumentContent(
+async function applyDocumentContent(
   client: unknown,
   input: {
     documentId: string;

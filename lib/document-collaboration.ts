@@ -12,6 +12,7 @@ export type WorkspaceUser = {
   id: string;
   email: string;
   label: string;
+  avatarUrl: string | null;
 };
 
 export type DocumentComment = {
@@ -311,7 +312,9 @@ export async function listWorkspaceUsers(client: unknown): Promise<WorkspaceUser
         ]) ||
         labelFromEmail(email) ||
         user.id;
-      return { id: user.id, email, label };
+      const avatarUrl =
+        metadataString(metadata, ["avatar_url", "avatarUrl", "picture", "photo_url"]) || null;
+      return { id: user.id, email, label, avatarUrl };
     });
 }
 

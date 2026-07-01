@@ -24,7 +24,35 @@ and MCP client management.
 | Open findings | 0 (3 deferred with rationale) |
 | Resolved this turn | 8 |
 
+## Turn 2 — 2026-07-01 14:34 (final, post audit + Fallow)
+
+Branch-total re-review of everything since commit `022b8d0`.
+
+**My changes:** A1 migration rename (unique version), C1/dead-code in
+`document-editing.ts`, dead-code in `document-reference-index.ts`, R4 dead
+GitHub code removed from `file-screen.tsx`, ledgers.
+
+**Parallel live edits reviewed (authored outside this thread, folded in):**
+- `lib/document-section-diff.ts` (new): pure, dependency-free Markdown
+  section splitter + differ; handles CRLF/BOM, duplicate-heading keys, preamble.
+  No security surface. Backed by new unit tests (suite grew 68 → 76).
+- `components/creed/document-review-panel.tsx` (+481): section-by-section
+  proposal/version review UI. Fetches only the already-audited authed routes
+  (`/proposals`, `/versions`, `/accept|reject|revert`) with `encodeURIComponent`;
+  no `dangerouslySetInnerHTML`/`innerHTML`/`eval`.
+- `lib/document-collaboration.ts`: adds `avatarUrl` from user metadata (additive).
+- `components/ui/avatar.tsx`: exports `AvatarImage`. `components/creed/shell.tsx`:
+  adds a Dashboard nav button (cosmetic; duplicates existing nav item).
+
+**Outcome:** all clear. tsc clean, lint 0 errors/36 warnings, vitest 76/76,
+next build success. No open findings. Advisory debt (feedback-menu wiring gap,
+route-boilerplate duplication, legacy/domain unused exports) recorded in
+`.audits/fallow.md` and `.audits/repo-audit-document-workspace.md`.
+
+---
+
 ## Turn 1 — 2026-07-01 14:06
+
 
 **Method:** four gates first (tsc/lint/tests/build all green on the original
 tree), then a parallel cluster read (removals, proposals API, editor/refs,

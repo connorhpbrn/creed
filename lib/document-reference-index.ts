@@ -156,22 +156,6 @@ export function ensureReferenceIndex(): Promise<void> {
   return inFlight;
 }
 
-// Force a re-fetch (e.g. after creating a document) so freshly created
-// documents become referenceable without a full reload.
-export function refreshReferenceIndex(): Promise<void> {
-  loaded = false;
-  inFlight = null;
-  return ensureReferenceIndex();
-}
-
-export function isReferenceIndexLoaded() {
-  return loaded;
-}
-
-export function getReferenceEntries(): DocumentReferenceEntry[] {
-  return entries;
-}
-
 export function resolveReference(
   kind: DocReferenceKind,
   slug: string

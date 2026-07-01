@@ -105,4 +105,5 @@ function AvatarGroupCount({
 export {
   Avatar,
   AvatarFallback,
+  AvatarImage,
 }

@@ -497,7 +497,19 @@ export function CreedShell({
               <Separator className="my-4 bg-[var(--creed-border)] lg:my-6" />
               {/* Utility actions as plain icon buttons (no name dropdown).
                   Stacked on the mobile rail, a single row on lg. */}
-              <div className="flex flex-col items-center gap-1 lg:flex-row lg:justify-start lg:gap-1.5">
+              <div className="flex flex-col items-center gap-1 lg:flex-row lg:justify-center lg:gap-1.5">
+                <Button
+                  asChild
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-[10px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
+                  aria-label="Dashboard"
+                >
+                  <Link href="/dashboard">
+                    <LayoutGrid className="h-4 w-4" />
+                  </Link>
+                </Button>
                 <NotificationMenu iconOnly />
                 <DarkModeButton />
                 <Button
