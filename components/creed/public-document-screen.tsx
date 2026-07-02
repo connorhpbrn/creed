@@ -234,10 +234,51 @@ export function PublicDocumentScreen({
       className={cn(
         "grid min-h-screen overflow-hidden bg-[var(--creed-surface)] text-[var(--creed-text-primary)]",
         panel
-          ? "grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_360px]"
-          : "grid-cols-[minmax(0,1fr)]"
+          ? "grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_360px]"
+          : "grid-cols-[48px_minmax(0,1fr)]"
       )}
     >
+      <aside
+        data-file-export-hidden
+        className="h-screen border-r border-[var(--creed-border)] bg-[var(--creed-surface)] px-1.5 py-3"
+      >
+        <div className="flex h-full flex-col items-center gap-1">
+          <RailButton
+            label="Activity"
+            active={panel === "activity"}
+            onClick={() => setPanel((current) => current === "activity" ? null : "activity")}
+          >
+            <History className="h-4 w-4" />
+          </RailButton>
+          <RailButton
+            label="Comments"
+            active={panel === "comments"}
+            badge={rootComments.length}
+            onClick={() => setPanel((current) => current === "comments" ? null : "comments")}
+          >
+            <MessageSquare className="h-4 w-4" />
+          </RailButton>
+          <RailButton
+            label="View"
+            active={panel === "view"}
+            onClick={() => setPanel((current) => current === "view" ? null : "view")}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+          </RailButton>
+          <RailButton label="Export PDF" active={false} onClick={exportPdf}>
+            {copiedAction === "pdf" ? <AnimatedCheckmark /> : <FileText className="h-4 w-4" />}
+          </RailButton>
+          <RailButton label="Download" active={false} onClick={downloadMarkdown}>
+            {copiedAction === "download" ? <AnimatedCheckmark /> : <Download className="h-4 w-4" />}
+          </RailButton>
+          <RailButton label="Copy" active={false} onClick={() => void copyMarkdown()}>
+            {copiedAction === "copy" ? <AnimatedCheckmark /> : <Copy className="h-4 w-4" />}
+          </RailButton>
+          <div className="min-h-0 flex-1" />
+          <PublicThemeButton />
+        </div>
+      </aside>
+
       <main
         data-file-export-scroll
         className="h-screen min-w-0 overflow-y-auto bg-[var(--creed-surface)] creed-scrollbar"
@@ -251,60 +292,16 @@ export function PublicDocumentScreen({
           } as CSSProperties}
         >
           <div data-file-export-title>{document.title}</div>
-
-          <div
-            data-file-sticky-header
-            data-file-export-hidden
-            className="sticky top-0 z-20 mb-8 -mx-4 bg-[color:var(--creed-surface)]/95 px-4 pb-5 pt-2 backdrop-blur-sm md:-mx-12 md:mb-12 md:px-12 md:pb-7 xl:-mx-16 xl:px-16"
-          >
-            <div className="flex flex-row items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h1 className="truncate font-heading text-[1.22rem] font-medium tracking-[-0.03em] text-[var(--creed-text-primary)] md:text-[1.45rem]">
-                  {document.title}
-                </h1>
-                {document.description.trim() ? (
-                  <p className="mt-1 max-w-2xl text-[13px] leading-5 text-[var(--creed-text-secondary)]">
-                    {document.description}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 self-start">
-                <ToolbarButton
-                  label="Comments"
-                  active={panel === "comments"}
-                  badge={rootComments.length}
-                  onClick={() => setPanel((current) => current === "comments" ? null : "comments")}
-                >
-                  <MessageSquare className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton
-                  label="Activity"
-                  active={panel === "activity"}
-                  onClick={() => setPanel((current) => current === "activity" ? null : "activity")}
-                >
-                  <History className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton
-                  label="View"
-                  active={panel === "view"}
-                  onClick={() => setPanel((current) => current === "view" ? null : "view")}
-                >
-                  <SlidersHorizontal className="h-4 w-4" />
-                </ToolbarButton>
-                <ToolbarButton label="Copy" active={false} onClick={() => void copyMarkdown()}>
-                  {copiedAction === "copy" ? <AnimatedCheckmark /> : <Copy className="h-4 w-4" />}
-                </ToolbarButton>
-                <ToolbarButton label="Download" active={false} onClick={downloadMarkdown}>
-                  {copiedAction === "download" ? <AnimatedCheckmark /> : <Download className="h-4 w-4" />}
-                </ToolbarButton>
-                <ToolbarButton label="Export PDF" active={false} onClick={exportPdf}>
-                  {copiedAction === "pdf" ? <AnimatedCheckmark /> : <FileText className="h-4 w-4" />}
-                </ToolbarButton>
-                <PublicThemeButton />
-              </div>
-            </div>
-          </div>
+          <header data-file-export-hidden className="mb-10 md:mb-14">
+            <h1 className="font-heading text-[1.45rem] font-medium tracking-[0] text-[var(--creed-text-primary)] md:text-[1.8rem]">
+              {document.title}
+            </h1>
+            {document.description.trim() ? (
+              <p className="mt-2 max-w-2xl text-[14px] leading-6 text-[var(--creed-text-secondary)]">
+                {document.description}
+              </p>
+            ) : null}
+          </header>
 
           <div className="space-y-10 md:space-y-16">
             {sections.map((section) => {
@@ -381,7 +378,7 @@ export function PublicDocumentScreen({
   );
 }
 
-function ToolbarButton({
+function RailButton({
   label,
   active,
   badge,
@@ -401,7 +398,7 @@ function ToolbarButton({
       title={label}
       onClick={onClick}
       className={cn(
-        "relative inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+        "relative inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
         active && "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)]"
       )}
     >
@@ -423,7 +420,7 @@ function PublicThemeButton() {
       type="button"
       variant="ghost"
       size="icon"
-      className="h-8 w-8 rounded-full text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
+      className="h-8 w-8 rounded-[10px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
       aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
       title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
       onClick={(event) => {
