@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AnimatedCheckmark } from "@/components/ui/animated-checkmark";
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,9 @@ export function PublicDocumentScreen({
     [document.title, sections]
   );
   const [panel, setPanel] = useState<PublicPanel>(null);
+  const scrollRef = useRef<HTMLElement>(null);
+  // Mobile-only bottom toolbar: reveal on scroll up, hide on scroll down.
+  const [mobileBarVisible, setMobileBarVisible] = useState(true);
   const [comments, setComments] = useState(initialComments);
   const [activity, setActivity] = useState(initialActivity);
   const [commentName, setCommentName] = useState("");
@@ -116,6 +119,35 @@ export function PublicDocumentScreen({
     } catch {
       setCommentName("");
     }
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    let lastY = el.scrollTop;
+    let ticking = false;
+
+    const handleScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        const y = el.scrollTop;
+        const delta = y - lastY;
+        if (y <= 8) {
+          setMobileBarVisible(true);
+        } else if (delta > 6) {
+          setMobileBarVisible(false);
+        } else if (delta < -6) {
+          setMobileBarVisible(true);
+        }
+        lastY = y;
+        ticking = false;
+      });
+    };
+
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
   }, []);
 
   function markActionComplete(key: string) {
@@ -234,13 +266,13 @@ export function PublicDocumentScreen({
       className={cn(
         "grid min-h-screen overflow-hidden bg-[var(--creed-surface)] text-[var(--creed-text-primary)]",
         panel
-          ? "grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_360px]"
-          : "grid-cols-[48px_minmax(0,1fr)]"
+          ? "grid-cols-[minmax(0,1fr)] md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_360px]"
+          : "grid-cols-[minmax(0,1fr)] md:grid-cols-[48px_minmax(0,1fr)]"
       )}
     >
       <aside
         data-file-export-hidden
-        className="h-screen bg-[var(--creed-surface)] px-1.5 py-3"
+        className="hidden h-screen bg-[var(--creed-surface)] px-1.5 py-3 md:block"
       >
         <div className="flex h-full flex-col items-center gap-2.5">
           <RailButton
@@ -280,6 +312,7 @@ export function PublicDocumentScreen({
       </aside>
 
       <main
+        ref={scrollRef}
         data-file-export-scroll
         className="h-screen min-w-0 overflow-y-auto bg-[var(--creed-surface)] creed-scrollbar"
       >
@@ -374,6 +407,50 @@ export function PublicDocumentScreen({
           onWidthChange={(width) => setEditorView({ width })}
         />
       ) : null}
+
+      {/* Mobile-only floating toolbar. Reveals on scroll up, hides on scroll
+          down, and steps aside entirely when a side panel is open. */}
+      <div
+        data-file-export-hidden
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-40 flex items-center justify-center gap-3 border-t border-[var(--creed-border)] bg-[color:var(--creed-surface)]/95 px-3 py-2 backdrop-blur-sm transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:hidden",
+          panel && "hidden",
+          mobileBarVisible ? "translate-y-0" : "translate-y-full"
+        )}
+      >
+        <RailButton
+          label="Activity"
+          active={panel === "activity"}
+          onClick={() => setPanel((current) => current === "activity" ? null : "activity")}
+        >
+          <History className="h-4 w-4" />
+        </RailButton>
+        <RailButton
+          label="Comments"
+          active={panel === "comments"}
+          badge={rootComments.length}
+          onClick={() => setPanel((current) => current === "comments" ? null : "comments")}
+        >
+          <MessageSquare className="h-4 w-4" />
+        </RailButton>
+        <RailButton label="Export PDF" active={false} onClick={exportPdf}>
+          {copiedAction === "pdf" ? <AnimatedCheckmark /> : <FileText className="h-4 w-4" />}
+        </RailButton>
+        <RailButton label="Download" active={false} onClick={downloadMarkdown}>
+          {copiedAction === "download" ? <AnimatedCheckmark /> : <Download className="h-4 w-4" />}
+        </RailButton>
+        <RailButton label="Copy" active={false} onClick={() => void copyMarkdown()}>
+          {copiedAction === "copy" ? <AnimatedCheckmark /> : <Copy className="h-4 w-4" />}
+        </RailButton>
+        <RailButton
+          label="View"
+          active={panel === "view"}
+          onClick={() => setPanel((current) => current === "view" ? null : "view")}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+        </RailButton>
+        <PublicThemeButton />
+      </div>
     </div>
   );
 }
