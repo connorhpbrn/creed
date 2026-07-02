@@ -613,56 +613,102 @@ export function DocumentReviewPanel({
       ) : null}
 
       {versions.length > 0 ? (
-        <div className="rounded-[var(--radius-lg)] border border-[var(--creed-border)] bg-[var(--creed-surface)]">
-          <button
-            type="button"
-            onClick={() => setHistoryOpen((open) => !open)}
-            className="flex w-full items-center justify-between px-4 py-2.5"
-            aria-expanded={historyOpen}
-          >
-            <span className="inline-flex items-center gap-2 text-[13px] font-medium text-[var(--creed-text-primary)]">
-              <History className="h-3.5 w-3.5" />
-              Version history
-              <span className="text-[var(--creed-text-tertiary)]">({versions.length})</span>
-            </span>
-            <ChevronDown
-              className={cn(
-                "h-3.5 w-3.5 text-[var(--creed-text-tertiary)] transition-transform duration-200",
-                historyOpen ? "rotate-180" : "rotate-0"
-              )}
-            />
-          </button>
-          <AnimatePresence initial={false}>
-            {historyOpen ? (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                className="overflow-hidden"
-              >
-                <div className="divide-y divide-[var(--creed-border)] border-t border-[var(--creed-border)]">
-                  {versions.map((version, index) => (
-                    <VersionRow
-                      key={version.id}
-                      version={version}
-                      previousContent={versions[index + 1]?.content ?? ""}
-                      person={resolvePerson(version.authorUserId, version.authorAgentLabel)}
-                      isCurrent={index === 0}
-                      expanded={expandedVersion === version.id}
-                      reverting={revertingVersion === version.id}
-                      onToggle={() =>
-                        setExpandedVersion((current) => (current === version.id ? null : version.id))
-                      }
-                      onRevert={() => void revertTo(version.id)}
-                    />
-                  ))}
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-        </div>
+        <DocumentVersionHistoryPill
+          versions={versions}
+          historyOpen={historyOpen}
+          expandedVersion={expandedVersion}
+          revertingVersion={revertingVersion}
+          resolvePerson={resolvePerson}
+          onToggleHistory={() => setHistoryOpen((open) => !open)}
+          onToggleVersion={(versionId) =>
+            setExpandedVersion((current) => (current === versionId ? null : versionId))
+          }
+          onRevert={(versionId) => void revertTo(versionId)}
+        />
       ) : null}
+    </div>
+  );
+}
+
+function DocumentVersionHistoryPill({
+  versions,
+  historyOpen,
+  expandedVersion,
+  revertingVersion,
+  resolvePerson,
+  onToggleHistory,
+  onToggleVersion,
+  onRevert,
+}: {
+  versions: DocumentVersion[];
+  historyOpen: boolean;
+  expandedVersion: string | null;
+  revertingVersion: string | null;
+  resolvePerson: (authorUserId: string | null, agentLabel: string | null) => Person;
+  onToggleHistory: () => void;
+  onToggleVersion: (versionId: string) => void;
+  onRevert: (versionId: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="inline-flex items-center gap-1 rounded-[16px] border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1.5 shadow-[0_8px_24px_rgba(28,28,26,0.04)]">
+        <button
+          type="button"
+          onClick={onToggleHistory}
+          aria-expanded={historyOpen}
+          className="group/trigger inline-flex h-7 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-[var(--creed-text-secondary)] outline-none transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
+        >
+          <History
+            className={cn(
+              "h-3.5 w-3.5 text-[var(--creed-text-tertiary)] transition-colors duration-200 group-hover/trigger:text-[var(--creed-text-primary)]",
+              historyOpen ? "text-[var(--creed-text-primary)]" : ""
+            )}
+          />
+          <span className="hidden sm:inline">Version history</span>
+          <span className="sm:hidden">History</span>
+          <span className="text-[var(--creed-text-tertiary)]">·</span>
+          <span>
+            <span className="sm:hidden">{versions.length}</span>
+            <span className="hidden sm:inline">
+              {versions.length === 1 ? "1 version" : `${versions.length} versions`}
+            </span>
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 text-[var(--creed-text-tertiary)] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/trigger:text-[var(--creed-text-primary)]",
+              historyOpen ? "rotate-0 text-[var(--creed-text-primary)]" : "-rotate-90"
+            )}
+          />
+        </button>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {historyOpen ? (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="divide-y divide-[var(--creed-border)] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[0_8px_24px_rgba(28,28,26,0.04)]">
+              {versions.map((version, index) => (
+                <VersionRow
+                  key={version.id}
+                  version={version}
+                  previousContent={versions[index + 1]?.content ?? ""}
+                  person={resolvePerson(version.authorUserId, version.authorAgentLabel)}
+                  isCurrent={index === 0}
+                  expanded={expandedVersion === version.id}
+                  reverting={revertingVersion === version.id}
+                  onToggle={() => onToggleVersion(version.id)}
+                  onRevert={() => onRevert(version.id)}
+                />
+              ))}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1096,13 +1142,19 @@ function VersionRow({
   onToggle: () => void;
   onRevert: () => void;
 }) {
+  const parts = useMemo(
+    () => mdDiffParts(previousContent, version.content),
+    [previousContent, version.content]
+  );
+  const stats = useMemo(() => summarizeDiff(parts), [parts]);
+
   return (
-    <div className="px-4 py-2.5" data-version-row={version.id}>
-      <div className="flex items-center justify-between gap-3">
+    <div data-version-row={version.id}>
+      <div className="flex items-center gap-2 px-3 py-2">
         <button
           type="button"
           onClick={onToggle}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"
           aria-expanded={expanded}
         >
           <ChevronDown
@@ -1111,15 +1163,17 @@ function VersionRow({
               expanded ? "rotate-0" : "-rotate-90"
             )}
           />
-          <div className="min-w-0">
-            <div className="truncate text-[13px] text-[var(--creed-text-primary)]">
-              {version.summary || `Revision ${version.revision}`}
-            </div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-[var(--creed-text-secondary)]">
-              <PersonBadge person={person} />
-              <span className="text-[var(--creed-text-tertiary)]">· {relativeTime(version.createdAt)}</span>
-            </div>
-          </div>
+          <PersonBadge person={person} />
+          <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--creed-text-secondary)]">
+            {version.summary || `Revision ${version.revision}`}
+          </span>
+          <span className="hidden shrink-0 text-[var(--creed-text-tertiary)] sm:inline">
+            · {relativeTime(version.createdAt)}
+          </span>
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1.5">
+            <DiffBadge tone="added" count={stats.added} size="md" />
+            <DiffBadge tone="removed" count={stats.removed} size="md" />
+          </span>
         </button>
         {isCurrent ? (
           <span className="shrink-0 rounded-full bg-[var(--creed-surface-raised)] px-2 py-0.5 text-[11px] text-[var(--creed-text-secondary)]">
@@ -1144,10 +1198,11 @@ function VersionRow({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
-            <div className="pt-3">
+            <div className="border-t border-[var(--creed-border)]" />
+            <div className="px-3 py-3">
               <SectionGroupedDiff before={previousContent} after={version.content} />
             </div>
           </motion.div>
