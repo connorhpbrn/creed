@@ -12,12 +12,49 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  robots: {
-    index: false,
-    follow: false,
-  },
-};
+async function readPublicDocumentForShare(shareId: string) {
+  const admin = getSupabaseAdminClient();
+  return readPublicSharedDocument(admin, decodeURIComponent(shareId));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ shareId: string }>;
+}): Promise<Metadata> {
+  const { shareId } = await params;
+  const document = await readPublicDocumentForShare(shareId);
+  const title = document?.title?.trim() || "Shared document";
+  const imageUrl = `/share/${encodeURIComponent(shareId)}/opengraph-image`;
+
+  return {
+    title: { absolute: title },
+    description: "",
+    robots: {
+      index: false,
+      follow: false,
+    },
+    openGraph: {
+      type: "article",
+      title,
+      description: "",
+      images: [
+        {
+          url: imageUrl,
+          width: 1200,
+          height: 630,
+          alt: `${title} preview`,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: "",
+      images: [imageUrl],
+    },
+  };
+}
 
 export default async function PublicDocumentPage({
   params,

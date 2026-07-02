@@ -329,11 +329,6 @@ export function PublicDocumentScreen({
             <h1 className="font-heading text-[1.45rem] font-medium tracking-[0] text-[var(--creed-text-primary)] md:text-[1.8rem]">
               {document.title}
             </h1>
-            {document.description.trim() ? (
-              <p className="mt-2 max-w-2xl text-[14px] leading-6 text-[var(--creed-text-secondary)]">
-                {document.description}
-              </p>
-            ) : null}
           </header>
 
           <div className="space-y-10 md:space-y-16">
