@@ -1046,6 +1046,7 @@ const collaborationRules: HiddenInstructionContract = {
     "Read the visible profile first.",
     "Parse the private write policy before attempting any write action.",
     "Reply to the user using the profile as canonical context.",
+    "Before calling any mutation tool, compare your intended result against the latest read. If there is no visible change, do not submit it.",
     "At the end of the exchange, decide whether anything durable was learned about the user. If yes, propose a narrowly-scoped update without asking what to propose.",
   ],
   proposalContract: {
@@ -1058,7 +1059,7 @@ const collaborationRules: HiddenInstructionContract = {
       "simple confidence",
     ],
     instruction:
-      "Agents may read freely and propose narrowly-scoped updates, but they should never rewrite the visible profile markdown directly or treat it like disposable notes.",
+      "Agents may read freely and propose narrowly-scoped updates, but they should never rewrite the visible profile markdown directly, submit unchanged proposals, or treat it like disposable notes.",
   },
 };
 
@@ -1128,6 +1129,24 @@ export function sectionToMarkdown(section: CreedSection) {
     "#$1"
   );
 
+  // Block code must run before inline `<code>` handling. Otherwise the code
+  // child inside `<pre><code>` is turned into inline-backtick markdown first,
+  // which corrupts Mermaid blocks when an unrelated editor save serializes the
+  // document.
+  text = text.replace(
+    /<pre[^>]*data-type="mermaid"[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/g,
+    (_match, body: string) =>
+      `\n\`\`\`mermaid\n${decodeEntities(body).trim()}\n\`\`\`\n`
+  );
+
+  // Fenced code blocks. Keep the contents verbatim; if the editor stored a
+  // language hint as a class, surface it on the opening fence.
+  text = text.replace(
+    /<pre[^>]*>\s*<code(?:\s+class="(?:language-)?([a-zA-Z0-9_-]+)")?[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/g,
+    (_match, lang: string | undefined, body: string) =>
+      `\n\`\`\`${lang ?? ""}\n${decodeEntities(body).trimEnd().replace(/^\n+/, "")}\n\`\`\`\n`
+  );
+
   // Inline formatting - convert rich-text spans to their markdown
   // equivalents BEFORE the generic stripTags pass runs at the end of
   // this function. Without these conversions, bold / italic / links /
@@ -1139,9 +1158,8 @@ export function sectionToMarkdown(section: CreedSection) {
   //
   // Order matters: inline `<code>` runs FIRST so we don't accidentally
   // re-process its inner text as emphasis. Links run before emphasis so
-  // the `[text](url)` brackets don't get nibbled. Block code already
-  // ran above (the `<pre><code>` fence handler), so by the time we
-  // get here the only `<code>` left is the inline variety.
+  // the `[text](url)` brackets don't get nibbled. Block code has already
+  // run, so by the time we get here the only `<code>` left is inline.
   text = text.replace(
     /<code\b[^>]*>([\s\S]*?)<\/code>/g,
     (_match, body: string) => `\`${stripTags(body).trim()}\``
@@ -1156,24 +1174,6 @@ export function sectionToMarkdown(section: CreedSection) {
   text = text.replace(/<(?:s|del|strike)\b[^>]*>([\s\S]*?)<\/(?:s|del|strike)>/g, "~~$1~~");
   text = text.replace(/<mark\b[^>]*>([\s\S]*?)<\/mark>/g, "==$1==");
   text = text.replace(/<u\b[^>]*>([\s\S]*?)<\/u>/g, "__$1__");
-
-  // Mermaid diagrams: a dedicated block node rendered from a ```mermaid fence.
-  // Must run BEFORE the generic fenced-code handler below (which would
-  // otherwise emit a language-less ``` fence and lose the mermaid hint). GitHub
-  // renders these natively after a publish. See rich-text.ts (the inverse).
-  text = text.replace(
-    /<pre[^>]*data-type="mermaid"[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/g,
-    (_match, body: string) =>
-      `\n\`\`\`mermaid\n${decodeEntities(body).trim()}\n\`\`\`\n`
-  );
-
-  // Fenced code blocks. Keep the contents verbatim; if the editor stored a
-  // language hint as a class, surface it on the opening fence.
-  text = text.replace(
-    /<pre[^>]*>\s*<code(?:\s+class="(?:language-)?([a-zA-Z0-9_-]+)")?[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/g,
-    (_match, lang: string | undefined, body: string) =>
-      `\n\`\`\`${lang ?? ""}\n${decodeEntities(body).trimEnd().replace(/^\n+/, "")}\n\`\`\`\n`
-  );
 
   // Tables - a `<table>` of `<tr>`/`<th>`/`<td>` becomes a GFM pipe table.
   // Runs before the generic list / paragraph strippers so a cell's inner
@@ -1508,6 +1508,8 @@ function buildHiddenAgentGuidanceMarkdown(
       "- `creed_get_recent_activity({ limit?, sinceISO? })` - see what other agents recently did. Useful to avoid duplicate proposals.",
       "",
       "All mutation tools take flat parameters, do NOT ask you to pick a mode, and route to direct-edit or proposal automatically based on the user's approval setting. Errors include the list of valid section IDs and accents so you can self-correct without re-reading docs.",
+      "Before submitting any mutation, compare the latest section/document you read with the content you intend to send. If the rendered text would not change, do not submit. Creed rejects no-op proposals and edits.",
+      "When updating existing content, preserve all unchanged Markdown exactly and make the smallest targeted edit. Do not re-upload, reorder, or reformat an entire section or document just to make a small change.",
       "",
       "Two older tools also exist (`propose_creed_update` and `direct_edit_creed`). They still work, but require nested `draft.kind` / `operation` discriminators. Prefer the focused tools above. If you do use the older tools, remember: when approval is on, `direct_edit_creed` is blocked at the server and `propose_creed_update` is the only path - even for delete / rename / recolor / reorder.",
       "",

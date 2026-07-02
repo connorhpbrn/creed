@@ -19,6 +19,7 @@ import type { WorkspaceUser } from "@/lib/document-collaboration";
 import type { DocumentComment } from "@/lib/document-collaboration";
 import type { SharedDocument } from "@/lib/shared-documents";
 import { markdownToRichHtml } from "@/lib/rich-text";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { MentionTextarea } from "@/components/creed/mention-textarea";
 import { cn } from "@/lib/utils";
 
@@ -69,7 +70,7 @@ type ProposalComment = {
 type DocumentVersion = {
   id: string;
   revision: number;
-  content: string;
+  content?: string;
   actorType: ActorType;
   authorUserId: string | null;
   authorAgentLabel: string | null;
@@ -925,6 +926,9 @@ export function DocumentReviewPanel({
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
+  const [versionContents, setVersionContents] = useState<Record<string, string>>({});
+  const [loadingVersion, setLoadingVersion] = useState<string | null>(null);
+  const [versionContentErrors, setVersionContentErrors] = useState<Record<string, string>>({});
   const [busyProposal, setBusyProposal] = useState<string | null>(null);
   const [revertingVersion, setRevertingVersion] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -951,22 +955,6 @@ export function DocumentReviewPanel({
     };
   }, [onHeightChange]);
 
-  // When an activity item asks to focus a version, open history, expand that
-  // version's diff, and scroll it into view. Waits for `versions` to load so a
-  // just-clicked event resolves once the list is fetched.
-  useEffect(() => {
-    if (!focusVersionId) return;
-    if (!versions.some((version) => version.id === focusVersionId)) return;
-    setHistoryOpen(true);
-    setExpandedVersion(focusVersionId);
-    const timer = window.setTimeout(() => {
-      const selector = `[data-version-row="${(window.CSS?.escape ?? ((v: string) => v))(focusVersionId)}"]`;
-      rootRef.current?.querySelector(selector)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      onFocusVersionHandled?.();
-    }, 340);
-    return () => window.clearTimeout(timer);
-  }, [focusVersionId, versions, onFocusVersionHandled]);
-
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
 
   const resolvePerson = useCallback(
@@ -981,35 +969,45 @@ export function DocumentReviewPanel({
     [usersById]
   );
 
-  const refresh = useCallback(async () => {
+  const refreshProposals = useCallback(async () => {
     try {
-      const [proposalsRes, versionsRes] = await Promise.all([
-        fetch(`/api/app/documents/${encodeURIComponent(documentId)}/proposals`, { cache: "no-store" }),
-        fetch(`/api/app/documents/${encodeURIComponent(documentId)}/versions`, { cache: "no-store" }),
-      ]);
+      const proposalsRes = await fetch(`/api/app/documents/${encodeURIComponent(documentId)}/proposals`, {
+        cache: "no-store",
+      });
       if (proposalsRes.ok) {
         const payload = (await proposalsRes.json()) as { proposals?: DocumentProposal[] };
         setProposals(payload.proposals ?? []);
         onProposalsChange?.(payload.proposals ?? []);
       }
+    } catch {
+      // Non-fatal: leave the last known list in place.
+    }
+  }, [documentId, onProposalsChange]);
+
+  const refreshVersions = useCallback(async () => {
+    try {
+      const versionsRes = await fetch(`/api/app/documents/${encodeURIComponent(documentId)}/versions`, {
+        cache: "no-store",
+      });
       if (versionsRes.ok) {
         const payload = (await versionsRes.json()) as { versions?: DocumentVersion[] };
         setVersions(payload.versions ?? []);
       }
     } catch {
-      // Non-fatal: leave the last known lists in place.
+      // Non-fatal: leave the last known list in place.
     }
-  }, [documentId, onProposalsChange]);
+  }, [documentId]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh, revision, refreshSignal]);
+    void refreshProposals();
+    void refreshVersions();
+  }, [refreshProposals, refreshVersions, revision, refreshSignal]);
 
   useEffect(() => {
     let interval: number | null = null;
     function start() {
       stop();
-      interval = window.setInterval(() => void refresh(), 30_000);
+      interval = window.setInterval(() => void refreshProposals(), 5_000);
     }
     function stop() {
       if (interval !== null) {
@@ -1018,12 +1016,14 @@ export function DocumentReviewPanel({
       }
     }
     function onFocus() {
-      void refresh();
+      void refreshProposals();
+      void refreshVersions();
       start();
     }
     function onVisibility() {
       if (document.visibilityState === "visible") {
-        void refresh();
+        void refreshProposals();
+        void refreshVersions();
         start();
       } else {
         stop();
@@ -1037,7 +1037,105 @@ export function DocumentReviewPanel({
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [refresh]);
+  }, [refreshProposals, refreshVersions]);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      .channel(`document-proposals-${documentId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "creed_document_proposals",
+          filter: `document_id=eq.${documentId}`,
+        },
+        () => {
+          void refreshProposals();
+          void refreshVersions();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [documentId, refreshProposals, refreshVersions]);
+
+  const loadVersionContent = useCallback(
+    async (versionId: string) => {
+      if (Object.prototype.hasOwnProperty.call(versionContents, versionId)) return;
+      setLoadingVersion(versionId);
+      setVersionContentErrors((current) => {
+        const next = { ...current };
+        delete next[versionId];
+        return next;
+      });
+      try {
+        const response = await fetch(
+          `/api/app/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}`,
+          { cache: "no-store" }
+        );
+        const payload = (await response.json()) as { version?: DocumentVersion; error?: string };
+        if (!response.ok || !payload.version) {
+          throw new Error(payload.error || "Could not load this version.");
+        }
+        setVersionContents((current) => ({
+          ...current,
+          [versionId]: payload.version?.content ?? "",
+        }));
+      } catch (error) {
+        setVersionContentErrors((current) => ({
+          ...current,
+          [versionId]: error instanceof Error ? error.message : "Could not load this version.",
+        }));
+      } finally {
+        setLoadingVersion((current) => (current === versionId ? null : current));
+      }
+    },
+    [documentId, versionContents]
+  );
+
+  const loadVersionPair = useCallback(
+    async (versionId: string) => {
+      const index = versions.findIndex((version) => version.id === versionId);
+      if (index === -1) return;
+      const previousId = versions[index + 1]?.id;
+      await Promise.all([
+        loadVersionContent(versionId),
+        previousId ? loadVersionContent(previousId) : Promise.resolve(),
+      ]);
+    },
+    [loadVersionContent, versions]
+  );
+
+  const toggleVersion = useCallback(
+    (versionId: string) => {
+      setExpandedVersion((current) => {
+        const next = current === versionId ? null : versionId;
+        if (next) void loadVersionPair(next);
+        return next;
+      });
+    },
+    [loadVersionPair]
+  );
+
+  // When an activity item asks to focus a version, open history, expand that
+  // version's diff, load the body pair, and scroll it into view.
+  useEffect(() => {
+    if (!focusVersionId) return;
+    if (!versions.some((version) => version.id === focusVersionId)) return;
+    setHistoryOpen(true);
+    setExpandedVersion(focusVersionId);
+    void loadVersionPair(focusVersionId);
+    const timer = window.setTimeout(() => {
+      const selector = `[data-version-row="${(window.CSS?.escape ?? ((v: string) => v))(focusVersionId)}"]`;
+      rootRef.current?.querySelector(selector)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      onFocusVersionHandled?.();
+    }, 340);
+    return () => window.clearTimeout(timer);
+  }, [focusVersionId, loadVersionPair, versions, onFocusVersionHandled]);
 
   const resolveProposal = useCallback(
     async (id: string, action: "accept" | "reject", options: ResolveProposalOptions = {}) => {
@@ -1060,14 +1158,14 @@ export function DocumentReviewPanel({
           onDocumentUpdated(payload.document);
         }
         toast.success(action === "accept" ? "Proposal accepted" : "Proposal rejected");
-        await refresh();
+        await Promise.all([refreshProposals(), refreshVersions()]);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : `Could not ${action} the proposal.`);
       } finally {
         setBusyProposal(null);
       }
     },
-    [documentId, onDocumentUpdated, refresh]
+    [documentId, onDocumentUpdated, refreshProposals, refreshVersions]
   );
 
   async function revertTo(versionId: string) {
@@ -1091,7 +1189,7 @@ export function DocumentReviewPanel({
       } else {
         toast.success("Revert proposed for review");
       }
-      await refresh();
+      await Promise.all([refreshProposals(), refreshVersions()]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not revert.");
     } finally {
@@ -1125,12 +1223,13 @@ export function DocumentReviewPanel({
           versions={versions}
           historyOpen={historyOpen}
           expandedVersion={expandedVersion}
+          versionContents={versionContents}
+          loadingVersion={loadingVersion}
+          versionContentErrors={versionContentErrors}
           revertingVersion={revertingVersion}
           resolvePerson={resolvePerson}
           onToggleHistory={() => setHistoryOpen((open) => !open)}
-          onToggleVersion={(versionId) =>
-            setExpandedVersion((current) => (current === versionId ? null : versionId))
-          }
+          onToggleVersion={toggleVersion}
           onRevert={(versionId) => void revertTo(versionId)}
         />
       ) : null}
@@ -1142,6 +1241,9 @@ function DocumentVersionHistoryPill({
   versions,
   historyOpen,
   expandedVersion,
+  versionContents,
+  loadingVersion,
+  versionContentErrors,
   revertingVersion,
   resolvePerson,
   onToggleHistory,
@@ -1151,6 +1253,9 @@ function DocumentVersionHistoryPill({
   versions: DocumentVersion[];
   historyOpen: boolean;
   expandedVersion: string | null;
+  versionContents: Record<string, string>;
+  loadingVersion: string | null;
+  versionContentErrors: Record<string, string>;
   revertingVersion: string | null;
   resolvePerson: (authorUserId: string | null, agentLabel: string | null) => Person;
   onToggleHistory: () => void;
@@ -1200,19 +1305,32 @@ function DocumentVersionHistoryPill({
             className="overflow-hidden"
           >
             <div className="creed-scrollbar max-h-[60vh] divide-y divide-[var(--creed-border)] overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[0_8px_24px_rgba(28,28,26,0.04)]">
-              {versions.map((version, index) => (
-                <VersionRow
-                  key={version.id}
-                  version={version}
-                  previousContent={versions[index + 1]?.content ?? ""}
-                  person={resolvePerson(version.authorUserId, version.authorAgentLabel)}
-                  isCurrent={index === 0}
-                  expanded={expandedVersion === version.id}
-                  reverting={revertingVersion === version.id}
-                  onToggle={() => onToggleVersion(version.id)}
-                  onRevert={() => onRevert(version.id)}
-                />
-              ))}
+              {versions.map((version, index) => {
+                const previousVersion = versions[index + 1];
+                return (
+                  <VersionRow
+                    key={version.id}
+                    version={version}
+                    content={versionContents[version.id]}
+                    previousContent={previousVersion ? versionContents[previousVersion.id] : ""}
+                    hasPreviousVersion={Boolean(previousVersion)}
+                    loadError={
+                      versionContentErrors[version.id] ||
+                      (previousVersion ? versionContentErrors[previousVersion.id] : undefined)
+                    }
+                    person={resolvePerson(version.authorUserId, version.authorAgentLabel)}
+                    isCurrent={index === 0}
+                    expanded={expandedVersion === version.id}
+                    loading={
+                      loadingVersion === version.id ||
+                      (previousVersion ? loadingVersion === previousVersion.id : false)
+                    }
+                    reverting={revertingVersion === version.id}
+                    onToggle={() => onToggleVersion(version.id)}
+                    onRevert={() => onRevert(version.id)}
+                  />
+                );
+              })}
             </div>
           </motion.div>
         ) : null}
@@ -1637,31 +1755,42 @@ function ProposalCommentThread({
 
 function VersionRow({
   version,
+  content,
   previousContent,
+  hasPreviousVersion,
+  loadError,
   person,
   isCurrent,
   expanded,
+  loading,
   reverting,
   onToggle,
   onRevert,
 }: {
   version: DocumentVersion;
-  previousContent: string;
+  content?: string;
+  previousContent?: string;
+  hasPreviousVersion: boolean;
+  loadError?: string;
   person: Person;
   isCurrent: boolean;
   expanded: boolean;
+  loading: boolean;
   reverting: boolean;
   onToggle: () => void;
   onRevert: () => void;
 }) {
+  const hasContent = typeof content === "string" && (!hasPreviousVersion || typeof previousContent === "string");
+  const before = previousContent ?? "";
+  const after = content ?? "";
   const parts = useMemo(
-    () => mdDiffParts(previousContent, version.content),
-    [previousContent, version.content]
+    () => (hasContent ? mdDiffParts(before, after) : []),
+    [after, before, hasContent]
   );
   const stats = useMemo(() => summarizeDiff(parts), [parts]);
   const impactLabel = useMemo(
-    () => versionImpactLabel(previousContent, version.content),
-    [previousContent, version.content]
+    () => (hasContent ? versionImpactLabel(before, after) : `Revision ${version.revision}`),
+    [after, before, hasContent, version.revision]
   );
 
   return (
@@ -1690,8 +1819,12 @@ function VersionRow({
             · {relativeTime(version.createdAt)}
           </span>
           <span className="ml-auto inline-flex shrink-0 items-center gap-1.5">
-            <DiffBadge tone="added" count={stats.added} size="md" />
-            <DiffBadge tone="removed" count={stats.removed} size="md" />
+            {hasContent ? (
+              <>
+                <DiffBadge tone="added" count={stats.added} size="md" />
+                <DiffBadge tone="removed" count={stats.removed} size="md" />
+              </>
+            ) : null}
           </span>
         </button>
         {isCurrent ? (
@@ -1722,7 +1855,18 @@ function VersionRow({
           >
             <div className="border-t border-[var(--creed-border)]" />
             <div className="px-3 py-3">
-              <SectionGroupedDiff before={previousContent} after={version.content} />
+              {loadError ? (
+                <div className="rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface-raised)] px-3 py-2 text-[13px] text-[#b91c1c] dark:text-[#f87171]">
+                  {loadError}
+                </div>
+              ) : hasContent ? (
+                <SectionGroupedDiff before={before} after={after} />
+              ) : (
+                <div className="inline-flex items-center gap-2 rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface-raised)] px-3 py-2 text-[13px] text-[var(--creed-text-secondary)]">
+                  <LoaderCircle className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+                  Loading version
+                </div>
+              )}
             </div>
           </motion.div>
         ) : null}

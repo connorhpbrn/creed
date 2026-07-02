@@ -473,6 +473,12 @@ export async function POST(request: Request) {
     if (targetDenied) {
       return targetDenied;
     }
+    if (target.name.trim() === nextName) {
+      return NextResponse.json(
+        { error: "No changes to apply. The section already has that name." },
+        { status: 400 }
+      );
+    }
 
     nextSections = result.state.sections.map((section) =>
       section.id === target.id
@@ -528,6 +534,12 @@ export async function POST(request: Request) {
     const targetDenied = assertDirectAllowed(target);
     if (targetDenied) {
       return targetDenied;
+    }
+    if (target.accent === accent) {
+      return NextResponse.json(
+        { error: "No changes to apply. The section already has that accent." },
+        { status: 400 }
+      );
     }
 
     nextSections = result.state.sections.map((section) =>
@@ -616,6 +628,26 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+    }
+
+    const currentIndex = result.state.sections.findIndex((section) => section.id === target.id);
+    if (body.position === "first" && currentIndex === 0) {
+      return NextResponse.json(
+        { error: "No changes to apply. The section is already first." },
+        { status: 400 }
+      );
+    }
+    if (body.position === "last" && currentIndex === result.state.sections.length - 1) {
+      return NextResponse.json(
+        { error: "No changes to apply. The section is already last." },
+        { status: 400 }
+      );
+    }
+    if (hasAfter && result.state.sections[currentIndex - 1]?.id === body.afterSectionId) {
+      return NextResponse.json(
+        { error: "No changes to apply. The section is already in that position." },
+        { status: 400 }
+      );
     }
 
     const withoutTarget = result.state.sections.filter((section) => section.id !== target.id);

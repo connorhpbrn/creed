@@ -42,6 +42,12 @@ Agents working through MCP must:
   labelled as an agent);
 - mention a user only when their attention is actually needed (a mention in a
   pending comment only notifies once the user approves it).
+- make targeted edits only: read the latest section/document, preserve
+  unchanged Markdown exactly, and do not re-upload, reorder, or reformat a whole
+  document for a small change;
+- compare the intended content with the latest read before calling any mutation
+  tool. If there is no visible change, do not submit a proposal or edit; the MCP
+  server rejects no-op changes.
 
 Documents can reference other documents and folders inline. Use the slug from
 `creed_list_documents` / `creed_read_document`:

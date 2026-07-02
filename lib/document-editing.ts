@@ -386,6 +386,17 @@ export async function routeDocumentEdit(
     return { ok: false, code: "not-found", error: "Document not found." };
   }
 
+  const changedSections = diffMarkdownSections(document.content, input.content).filter(
+    sectionChangeHasReviewableDiff
+  );
+  if (changedSections.length === 0) {
+    return {
+      ok: false,
+      code: "invalid",
+      error: "No visible changes to apply.",
+    };
+  }
+
   const policy = await policyForActor(client, input.actorType);
 
   if (policy === "cant-edit") {

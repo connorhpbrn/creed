@@ -8,10 +8,13 @@ import {
   normalizeLegacyProposalDraft,
   normalizeLegacySectionId,
   normalizeProposalForSection,
+  type CreedSection,
   type Proposal,
+  type ProposalDraft,
 } from "@/lib/creed-data";
 import { findUserIdByProposalToken, loadCreedState, recordConnectionUsage } from "@/lib/creed-backend";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { markdownToRichHtml } from "@/lib/rich-text";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
 
@@ -19,6 +22,110 @@ type ProposalSubmission = Omit<Proposal, "timeLabel" | "status" | "accent"> & {
   accent?: Proposal["accent"];
   integration?: string;
 };
+
+function decodeHtmlText(value: string) {
+  const namedEntities: Record<string, string> = {
+    nbsp: " ",
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+  };
+
+  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, entity: string) => {
+    const lower = entity.toLowerCase();
+    if (lower.startsWith("#x")) {
+      const codePoint = Number.parseInt(lower.slice(2), 16);
+      return Number.isFinite(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : match;
+    }
+    if (lower.startsWith("#")) {
+      const codePoint = Number.parseInt(lower.slice(1), 10);
+      return Number.isFinite(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : match;
+    }
+    return namedEntities[lower] ?? match;
+  });
+}
+
+function htmlToComparableText(value: string) {
+  return decodeHtmlText(
+    value
+      .replace(/<\s*(br|hr)\s*\/?\s*>/gi, "\n")
+      .replace(/<\s*\/(p|h[1-6]|li|ul|ol|blockquote|pre|tr|table|thead|tbody|th|td|div)\s*>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function richTextDraftHtml(draft: ProposalDraft) {
+  if (draft.kind !== "rich-text") return "";
+  if (typeof draft.contentMarkdown === "string" && draft.contentMarkdown.trim()) {
+    return markdownToRichHtml(draft.contentMarkdown.trim());
+  }
+  return draft.contentHtml ?? "";
+}
+
+function noOpProposalError({
+  draft,
+  targetSection,
+  sections,
+  sectionId,
+}: {
+  draft: ProposalDraft;
+  targetSection: CreedSection | undefined;
+  sections: CreedSection[];
+  sectionId: string;
+}) {
+  if (draft.kind === "new-section" || draft.kind === "delete-section") {
+    return null;
+  }
+
+  if (!targetSection) {
+    return null;
+  }
+
+  if (draft.kind === "rich-text") {
+    const before = htmlToComparableText(targetSection.content);
+    const after = htmlToComparableText(richTextDraftHtml(draft));
+    return before === after
+      ? "No changes to propose. Read the latest content and submit only a targeted edit that changes visible content."
+      : null;
+  }
+
+  if (draft.kind === "rename-section") {
+    return targetSection.name.trim() === draft.name.trim()
+      ? "No changes to propose. The section already has that name."
+      : null;
+  }
+
+  if (draft.kind === "recolor-section") {
+    return targetSection.accent === draft.accent
+      ? "No changes to propose. The section already has that accent."
+      : null;
+  }
+
+  if (draft.kind === "reorder-section") {
+    const visibleSections = sections.filter((section) => !section.archived);
+    const currentIndex = visibleSections.findIndex((section) => section.id === sectionId);
+    if (currentIndex === -1) return null;
+    if (draft.position === "first" && currentIndex === 0) {
+      return "No changes to propose. The section is already first.";
+    }
+    if (draft.position === "last" && currentIndex === visibleSections.length - 1) {
+      return "No changes to propose. The section is already last.";
+    }
+    if (draft.afterSectionId && visibleSections[currentIndex - 1]?.id === draft.afterSectionId) {
+      return "No changes to propose. The section is already in that position.";
+    }
+  }
+
+  return null;
+}
 
 export async function POST(request: Request) {
   if (!isSupabaseAdminConfigured()) {
@@ -292,6 +399,16 @@ export async function POST(request: Request) {
     },
     targetSection
   );
+
+  const noOpError = noOpProposalError({
+    draft: normalizedProposal.draft,
+    targetSection,
+    sections: state.sections,
+    sectionId: body.sectionId,
+  });
+  if (noOpError) {
+    return NextResponse.json({ error: noOpError }, { status: 400 });
+  }
 
   const now = new Date().toISOString();
   const baseRevision = body.sectionId === "new-section" ? null : (state.sectionRevisions[body.sectionId] ?? null);

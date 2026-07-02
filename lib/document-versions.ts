@@ -19,6 +19,10 @@ export type DocumentVersion = {
   createdAt: string;
 };
 
+export type DocumentVersionSummary = Omit<DocumentVersion, "content"> & {
+  content?: string;
+};
+
 type DocumentVersionRow = {
   id: string;
   document_id: string;
@@ -101,15 +105,28 @@ export async function appendDocumentVersion(
 
 export async function listDocumentVersions(
   client: unknown,
-  documentId: string
-): Promise<DocumentVersion[]> {
+  documentId: string,
+  options: { includeContent?: boolean; limit?: number } = {}
+): Promise<DocumentVersionSummary[]> {
   const db = client as SupabaseLikeClient;
-  const { data, error } = (await db
+  const columns = options.includeContent
+    ? VERSION_COLUMNS
+    : VERSION_COLUMNS.split(", ")
+        .filter((column) => column !== "content")
+        .join(", ");
+
+  let query = db
     .from("creed_document_versions")
-    .select(VERSION_COLUMNS)
+    .select(columns)
     .eq("document_id", documentId)
-    .order("revision", { ascending: false })) as {
-    data: DocumentVersionRow[] | null;
+    .order("revision", { ascending: false });
+
+  if (options.limit && options.limit > 0) {
+    query = query.limit(options.limit);
+  }
+
+  const { data, error } = (await query) as {
+    data: Array<Partial<DocumentVersionRow> & Omit<DocumentVersionRow, "content">> | null;
     error: { message: string } | null;
   };
 
@@ -117,7 +134,12 @@ export async function listDocumentVersions(
     throw new Error(error.message || "Could not load document versions.");
   }
 
-  return (data ?? []).map(mapVersion);
+  return (data ?? []).map((row) => {
+    const version = mapVersion({ ...row, content: row.content ?? "" });
+    if (options.includeContent) return version;
+    const { content: _content, ...summary } = version;
+    return summary;
+  });
 }
 
 export async function readDocumentVersion(
