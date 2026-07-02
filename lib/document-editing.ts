@@ -65,6 +65,9 @@ export type DocumentProposal = {
   sectionStatus: SectionChangeStatus | null;
   sectionBefore: string | null;
   sectionAfter: string | null;
+  sectionProposedIndex: number | null;
+  sectionPreviousKey: string | null;
+  sectionNextKey: string | null;
 };
 
 type DocumentProposalRow = {
@@ -148,6 +151,9 @@ function sectionFromDraft(draft: unknown): SectionChange | null {
     status: (section.status as SectionChangeStatus) ?? "modified",
     before: typeof section.before === "string" ? section.before : "",
     after: typeof section.after === "string" ? section.after : "",
+    proposedIndex: typeof section.proposedIndex === "number" ? section.proposedIndex : null,
+    previousKey: typeof section.previousKey === "string" ? section.previousKey : null,
+    nextKey: typeof section.nextKey === "string" ? section.nextKey : null,
   };
 }
 
@@ -175,7 +181,35 @@ function mapProposal(row: DocumentProposalRow): DocumentProposal {
     sectionStatus: section ? section.status : null,
     sectionBefore: section ? section.before : null,
     sectionAfter: section ? section.after : null,
+    sectionProposedIndex: section ? section.proposedIndex : null,
+    sectionPreviousKey: section ? section.previousKey : null,
+    sectionNextKey: section ? section.nextKey : null,
   };
+}
+
+function compareProposalReviewOrder(a: DocumentProposal, b: DocumentProposal) {
+  if (a.batchId && b.batchId && a.batchId === b.batchId) {
+    const aIndex = a.sectionProposedIndex ?? Number.MAX_SAFE_INTEGER;
+    const bIndex = b.sectionProposedIndex ?? Number.MAX_SAFE_INTEGER;
+    if (aIndex !== bIndex) return aIndex - bIndex;
+  }
+
+  const created = a.createdAt.localeCompare(b.createdAt);
+  if (created !== 0) return created;
+
+  const aGroup = a.batchId ?? a.id;
+  const bGroup = b.batchId ?? b.id;
+  if (aGroup !== bGroup) return aGroup.localeCompare(bGroup);
+
+  const aIndex = a.sectionProposedIndex ?? Number.MAX_SAFE_INTEGER;
+  const bIndex = b.sectionProposedIndex ?? Number.MAX_SAFE_INTEGER;
+  if (aIndex !== bIndex) return aIndex - bIndex;
+
+  return a.id.localeCompare(b.id);
+}
+
+function sortProposalsForReview(proposals: DocumentProposal[]) {
+  return [...proposals].sort(compareProposalReviewOrder);
 }
 
 // Apply a whole-content change to a document (guarded on `expectedRevision`),
@@ -224,8 +258,8 @@ async function applyDocumentContent(
 
 // Split a whole-content submission into one proposal per changed Markdown
 // section (all sharing a batchId) so each section can be reviewed on its own.
-// Returns the created batch, oldest-key-first. When nothing changed, returns an
-// empty batch (the caller treats that as "no proposal to record").
+// Returns the created batch in proposed document order. When nothing changed,
+// returns an empty batch (the caller treats that as "no proposal to record").
 export async function createDocumentProposal(
   client: unknown,
   input: {
@@ -295,7 +329,7 @@ export async function createDocumentProposal(
     },
   });
 
-  return { ok: true, value: data.map(mapProposal) };
+  return { ok: true, value: sortProposalsForReview(data.map(mapProposal)) };
 }
 
 export async function listDocumentProposals(
@@ -319,7 +353,7 @@ export async function listDocumentProposals(
     throw new Error(error.message || "Could not load proposals.");
   }
 
-  return (data ?? []).map(mapProposal);
+  return sortProposalsForReview((data ?? []).map(mapProposal));
 }
 
 // The single policy-gated entry point for a whole-content document edit.

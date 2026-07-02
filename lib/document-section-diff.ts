@@ -28,6 +28,9 @@ export type SectionChange = {
   status: SectionChangeStatus;
   before: string;
   after: string;
+  proposedIndex: number | null;
+  previousKey: string | null;
+  nextKey: string | null;
 };
 
 const HEADING_RE = /^(#{1,6})\s+(.*\S)\s*$/;
@@ -121,8 +124,10 @@ export function diffMarkdownSections(before: string, after: string): SectionChan
 
   const changes: SectionChange[] = [];
 
-  for (const section of afterSections) {
+  for (const [index, section] of afterSections.entries()) {
     const previous = beforeByKey.get(section.key);
+    const previousKey = afterSections[index - 1]?.key ?? null;
+    const nextKey = afterSections[index + 1]?.key ?? null;
     if (!previous) {
       changes.push({
         key: section.key,
@@ -131,6 +136,9 @@ export function diffMarkdownSections(before: string, after: string): SectionChan
         status: "added",
         before: "",
         after: section.body,
+        proposedIndex: index,
+        previousKey,
+        nextKey,
       });
       continue;
     }
@@ -143,10 +151,13 @@ export function diffMarkdownSections(before: string, after: string): SectionChan
       status,
       before: previous.body,
       after: section.body,
+      proposedIndex: index,
+      previousKey,
+      nextKey,
     });
   }
 
-  for (const section of beforeSections) {
+  for (const [index, section] of beforeSections.entries()) {
     if (afterKeys.has(section.key)) continue;
     changes.push({
       key: section.key,
@@ -155,6 +166,9 @@ export function diffMarkdownSections(before: string, after: string): SectionChan
       status: "removed",
       before: section.body,
       after: "",
+      proposedIndex: afterSections.length + index,
+      previousKey: beforeSections[index - 1]?.key ?? null,
+      nextKey: beforeSections[index + 1]?.key ?? null,
     });
   }
 
@@ -175,18 +189,54 @@ export type ApplySectionResult =
   | { ok: false; reason: "conflict" };
 
 // Insert a brand-new section into `content`. A preamble (level 0) goes to the
-// top; every other section is appended to the end. Placement is deliberately
-// simple: per-section acceptance is about landing the section's text, not about
-// reproducing the author's exact ordering, which the whole-content diff already
-// shows in review.
-function insertSection(content: string, change: Pick<SectionChange, "level" | "after">): string {
+// top; every other section lands next to the nearest proposed sibling that
+// still exists in the live document, so accepting added sections out of order
+// does not scramble the document's reading order.
+function joinMarkdownBlocks(head: string, middle: string, tail: string) {
+  return [
+    head.replace(/\s+$/, ""),
+    middle.replace(/\s+$/, ""),
+    tail.replace(/^\s+/, "").replace(/\s+$/, ""),
+  ]
+    .filter((block) => block.length > 0)
+    .join("\n\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/\s+$/, "");
+}
+
+function insertSection(
+  content: string,
+  change: Pick<SectionChange, "level" | "after" | "previousKey" | "nextKey">
+): string {
   const sectionText = change.after.replace(/\s+$/, "");
   if (change.level === 0) {
     const rest = content.replace(/^\s+/, "");
     return rest.length ? `${sectionText}\n\n${rest}` : sectionText;
   }
-  const head = content.replace(/\s+$/, "");
-  return head.length ? `${head}\n\n${sectionText}` : sectionText;
+
+  const { lines, spans } = scanSectionSpans(content);
+  const findSpan = (key: string | null) =>
+    key ? spans.find((span) => !span.isEmptyPreamble && span.key === key) : undefined;
+
+  const previous = findSpan(change.previousKey);
+  if (previous) {
+    return joinMarkdownBlocks(
+      lines.slice(0, previous.endLine).join("\n"),
+      sectionText,
+      lines.slice(previous.endLine).join("\n")
+    );
+  }
+
+  const next = findSpan(change.nextKey);
+  if (next) {
+    return joinMarkdownBlocks(
+      lines.slice(0, next.startLine).join("\n"),
+      sectionText,
+      lines.slice(next.startLine).join("\n")
+    );
+  }
+
+  return joinMarkdownBlocks(content, sectionText, "");
 }
 
 // Replace (or, when `replacement` is null, remove) a single section identified

@@ -36,6 +36,7 @@ function setPolicy(
 
 const VERSIONS = "creed_document_versions";
 const DOCS = "creed_documents";
+const PROPOSALS = "creed_document_proposals";
 
 describe("Property 1: policy determinism", () => {
   const actorTypes: ActorType[] = ["human", "agent"];
@@ -308,7 +309,7 @@ describe("Property 8: attribution preservation", () => {
     expect(versionRow.source_proposal_id).toBe(proposalId);
 
     // The accepting member is recorded as the resolver, not the author.
-    const proposalRow = client.rows("creed_document_proposals")[0];
+    const proposalRow = client.rows(PROPOSALS)[0];
     expect(proposalRow.resolved_by).toBe("accepting-user-B");
   });
 });
@@ -385,6 +386,43 @@ describe("Per-section proposals (batching + independent accept)", () => {
     expect(proposals.every((p) => p.kind === "document-section")).toBe(true);
   });
 
+  it("lists proposals in proposed document order within a batch", async () => {
+    const before = ["# Doc", "Intro.", "", "## Alpha", "A.", "", "## Omega", "Z."].join("\n");
+    const after = [
+      "# Doc",
+      "Intro.",
+      "",
+      "## Alpha",
+      "A.",
+      "",
+      "## Beta",
+      "B.",
+      "",
+      "## Gamma",
+      "G.",
+      "",
+      "## Omega",
+      "Z.",
+    ].join("\n");
+    const { client, documentId } = createFakeClientWithDocument({ content: before });
+    setPolicy(client, { human: "propose" });
+
+    const proposed = await routeDocumentEdit(client, {
+      documentId,
+      actorType: "human",
+      author: { userId: "author-A" },
+      content: after,
+      expectedRevision: 1,
+      summary: "add ordered sections",
+    });
+    if (!(proposed.ok && proposed.outcome === "proposed")) throw new Error("setup failed");
+    expect(proposed.proposals.map((proposal) => proposal.sectionHeading)).toEqual(["Beta", "Gamma"]);
+
+    client.seed(PROPOSALS, client.rows(PROPOSALS).reverse());
+    const listed = await listDocumentProposals(client, documentId);
+    expect(listed.map((proposal) => proposal.sectionHeading)).toEqual(["Beta", "Gamma"]);
+  });
+
   it("accepts each section independently, advancing the document once per accept", async () => {
     const { client, documentId, proposals } = await proposeBoth();
     const goals = proposals.find((p) => p.sectionHeading === "Goals")!;
@@ -420,5 +458,68 @@ describe("Per-section proposals (batching + independent accept)", () => {
     expect(client.rows(DOCS)[0].content).toContain("Old goal.");
     expect(client.rows(DOCS)[0].content).toContain("Did work.");
     expect(client.count(VERSIONS)).toBe(1);
+  });
+
+  it("preserves proposed document order when added sections are accepted out of order", async () => {
+    const before = ["# Doc", "Intro.", "", "## Alpha", "A.", "", "## Omega", "Z."].join("\n");
+    const after = [
+      "# Doc",
+      "Intro.",
+      "",
+      "## Alpha",
+      "A.",
+      "",
+      "## Beta",
+      "B.",
+      "",
+      "## Gamma",
+      "G.",
+      "",
+      "## Omega",
+      "Z.",
+    ].join("\n");
+    const { client, documentId } = createFakeClientWithDocument({ content: before });
+    setPolicy(client, { human: "propose" });
+
+    const proposed = await routeDocumentEdit(client, {
+      documentId,
+      actorType: "human",
+      author: { userId: "author-A" },
+      content: after,
+      expectedRevision: 1,
+      summary: "add ordered sections",
+    });
+    if (!(proposed.ok && proposed.outcome === "proposed")) throw new Error("setup failed");
+
+    const beta = proposed.proposals.find((p) => p.sectionHeading === "Beta")!;
+    const gamma = proposed.proposals.find((p) => p.sectionHeading === "Gamma")!;
+
+    const first = await acceptDocumentProposal(client, {
+      documentId,
+      proposalId: gamma.id,
+      actorUserId: "u-B",
+    });
+    expect(first.ok).toBe(true);
+    expect(client.rows(DOCS)[0].content).toBe([
+      "# Doc",
+      "Intro.",
+      "",
+      "## Alpha",
+      "A.",
+      "",
+      "## Gamma",
+      "G.",
+      "",
+      "## Omega",
+      "Z.",
+    ].join("\n"));
+
+    const second = await acceptDocumentProposal(client, {
+      documentId,
+      proposalId: beta.id,
+      actorUserId: "u-B",
+    });
+    expect(second.ok).toBe(true);
+    expect(client.rows(DOCS)[0].content).toBe(after);
   });
 });

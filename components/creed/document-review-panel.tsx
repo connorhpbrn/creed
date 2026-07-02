@@ -50,6 +50,9 @@ export type DocumentProposal = {
   sectionStatus: SectionStatus | null;
   sectionBefore: string | null;
   sectionAfter: string | null;
+  sectionProposedIndex: number | null;
+  sectionPreviousKey: string | null;
+  sectionNextKey: string | null;
 };
 
 type ProposalComment = {
@@ -259,6 +262,13 @@ function SectionGroupedDiff({ before, after }: { before: string; after: string }
       ))}
     </div>
   );
+}
+
+function versionImpactLabel(before: string, after: string) {
+  const changed = diffMarkdownSections(before, after).filter((change) => change.status !== "unchanged");
+  if (changed.length === 0) return "No section change";
+  if (changed.length === 1) return sectionChangeLabel(changed[0]);
+  return `${changed.length} sections`;
 }
 
 // The before/after a proposal represents: a section proposal carries its own
@@ -691,7 +701,7 @@ function DocumentVersionHistoryPill({
             transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
-            <div className="divide-y divide-[var(--creed-border)] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[0_8px_24px_rgba(28,28,26,0.04)]">
+            <div className="creed-scrollbar max-h-[60vh] divide-y divide-[var(--creed-border)] overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[0_8px_24px_rgba(28,28,26,0.04)]">
               {versions.map((version, index) => (
                 <VersionRow
                   key={version.id}
@@ -1147,6 +1157,10 @@ function VersionRow({
     [previousContent, version.content]
   );
   const stats = useMemo(() => summarizeDiff(parts), [parts]);
+  const impactLabel = useMemo(
+    () => versionImpactLabel(previousContent, version.content),
+    [previousContent, version.content]
+  );
 
   return (
     <div data-version-row={version.id}>
@@ -1164,6 +1178,9 @@ function VersionRow({
             )}
           />
           <PersonBadge person={person} />
+          <span className="max-w-[12rem] shrink-0 truncate text-[13px] text-[var(--creed-text-primary)]">
+            {impactLabel}
+          </span>
           <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--creed-text-secondary)]">
             {version.summary || `Revision ${version.revision}`}
           </span>

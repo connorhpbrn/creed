@@ -59,6 +59,14 @@ describe("diffMarkdownSections", () => {
     expect(changes.find((c) => c.heading === "Routines")?.status).toBe("added");
   });
 
+  it("records proposed reading order and neighboring section keys", () => {
+    const next = ["## Goals", "Old goal.", "", "## Routines", "Mornings.", "", "## Work", "Same work."].join("\n");
+    const routines = diffMarkdownSections(base, next).find((c) => c.heading === "Routines");
+    expect(routines?.proposedIndex).toBe(1);
+    expect(routines?.previousKey).toBe("h2:goals");
+    expect(routines?.nextKey).toBe("h2:work");
+  });
+
   it("detects a removed section and preserves its before text", () => {
     const next = ["## Goals", "Old goal."].join("\n");
     const changes = diffMarkdownSections(base, next);
@@ -111,6 +119,27 @@ describe("applySectionChange", () => {
     const result = applySectionChange(doc, change(doc, after));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.content).toContain("## Routines");
+  });
+
+  it("inserts a new section at its proposed position before an existing sibling", () => {
+    const before = ["# Doc", "Intro.", "", "## Alpha", "A.", "", "## Omega", "Z."].join("\n");
+    const after = [
+      "# Doc",
+      "Intro.",
+      "",
+      "## Alpha",
+      "A.",
+      "",
+      "## Beta",
+      "B.",
+      "",
+      "## Omega",
+      "Z.",
+    ].join("\n");
+    const target = change(before, after);
+    const result = applySectionChange(before, target);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.content).toBe(after);
   });
 
   it("removes a section", () => {

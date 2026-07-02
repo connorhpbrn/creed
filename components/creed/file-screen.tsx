@@ -2693,27 +2693,6 @@ export function FileScreen({
                   />
                 ) : null}
 
-                {documentMode && currentDocument ? (
-                  <DocumentReviewPanel
-                    documentId={currentDocument.id}
-                    revision={currentDocument.revision}
-                    currentContent={currentDocument.content}
-                    users={documentUsers}
-                    refreshSignal={reviewRefreshKey}
-                    onProposalsChange={setDocumentProposals}
-                    onCommentPosted={handleProposalCommentPosted}
-                    focusVersionId={focusVersionId}
-                    onFocusVersionHandled={() => setFocusVersionId(null)}
-                    onDocumentUpdated={(doc) => {
-                      setCurrentDocument(doc);
-                      const parsed = parseDocumentSections(doc.content, doc.title);
-                      setDocumentSections(parsed);
-                      setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, doc.title));
-                      void reloadDocumentActivity(doc.id);
-                    }}
-                  />
-                ) : null}
-
                 {/* Review pill lives inside the sticky header block so both
                     pin to the top of the scroll viewport together. Visually
                     distinct via its own card chrome and a top margin - but
@@ -2765,6 +2744,27 @@ export function FileScreen({
                   </div>
                 ) : null}
               </div>
+
+              {documentMode && currentDocument ? (
+                <DocumentReviewPanel
+                  documentId={currentDocument.id}
+                  revision={currentDocument.revision}
+                  currentContent={currentDocument.content}
+                  users={documentUsers}
+                  refreshSignal={reviewRefreshKey}
+                  onProposalsChange={setDocumentProposals}
+                  onCommentPosted={handleProposalCommentPosted}
+                  focusVersionId={focusVersionId}
+                  onFocusVersionHandled={() => setFocusVersionId(null)}
+                  onDocumentUpdated={(doc) => {
+                    setCurrentDocument(doc);
+                    const parsed = parseDocumentSections(doc.content, doc.title);
+                    setDocumentSections(parsed);
+                    setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, doc.title));
+                    void reloadDocumentActivity(doc.id);
+                  }}
+                />
+              ) : null}
 
               <Reorder.Group
                 axis="y"
