@@ -760,30 +760,14 @@
   color: var(--creed-text-primary);
 }
 
-.creed-rendered-diff > .creed-rendered-markdown-fragment + .creed-rendered-markdown-fragment {
-  margin-top: 0.55rem;
-}
-
-.creed-rendered-markdown-fragment {
-  border-left: 3px solid transparent;
-}
-
 .creed-rendered-markdown-added {
   border-color: color-mix(in srgb, var(--creed-success) 25%, var(--creed-border));
   background: color-mix(in srgb, var(--creed-success) 5%, transparent);
 }
 
-.creed-rendered-markdown-fragment.creed-rendered-markdown-added {
-  border-left-color: var(--creed-success);
-}
-
 .creed-rendered-markdown-removed {
   border-color: color-mix(in srgb, var(--creed-danger) 25%, var(--creed-border));
   background: color-mix(in srgb, var(--creed-danger) 5%, transparent);
-}
-
-.creed-rendered-markdown-fragment.creed-rendered-markdown-removed {
-  border-left-color: var(--creed-danger);
 }
 
 .creed-rendered-markdown > * + * {
