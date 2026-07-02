@@ -494,7 +494,7 @@ export function PublicDocumentScreen({
             mobileBarVisible ? "translate-y-0" : "translate-y-[calc(100%+2rem)]"
           )}
         >
-          <div className="flex items-center gap-4 rounded-full border border-[var(--creed-border)] bg-[var(--creed-surface)] px-4 py-3 shadow-[0_16px_44px_rgba(28,28,26,0.16)] dark:shadow-[0_16px_44px_rgba(0,0,0,0.32)]">
+          <div className="flex items-center gap-3 rounded-full border border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 py-2 shadow-[0_14px_36px_rgba(28,28,26,0.14)] dark:shadow-[0_14px_36px_rgba(0,0,0,0.3)]">
             <RailButton
               label="Activity"
               active={panel === "activity"}
@@ -651,7 +651,7 @@ function RailButton({
       onClick={onClick}
       className={cn(
         "relative inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
-        size === "desktop" && "h-10 w-10 rounded-[12px]",
+        size === "desktop" && "h-9 w-9 rounded-[11px]",
         active && "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)]"
       )}
     >
@@ -675,7 +675,7 @@ function PublicThemeButton({ size = "mobile" }: { size?: "mobile" | "desktop" })
       size="icon"
       className={cn(
         "h-8 w-8 rounded-[10px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]",
-        size === "desktop" && "h-10 w-10 rounded-[12px]"
+        size === "desktop" && "h-9 w-9 rounded-[11px]"
       )}
       aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
       title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
