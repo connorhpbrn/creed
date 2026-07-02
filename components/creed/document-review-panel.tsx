@@ -202,6 +202,303 @@ function hasStructuredMarkdown(md: string) {
   return false;
 }
 
+function hasMarkdownTable(md: string) {
+  const lines = (md ?? "").replace(/\r\n/g, "\n").split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = (lines[index] ?? "").trim();
+    if (trimmed.includes("|") && isTableDelimiterRow(lines[index + 1])) return true;
+  }
+  return false;
+}
+
+type MarkdownTableBlock = {
+  kind: "table";
+  header: string[];
+  rows: string[][];
+};
+
+type MarkdownTextBlock = {
+  kind: "text";
+  text: string;
+};
+
+type MarkdownDiffBlock = MarkdownTextBlock | MarkdownTableBlock;
+
+function parseMarkdownDiffBlocks(md: string): MarkdownDiffBlock[] {
+  const lines = (md ?? "").replace(/\r\n/g, "\n").split("\n");
+  const blocks: MarkdownDiffBlock[] = [];
+  let index = 0;
+  let inCodeBlock = false;
+  let textLines: string[] = [];
+
+  function flushText() {
+    if (textLines.length === 0) return;
+    const text = textLines.join("\n").trim();
+    if (text) blocks.push({ kind: "text", text });
+    textLines = [];
+  }
+
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      inCodeBlock = !inCodeBlock;
+      textLines.push(line);
+      index += 1;
+      continue;
+    }
+
+    if (!inCodeBlock && trimmed.includes("|") && isTableDelimiterRow(lines[index + 1])) {
+      flushText();
+      const tableRows = [line, lines[index + 1] ?? ""];
+      index += 2;
+      while (index < lines.length) {
+        const next = lines[index] ?? "";
+        const nextTrimmed = next.trim();
+        if (!nextTrimmed || !nextTrimmed.includes("|") || nextTrimmed.startsWith("```")) break;
+        tableRows.push(next);
+        index += 1;
+      }
+      blocks.push({
+        kind: "table",
+        header: splitTableCells(tableRows[0] ?? ""),
+        rows: tableRows.slice(2).map(splitTableCells),
+      });
+      continue;
+    }
+
+    textLines.push(line);
+    index += 1;
+  }
+
+  flushText();
+  return blocks;
+}
+
+type AlignedItem = {
+  beforeIndex: number | null;
+  afterIndex: number | null;
+};
+
+function alignByExactMatch<T>(before: T[], after: T[], keyFor: (item: T) => string): AlignedItem[] {
+  const beforeKeys = before.map(keyFor);
+  const afterKeys = after.map(keyFor);
+  const lengths = Array.from({ length: before.length + 1 }, () =>
+    Array.from({ length: after.length + 1 }, () => 0)
+  );
+
+  for (let beforeIndex = before.length - 1; beforeIndex >= 0; beforeIndex -= 1) {
+    for (let afterIndex = after.length - 1; afterIndex >= 0; afterIndex -= 1) {
+      lengths[beforeIndex][afterIndex] =
+        beforeKeys[beforeIndex] === afterKeys[afterIndex]
+          ? lengths[beforeIndex + 1][afterIndex + 1] + 1
+          : Math.max(lengths[beforeIndex + 1][afterIndex], lengths[beforeIndex][afterIndex + 1]);
+    }
+  }
+
+  const exactMatches: AlignedItem[] = [];
+  let beforeCursor = 0;
+  let afterCursor = 0;
+  while (beforeCursor < before.length && afterCursor < after.length) {
+    if (beforeKeys[beforeCursor] === afterKeys[afterCursor]) {
+      exactMatches.push({ beforeIndex: beforeCursor, afterIndex: afterCursor });
+      beforeCursor += 1;
+      afterCursor += 1;
+    } else if (lengths[beforeCursor + 1][afterCursor] >= lengths[beforeCursor][afterCursor + 1]) {
+      beforeCursor += 1;
+    } else {
+      afterCursor += 1;
+    }
+  }
+
+  const aligned: AlignedItem[] = [];
+  let previousBefore = 0;
+  let previousAfter = 0;
+
+  for (const match of exactMatches) {
+    const beforeSegmentEnd = match.beforeIndex ?? previousBefore;
+    const afterSegmentEnd = match.afterIndex ?? previousAfter;
+    const beforeSegmentLength = beforeSegmentEnd - previousBefore;
+    const afterSegmentLength = afterSegmentEnd - previousAfter;
+    const pairedLength = Math.min(beforeSegmentLength, afterSegmentLength);
+
+    for (let offset = 0; offset < pairedLength; offset += 1) {
+      aligned.push({ beforeIndex: previousBefore + offset, afterIndex: previousAfter + offset });
+    }
+    for (let offset = pairedLength; offset < beforeSegmentLength; offset += 1) {
+      aligned.push({ beforeIndex: previousBefore + offset, afterIndex: null });
+    }
+    for (let offset = pairedLength; offset < afterSegmentLength; offset += 1) {
+      aligned.push({ beforeIndex: null, afterIndex: previousAfter + offset });
+    }
+
+    aligned.push(match);
+    previousBefore = (match.beforeIndex ?? previousBefore) + 1;
+    previousAfter = (match.afterIndex ?? previousAfter) + 1;
+  }
+
+  const beforeSegmentLength = before.length - previousBefore;
+  const afterSegmentLength = after.length - previousAfter;
+  const pairedLength = Math.min(beforeSegmentLength, afterSegmentLength);
+  for (let offset = 0; offset < pairedLength; offset += 1) {
+    aligned.push({ beforeIndex: previousBefore + offset, afterIndex: previousAfter + offset });
+  }
+  for (let offset = pairedLength; offset < beforeSegmentLength; offset += 1) {
+    aligned.push({ beforeIndex: previousBefore + offset, afterIndex: null });
+  }
+  for (let offset = pairedLength; offset < afterSegmentLength; offset += 1) {
+    aligned.push({ beforeIndex: null, afterIndex: previousAfter + offset });
+  }
+
+  return aligned;
+}
+
+function rowKey(row: string[]) {
+  return row.map((cell) => cell.trim()).join("\u001f");
+}
+
+function CellDiffChunks({ before, after }: { before: string; after: string }) {
+  if (before === after) return <>{after || before}</>;
+  return <DiffChunks parts={diffWords(before, after)} />;
+}
+
+function diffCellTone(before: string | undefined, after: string | undefined): RichDiffTone {
+  if (before === undefined) return "added";
+  if (after === undefined) return "removed";
+  return before === after ? "neutral" : "added";
+}
+
+function diffCellClass(tone: RichDiffTone) {
+  if (tone === "added") {
+    return "bg-[color-mix(in_srgb,var(--creed-success)_10%,transparent)]";
+  }
+  if (tone === "removed") {
+    return "bg-[color-mix(in_srgb,var(--creed-danger)_10%,transparent)]";
+  }
+  return "";
+}
+
+function TableDiff({ before, after }: { before: MarkdownTableBlock; after: MarkdownTableBlock }) {
+  const columns = useMemo(
+    () => alignByExactMatch(before.header, after.header, (cell) => cell.trim()),
+    [before.header, after.header]
+  );
+  const rows = useMemo(() => alignByExactMatch(before.rows, after.rows, rowKey), [before.rows, after.rows]);
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="creed-table creed-diff-table">
+        <tbody>
+          <tr>
+            {columns.map((column, index) => {
+              const beforeCell =
+                column.beforeIndex === null ? undefined : before.header[column.beforeIndex];
+              const afterCell = column.afterIndex === null ? undefined : after.header[column.afterIndex];
+              const tone = diffCellTone(beforeCell, afterCell);
+              return (
+                <th key={index} className={diffCellClass(tone)}>
+                  <CellDiffChunks before={beforeCell ?? ""} after={afterCell ?? ""} />
+                </th>
+              );
+            })}
+          </tr>
+          {rows.map((row, rowIndex) => {
+            const beforeRow = row.beforeIndex === null ? undefined : before.rows[row.beforeIndex];
+            const afterRow = row.afterIndex === null ? undefined : after.rows[row.afterIndex];
+            const rowTone: RichDiffTone =
+              beforeRow === undefined ? "added" : afterRow === undefined ? "removed" : "neutral";
+            return (
+              <tr
+                key={rowIndex}
+                className={cn(
+                  rowTone === "added"
+                    ? "bg-[color-mix(in_srgb,var(--creed-success)_5%,transparent)]"
+                    : rowTone === "removed"
+                      ? "bg-[color-mix(in_srgb,var(--creed-danger)_5%,transparent)]"
+                      : ""
+                )}
+              >
+                {columns.map((column, columnIndex) => {
+                  const beforeCell =
+                    beforeRow && column.beforeIndex !== null ? beforeRow[column.beforeIndex] : undefined;
+                  const afterCell =
+                    afterRow && column.afterIndex !== null ? afterRow[column.afterIndex] : undefined;
+                  const tone = rowTone === "neutral" ? diffCellTone(beforeCell, afterCell) : rowTone;
+                  return (
+                    <td key={columnIndex} className={diffCellClass(tone)}>
+                      <CellDiffChunks before={beforeCell ?? ""} after={afterCell ?? ""} />
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function renderDiffBlockPair(before: MarkdownDiffBlock | undefined, after: MarkdownDiffBlock | undefined, key: string) {
+  if (before?.kind === "table" && after?.kind === "table") {
+    return <TableDiff key={key} before={before} after={after} />;
+  }
+
+  if (before?.kind === "table") {
+    return (
+      <TableDiff
+        key={key}
+        before={before}
+        after={{ kind: "table", header: [], rows: [] }}
+      />
+    );
+  }
+
+  if (after?.kind === "table") {
+    return (
+      <TableDiff
+        key={key}
+        before={{ kind: "table", header: [], rows: [] }}
+        after={after}
+      />
+    );
+  }
+
+  return (
+    <div key={key} className="whitespace-pre-wrap break-words text-[13px] leading-6">
+      <DiffChunks parts={mdDiffParts(before?.text ?? "", after?.text ?? "")} />
+    </div>
+  );
+}
+
+function TableAwareDiff({ before, after }: { before: string; after: string }) {
+  const beforeBlocks = useMemo(() => parseMarkdownDiffBlocks(before), [before]);
+  const afterBlocks = useMemo(() => parseMarkdownDiffBlocks(after), [after]);
+  const aligned = useMemo(
+    () =>
+      alignByExactMatch(beforeBlocks, afterBlocks, (block) =>
+        block.kind === "table" ? `table:${block.header.join("|")}` : `text:${markdownToText(block.text)}`
+      ),
+    [beforeBlocks, afterBlocks]
+  );
+
+  if (aligned.length === 0) {
+    return <span className="text-[var(--creed-text-tertiary)]">No textual change</span>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {aligned.map((item, index) =>
+        renderDiffBlockPair(
+          item.beforeIndex === null ? undefined : beforeBlocks[item.beforeIndex],
+          item.afterIndex === null ? undefined : afterBlocks[item.afterIndex],
+          String(index)
+        )
+      )}
+    </div>
+  );
+}
+
 // Strip Markdown syntax down to readable prose so a diff of two Markdown bodies
 // reads like the rendered editor, not like raw source. Tables are kept as
 // aligned plain text so the old inline diff remains scannable.
@@ -255,14 +552,19 @@ function DiffText({ before, after }: { before: string; after: string }) {
     () => hasStructuredMarkdown(before) || hasStructuredMarkdown(after),
     [before, after]
   );
+  const tableDiff = useMemo(() => hasMarkdownTable(before) || hasMarkdownTable(after), [before, after]);
   return (
     <div
       className={cn(
         "creed-diff-block creed-scrollbar max-h-[360px] overflow-y-auto overflow-x-auto whitespace-pre-wrap break-words px-3.5 py-3",
-        structured ? "font-[var(--font-geist-mono)] text-[12px] leading-5" : "text-[13px] leading-6"
+        tableDiff
+          ? "whitespace-normal text-[13px] leading-6"
+          : structured
+            ? "font-[var(--font-geist-mono)] text-[12px] leading-5"
+            : "text-[13px] leading-6"
       )}
     >
-      <DiffChunks parts={parts} />
+      {tableDiff ? <TableAwareDiff before={before} after={after} /> : <DiffChunks parts={parts} />}
     </div>
   );
 }

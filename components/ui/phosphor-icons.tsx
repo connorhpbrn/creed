@@ -240,6 +240,7 @@ export {
   SearchIcon as Search,
   SaveIcon as Save,
   SendIcon as Send,
+  ShareIcon as Share,
   ShieldCheckIcon as ShieldCheck,
   LogoutIcon as Logout,
   SlidersHorizontalIcon as SlidersHorizontal,
