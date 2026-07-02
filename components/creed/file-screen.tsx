@@ -2716,7 +2716,7 @@ export function FileScreen({
                               window.setTimeout(() => setRenameDocumentOpen(true), 0);
                             }}
                           >
-                            {renamingDocument ? "Renaming" : "Rename document"}
+                            {renamingDocument ? "Renaming" : "Rename"}
                             {renamingDocument ? (
                               <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                             ) : null}
