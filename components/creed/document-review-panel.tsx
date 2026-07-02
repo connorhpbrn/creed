@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { diffWords } from "diff";
 import { AnimatePresence, motion } from "framer-motion";
@@ -17,16 +17,17 @@ import {
 import type { WorkspaceUser } from "@/lib/document-collaboration";
 import type { DocumentComment } from "@/lib/document-collaboration";
 import type { SharedDocument } from "@/lib/shared-documents";
+import { markdownToRichHtml } from "@/lib/rich-text";
 import { MentionTextarea } from "@/components/creed/mention-textarea";
 import { cn } from "@/lib/utils";
 
 // Supabase-only review surface for a shared document. Mirrors the personal-file
 // ReviewPill: a compact summary pill (total +/- and "N proposals") that reveals
-// the per-section proposals, each showing its own diff and accept/reject. Diffs
-// render as clean editor-like text (Markdown syntax stripped the way the
-// personal file strips HTML), never raw Markdown source. Every proposal/version
-// is attributed to the person behind it (avatar + name), not the model/MCP
-// label. The append-only version history sits below with the same rendered diff.
+// the per-section proposals, each showing its own diff and accept/reject.
+// Proposal bodies render through the same Markdown-to-rich-HTML path as the
+// editor so tables and diagrams stay legible. Every proposal/version is
+// attributed to the person behind it (avatar + name), not the model/MCP label.
+// The append-only version history sits below with the same section grouping.
 
 type ActorType = "human" | "agent";
 
@@ -169,6 +170,154 @@ function DiffText({ before, after }: { before: string; after: string }) {
   return (
     <div className="creed-diff-block creed-scrollbar max-h-[280px] overflow-y-auto px-3.5 py-3 text-[13px] leading-6">
       <DiffChunks parts={parts} />
+    </div>
+  );
+}
+
+let proposalMermaidModule: Promise<typeof import("mermaid").default> | null = null;
+function loadProposalMermaid() {
+  if (!proposalMermaidModule) {
+    proposalMermaidModule = import("mermaid").then((mod) => mod.default);
+  }
+  return proposalMermaidModule;
+}
+
+function isDarkTheme() {
+  return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+}
+
+let proposalMermaidRenderSeq = 0;
+
+function RenderedMarkdownPreview({
+  markdown,
+  tone = "neutral",
+  maxHeight = "max-h-[360px]",
+}: {
+  markdown: string;
+  tone?: "added" | "removed" | "neutral";
+  maxHeight?: string;
+}) {
+  const html = useMemo(() => markdownToRichHtml(markdown), [markdown]);
+  const elementId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function renderMermaidBlocks() {
+      const root = ref.current;
+      if (!root) return;
+
+      const blocks = Array.from(root.querySelectorAll<HTMLElement>('pre[data-type="mermaid"]'));
+      if (blocks.length === 0) return;
+
+      const mermaid = await loadProposalMermaid();
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: isDarkTheme() ? "dark" : "default",
+        fontFamily: "inherit",
+      });
+
+      for (const [index, block] of blocks.entries()) {
+        const source = block.getAttribute("data-source") ?? block.textContent?.trim() ?? "";
+        block.setAttribute("data-source", source);
+        block.classList.add("creed-proposal-mermaid");
+        if (!source) continue;
+
+        try {
+          const token = (proposalMermaidRenderSeq += 1);
+          const { svg } = await mermaid.render(`creed-proposal-mermaid-${elementId}-${index}-${token}`, source);
+          if (cancelled) return;
+          const preview = document.createElement("div");
+          preview.className = "creed-proposal-mermaid-preview";
+          preview.innerHTML = svg;
+          block.replaceChildren(preview);
+        } catch (error) {
+          if (cancelled) return;
+          const message = error instanceof Error ? error.message : "Invalid diagram syntax";
+          const fallback = document.createElement("div");
+          fallback.className = "creed-proposal-mermaid-error";
+          const title = document.createElement("p");
+          title.textContent = "Diagram could not be rendered";
+          const detail = document.createElement("pre");
+          detail.textContent = message;
+          fallback.append(title, detail);
+          block.replaceChildren(fallback);
+        }
+      }
+    }
+
+    void renderMermaidBlocks();
+    return () => {
+      cancelled = true;
+    };
+  }, [elementId, html]);
+
+  if (!markdown.trim()) {
+    return (
+      <div className="rounded-lg border border-dashed border-[var(--creed-border)] px-3.5 py-3 text-[13px] text-[var(--creed-text-tertiary)]">
+        No content
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "creed-rendered-markdown creed-scrollbar overflow-y-auto rounded-lg border px-3.5 py-3 text-[13px] leading-6",
+        maxHeight,
+        tone === "added"
+          ? "creed-rendered-markdown-added"
+          : tone === "removed"
+            ? "creed-rendered-markdown-removed"
+            : "border-[var(--creed-border)] bg-[var(--creed-surface)]"
+      )}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
+function RenderedProposalBody({
+  before,
+  after,
+  status,
+}: {
+  before: string;
+  after: string;
+  status: SectionStatus;
+}) {
+  if (status === "added") {
+    return (
+      <div className="px-3 py-3">
+        <RenderedMarkdownPreview markdown={after} tone="added" />
+      </div>
+    );
+  }
+
+  if (status === "removed") {
+    return (
+      <div className="px-3 py-3">
+        <RenderedMarkdownPreview markdown={before} tone="removed" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 px-3 py-3">
+      <div className="space-y-1.5">
+        <p className="px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--creed-text-tertiary)]">
+          Current
+        </p>
+        <RenderedMarkdownPreview markdown={before} tone="removed" maxHeight="max-h-[260px]" />
+      </div>
+      <div className="space-y-1.5">
+        <p className="px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--creed-text-tertiary)]">
+          Proposed
+        </p>
+        <RenderedMarkdownPreview markdown={after} tone="added" maxHeight="max-h-[360px]" />
+      </div>
     </div>
   );
 }
@@ -410,7 +559,7 @@ export function InlineDocumentProposal({
             className="overflow-hidden"
           >
             <div className="border-t border-[var(--creed-border)]" />
-            <DiffText before={before} after={after} />
+            <RenderedProposalBody before={before} after={after} status={status} />
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -991,13 +1140,13 @@ function DocumentReviewPillItem({
           >
             <div className="border-t border-[var(--creed-border)]" />
             {proposal.kind === "document-section" ? (
-              <div className="creed-diff-block creed-scrollbar max-h-[280px] overflow-y-auto px-3.5 py-3 text-[13px] leading-6">
-                <DiffChunks parts={parts} />
-              </div>
+              <RenderedProposalBody
+                before={before}
+                after={after}
+                status={proposal.sectionStatus ?? "modified"}
+              />
             ) : (
-              <div className="px-3 py-3">
-                <SectionGroupedDiff before={before} after={after} />
-              </div>
+              <RenderedProposalBody before={before} after={after} status="modified" />
             )}
           </motion.div>
         ) : null}

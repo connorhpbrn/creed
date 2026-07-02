@@ -754,6 +754,177 @@
   color: var(--creed-surface);
 }
 
+/* Read-only rich Markdown previews in proposal cards. These reuse the same
+   classes emitted for the editor, but the review panel is outside ProseMirror. */
+.creed-rendered-markdown {
+  color: var(--creed-text-primary);
+}
+
+.creed-rendered-markdown-added {
+  border-color: color-mix(in srgb, var(--creed-success) 25%, var(--creed-border));
+  background: color-mix(in srgb, var(--creed-success) 5%, transparent);
+}
+
+.creed-rendered-markdown-removed {
+  border-color: color-mix(in srgb, var(--creed-danger) 25%, var(--creed-border));
+  background: color-mix(in srgb, var(--creed-danger) 5%, transparent);
+}
+
+.creed-rendered-markdown > * + * {
+  margin-top: 0.85rem;
+}
+
+.creed-rendered-markdown h2 {
+  margin: 0;
+  font-size: 1.25em;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--creed-text-primary);
+}
+
+.creed-rendered-markdown h3 {
+  margin: 0;
+  font-size: 1.05em;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--creed-text-primary);
+}
+
+.creed-rendered-markdown p {
+  margin: 0;
+}
+
+.creed-rendered-markdown .creed-list {
+  margin: 0;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 1em;
+  line-height: 1.7;
+  color: var(--creed-text-primary);
+}
+
+.creed-rendered-markdown .creed-list-bullet {
+  list-style: none;
+  padding-left: 0;
+}
+
+.creed-rendered-markdown .creed-list-bullet > li {
+  position: relative;
+  padding-left: 1.3em;
+}
+
+.creed-rendered-markdown .creed-list-bullet > li::before {
+  content: "";
+  position: absolute;
+  left: 0.1em;
+  top: 0.65em;
+  width: 0.42em;
+  height: 0.42em;
+  border-radius: 0.14em;
+  background: var(--section-accent-bar, var(--creed-text-secondary));
+}
+
+.creed-rendered-markdown .creed-list-ordered {
+  list-style-type: decimal;
+  padding-left: 1.45rem;
+}
+
+.creed-rendered-markdown li + li {
+  margin-top: 0.35rem;
+}
+
+.creed-rendered-markdown .creed-callout {
+  position: relative;
+  border: none;
+  border-radius: 0 0.75rem 0.75rem 0;
+  background: var(--section-accent-tint, #faf9f6);
+  padding: 0.7rem 0.95rem 0.7rem 1.35rem;
+  color: var(--creed-text-primary);
+}
+
+.creed-rendered-markdown .creed-callout::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: var(--section-accent-bar, #d2a35b);
+  content: "";
+}
+
+.creed-rendered-markdown .creed-callout p {
+  margin: 0;
+}
+
+.creed-rendered-markdown code {
+  border-radius: 0.45rem;
+  background: var(--creed-surface-raised);
+  padding: 0.12rem 0.32rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.92em;
+}
+
+.creed-rendered-markdown pre:not([data-type="mermaid"]) {
+  margin: 0;
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  background: var(--creed-surface-raised);
+  padding: 0.7rem 0.95rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.92em;
+  line-height: 1.5;
+  color: var(--creed-text-primary);
+  tab-size: 2;
+}
+
+.creed-rendered-markdown pre:not([data-type="mermaid"]) code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.creed-rendered-markdown .creed-proposal-mermaid {
+  margin: 0;
+  overflow-x: auto;
+  border: 1px solid var(--creed-border);
+  border-radius: 0.75rem;
+  background: var(--creed-surface-raised);
+  padding: 1rem;
+}
+
+.creed-rendered-markdown .creed-proposal-mermaid-preview {
+  display: flex;
+  justify-content: center;
+}
+
+.creed-rendered-markdown .creed-proposal-mermaid-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.creed-rendered-markdown .creed-proposal-mermaid-error {
+  color: #b91c1c;
+  font-size: 0.9em;
+}
+
+.dark .creed-rendered-markdown .creed-proposal-mermaid-error {
+  color: #f87171;
+}
+
+.creed-rendered-markdown .creed-proposal-mermaid-error p {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+.creed-rendered-markdown .creed-proposal-mermaid-error pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.95em;
+  opacity: 0.85;
+}
+
 /* Tables. Applies to the editor (where a resizable TableView renders the
    `<table>` without our configured class) and to any raw rendered Markdown
    (`.creed-table`, e.g. the diff panel). Grid lines on every cell, and text

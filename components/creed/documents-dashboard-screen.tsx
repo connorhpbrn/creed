@@ -26,6 +26,7 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  SquarePen,
   Tag,
   TreeStructure,
   TShirt,
@@ -85,6 +86,10 @@ import type { SharedDocumentFolder, SharedDocumentSummary } from "@/lib/shared-d
 import { cn } from "@/lib/utils";
 
 type DashboardDocument = SharedDocumentSummary;
+
+type RenameTarget =
+  | { kind: "document"; id: string; name: string }
+  | { kind: "folder"; id: string; name: string };
 
 type PropertyValueMap = {
   status: DocumentStatus | null;
@@ -325,6 +330,70 @@ function PropertyPill({
   );
 }
 
+function RenameDialog({
+  target,
+  renaming,
+  onOpenChange,
+  onRename,
+}: {
+  target: RenameTarget | null;
+  renaming: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRename: (name: string) => void;
+}) {
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    setName(target?.name ?? "");
+  }, [target]);
+
+  const label = target?.kind === "folder" ? "folder" : "document";
+  const trimmed = name.trim();
+  const unchanged = Boolean(target && trimmed === target.name.trim());
+
+  function submit() {
+    if (!trimmed || unchanged || renaming) return;
+    onRename(trimmed);
+  }
+
+  return (
+    <Dialog open={Boolean(target)} onOpenChange={(open) => {
+      if (!renaming) onOpenChange(open);
+    }}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>Rename {label}</DialogTitle>
+          <DialogDescription>
+            Give this {label} a new name.
+          </DialogDescription>
+        </DialogHeader>
+        <Input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              submit();
+            }
+          }}
+          autoFocus
+          disabled={renaming}
+          placeholder={target?.kind === "folder" ? "Folder name" : "Document name"}
+        />
+        <DialogFooter>
+          <Button type="button" variant="ghost" size="sm" disabled={renaming} onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" size="sm" disabled={renaming || !trimmed || unchanged} onClick={submit} className="gap-1.5">
+            {renaming ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <SquarePen className="h-3.5 w-3.5" strokeWidth={1.8} />}
+            Rename
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DocumentRow({
   document,
   visibleProperties,
@@ -332,6 +401,7 @@ function DocumentRow({
   selected,
   onPropertyChange,
   onSelectionChange,
+  onRename,
   onMove,
   onArchive,
   onDragStart,
@@ -343,6 +413,7 @@ function DocumentRow({
   selected: boolean;
   onPropertyChange: (property: DocumentPropertyKey, value: string | null) => void;
   onSelectionChange: (selected: boolean) => void;
+  onRename: () => void;
   onMove: () => void;
   onArchive: () => void;
   onDragStart: (documentId: string) => void;
@@ -392,6 +463,17 @@ function DocumentRow({
       <button
         type="button"
         disabled={updating}
+        onClick={onRename}
+        aria-label={`Rename ${document.title}`}
+        title="Rename"
+        className="inline-grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--creed-text-tertiary)] opacity-0 transition hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] group-hover/row:opacity-100 disabled:opacity-50"
+      >
+        <SquarePen className="h-3.5 w-3.5" strokeWidth={1.8} />
+      </button>
+
+      <button
+        type="button"
+        disabled={updating}
         onClick={onMove}
         aria-label={`Move ${document.title}`}
         title="Move"
@@ -421,6 +503,7 @@ function DocumentCard({
   selected,
   onPropertyChange,
   onSelectionChange,
+  onRename,
   onMove,
   onArchive,
   onDragStart,
@@ -432,6 +515,7 @@ function DocumentCard({
   selected: boolean;
   onPropertyChange: (property: DocumentPropertyKey, value: string | null) => void;
   onSelectionChange: (selected: boolean) => void;
+  onRename: () => void;
   onMove: () => void;
   onArchive: () => void;
   onDragStart: (documentId: string) => void;
@@ -509,6 +593,16 @@ function DocumentCard({
           <button
             type="button"
             disabled={updating}
+            onClick={onRename}
+            aria-label={`Rename ${document.title}`}
+            title="Rename"
+            className="inline-grid size-7 place-items-center rounded-[7px] text-[var(--creed-text-tertiary)] opacity-0 transition hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] group-hover/card:opacity-100 disabled:opacity-50"
+          >
+            <SquarePen className="h-3.5 w-3.5" strokeWidth={1.8} />
+          </button>
+          <button
+            type="button"
+            disabled={updating}
             onClick={onMove}
             aria-label={`Move ${document.title}`}
             title="Move"
@@ -571,18 +665,20 @@ function FolderTile({
   folder,
   subfolderCount,
   updating,
+  onRename,
   onArchive,
 }: {
   folder: SharedDocumentFolder;
   subfolderCount: number;
   updating: boolean;
+  onRename: () => void;
   onArchive: () => void;
 }) {
   return (
     <div className="group/folder relative">
       <Link
         href={`/dashboard/folder/${encodeURIComponent(folder.slug)}`}
-        className="flex items-center gap-3 rounded-[10px] border border-[var(--creed-border)] bg-[var(--creed-surface)] p-3 pr-12 transition hover:border-[var(--creed-border-strong)] hover:shadow-[0_6px_20px_rgba(28,28,26,0.05)]"
+        className="flex items-center gap-3 rounded-[10px] border border-[var(--creed-border)] bg-[var(--creed-surface)] p-3 pr-20 transition hover:border-[var(--creed-border-strong)] hover:shadow-[0_6px_20px_rgba(28,28,26,0.05)]"
       >
         <span className="grid size-9 shrink-0 place-items-center rounded-[8px] bg-[var(--creed-surface-raised)] text-[var(--creed-text-secondary)] transition group-hover/folder:text-[#2563EB]">
           <Folder className="h-[18px] w-[18px]" strokeWidth={1.8} />
@@ -598,16 +694,28 @@ function FolderTile({
           </span>
         </span>
       </Link>
-      <button
-        type="button"
-        disabled={updating}
-        onClick={onArchive}
-        aria-label={`Archive ${folder.name}`}
-        title="Archive"
-        className="absolute right-2.5 top-1/2 inline-grid size-8 -translate-y-1/2 place-items-center rounded-[8px] text-[var(--creed-text-tertiary)] opacity-0 transition hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] group-hover/folder:opacity-100 disabled:opacity-50"
-      >
-        {updating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
-      </button>
+      <span className="absolute right-2.5 top-1/2 inline-flex -translate-y-1/2 items-center gap-0.5">
+        <button
+          type="button"
+          disabled={updating}
+          onClick={onRename}
+          aria-label={`Rename ${folder.name}`}
+          title="Rename"
+          className="inline-grid size-8 place-items-center rounded-[8px] text-[var(--creed-text-tertiary)] opacity-0 transition hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] group-hover/folder:opacity-100 disabled:opacity-50"
+        >
+          <SquarePen className="h-4 w-4" strokeWidth={1.8} />
+        </button>
+        <button
+          type="button"
+          disabled={updating}
+          onClick={onArchive}
+          aria-label={`Archive ${folder.name}`}
+          title="Archive"
+          className="inline-grid size-8 place-items-center rounded-[8px] text-[var(--creed-text-tertiary)] opacity-0 transition hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] group-hover/folder:opacity-100 disabled:opacity-50"
+        >
+          {updating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+        </button>
+      </span>
     </div>
   );
 }
@@ -745,6 +853,7 @@ export function DocumentsDashboardScreen({
   const router = useRouter();
   const [documentRows, setDocumentRows] = useState<DashboardDocument[]>(documents);
   const [folderRows, setFolderRows] = useState<SharedDocumentFolder[]>(folders);
+  const [allFolderRows, setAllFolderRows] = useState<SharedDocumentFolder[]>(allFolders);
   const [viewMode, setViewMode] = useState<DocumentViewMode>(preferences.viewMode);
   const [groupBy, setGroupBy] = useState<DocumentGroupKey>(preferences.groupBy);
   const [sortBy, setSortBy] = useState<DocumentSortKey>(preferences.sortBy);
@@ -763,6 +872,8 @@ export function DocumentsDashboardScreen({
   const [savingView, setSavingView] = useState<"user" | "global" | null>(null);
   const [updatingDocumentId, setUpdatingDocumentId] = useState<string | null>(null);
   const [updatingFolderId, setUpdatingFolderId] = useState<string | null>(null);
+  const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
+  const [renaming, setRenaming] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createMode, setCreateMode] = useState<CreateDialogMode>("document");
 
@@ -775,6 +886,18 @@ export function DocumentsDashboardScreen({
     const liveIds = new Set(documentRows.map((document) => document.id));
     setSelectedDocumentIds((ids) => ids.filter((id) => liveIds.has(id)));
   }, [documentRows]);
+
+  useEffect(() => {
+    setDocumentRows(documents);
+  }, [documents]);
+
+  useEffect(() => {
+    setFolderRows(folders);
+  }, [folders]);
+
+  useEffect(() => {
+    setAllFolderRows(allFolders);
+  }, [allFolders]);
 
   const filteredDocuments = useMemo(() => {
     const query = filter.trim().toLowerCase();
@@ -821,12 +944,12 @@ export function DocumentsDashboardScreen({
   // at nested content even though the dashboard only loads direct children.
   const subfolderCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const folder of allFolders) {
+    for (const folder of allFolderRows) {
       if (!folder.parentId) continue;
       counts.set(folder.parentId, (counts.get(folder.parentId) ?? 0) + 1);
     }
     return counts;
-  }, [allFolders]);
+  }, [allFolderRows]);
 
   const groups = useMemo(
     () =>
@@ -917,6 +1040,75 @@ export function DocumentsDashboardScreen({
       toast.error(error instanceof Error ? error.message : "Could not archive folder.");
     } finally {
       setUpdatingFolderId(null);
+    }
+  }
+
+  async function renameDocument(documentId: string, name: string) {
+    if (updatingDocumentId) return;
+    try {
+      setUpdatingDocumentId(documentId);
+      setRenaming(true);
+      const response = await fetch(`/api/app/documents/${encodeURIComponent(documentId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: name }),
+      });
+      if (!response.ok) {
+        throw new Error(await readError(response, "Could not rename document."));
+      }
+      const payload = (await response.json()) as { document?: SharedDocumentSummary };
+      if (payload.document) {
+        setDocumentRows((rows) => rows.map((row) => row.id === documentId ? payload.document! : row));
+      }
+      setRenameTarget(null);
+      toast.success("Document renamed");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not rename document.");
+    } finally {
+      setUpdatingDocumentId(null);
+      setRenaming(false);
+    }
+  }
+
+  async function renameFolder(folderId: string, name: string) {
+    if (updatingFolderId) return;
+    try {
+      setUpdatingFolderId(folderId);
+      setRenaming(true);
+      const response = await fetch(`/api/app/document-folders/${encodeURIComponent(folderId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!response.ok) {
+        throw new Error(await readError(response, "Could not rename folder."));
+      }
+      const payload = (await response.json()) as { folder?: SharedDocumentFolder };
+      if (payload.folder) {
+        setFolderRows((rows) => rows.map((row) => row.id === folderId ? payload.folder! : row));
+        setAllFolderRows((rows) => rows.map((row) => row.id === folderId ? payload.folder! : row));
+        if (currentFolder?.id === folderId) {
+          router.replace(`/dashboard/folder/${encodeURIComponent(payload.folder.slug)}`);
+        }
+      }
+      setRenameTarget(null);
+      toast.success("Folder renamed");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not rename folder.");
+    } finally {
+      setUpdatingFolderId(null);
+      setRenaming(false);
+    }
+  }
+
+  function renameTargetName(name: string) {
+    if (!renameTarget) return;
+    if (renameTarget.kind === "document") {
+      void renameDocument(renameTarget.id, name);
+    } else {
+      void renameFolder(renameTarget.id, name);
     }
   }
 
@@ -1148,24 +1340,46 @@ export function DocumentsDashboardScreen({
           </span>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" size="sm" className="gap-1.5">
-              <Plus className="h-4 w-4" strokeWidth={2} />
-              New
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-[160px]">
-            <DropdownMenuItem onSelect={() => openCreate("document")}>
-              <FileText className="h-4 w-4" strokeWidth={1.8} />
-              Document
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => openCreate("folder")}>
-              <Folder className="h-4 w-4" strokeWidth={1.8} />
-              Folder
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          {currentFolder ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Folder options"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--creed-border)] bg-[var(--creed-surface)] text-[var(--creed-text-secondary)] transition hover:bg-[var(--creed-surface-raised)]"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[170px]">
+                <DropdownMenuItem onSelect={() => setRenameTarget({ kind: "folder", id: currentFolder.id, name: currentFolder.name })}>
+                  <SquarePen className="h-4 w-4" strokeWidth={1.8} />
+                  Rename folder
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" size="sm" className="gap-1.5">
+                <Plus className="h-4 w-4" strokeWidth={2} />
+                New
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[160px]">
+              <DropdownMenuItem onSelect={() => openCreate("document")}>
+                <FileText className="h-4 w-4" strokeWidth={1.8} />
+                Document
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => openCreate("folder")}>
+                <Folder className="h-4 w-4" strokeWidth={1.8} />
+                Folder
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </header>
 
       {/* Toolbar (floating) */}
@@ -1394,6 +1608,7 @@ export function DocumentsDashboardScreen({
                 folder={folder}
                 subfolderCount={subfolderCounts.get(folder.id) ?? 0}
                 updating={updatingFolderId === folder.id}
+                onRename={() => setRenameTarget({ kind: "folder", id: folder.id, name: folder.name })}
                 onArchive={() => void archiveFolder(folder.id)}
               />
             ))}
@@ -1451,6 +1666,7 @@ export function DocumentsDashboardScreen({
                           onDragStart={setDraggedDocumentId}
                           onDragEnd={() => setDraggedDocumentId(null)}
                           onSelectionChange={(selected) => toggleDocumentSelection(document.id, selected)}
+                          onRename={() => setRenameTarget({ kind: "document", id: document.id, name: document.title })}
                           onMove={() => openMoveDialog([document.id])}
                           onArchive={() => void archiveDocument(document.id)}
                           onPropertyChange={(property, value) => updateDocumentFromString(document.id, property, value)}
@@ -1469,6 +1685,7 @@ export function DocumentsDashboardScreen({
                           onDragStart={setDraggedDocumentId}
                           onDragEnd={() => setDraggedDocumentId(null)}
                           onSelectionChange={(selected) => toggleDocumentSelection(document.id, selected)}
+                          onRename={() => setRenameTarget({ kind: "document", id: document.id, name: document.title })}
                           onMove={() => openMoveDialog([document.id])}
                           onArchive={() => void archiveDocument(document.id)}
                           onPropertyChange={(property, value) => updateDocumentFromString(document.id, property, value)}
@@ -1525,10 +1742,21 @@ export function DocumentsDashboardScreen({
         onOpenChange={setCreateOpen}
         mode={createMode}
         onModeChange={setCreateMode}
-        folders={allFolders}
+        folders={allFolderRows}
         defaultFolderId={currentFolder?.id ?? null}
         onDocumentCreated={(document) => setDocumentRows((rows) => [document, ...rows])}
-        onFolderCreated={(folder) => setFolderRows((rows) => [...rows, folder])}
+        onFolderCreated={(folder) => {
+          setFolderRows((rows) => [...rows, folder]);
+          setAllFolderRows((rows) => [...rows, folder]);
+        }}
+      />
+      <RenameDialog
+        target={renameTarget}
+        renaming={renaming}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(null);
+        }}
+        onRename={renameTargetName}
       />
       <MoveDocumentsDialog
         open={moveDialogOpen}
@@ -1536,7 +1764,7 @@ export function DocumentsDashboardScreen({
           setMoveDialogOpen(open);
           if (!open) setMoveDocumentIds([]);
         }}
-        folders={allFolders}
+        folders={allFolderRows}
         currentFolderId={currentFolder?.id ?? null}
         selectedCount={moveDocumentIds.length || selectedDocumentIds.length}
         moving={bulkAction === "move"}

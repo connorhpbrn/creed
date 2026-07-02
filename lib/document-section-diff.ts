@@ -284,10 +284,14 @@ export function applySectionChange(content: string, change: SectionChange): Appl
   if (change.status === "added") {
     if (existing) {
       // Someone already added a section with this identity. Fine if it matches
-      // what we wanted; otherwise it is a genuine conflict.
-      return existing.body.trim() === change.after.trim()
-        ? { ok: true, content }
-        : { ok: false, reason: "conflict" };
+      // what we wanted; otherwise treat this proposal as an update to the
+      // now-real section. This covers repeated proposal updates to the same new
+      // section before any of them are accepted.
+      if (existing.body.trim() === change.after.trim()) {
+        return { ok: true, content };
+      }
+      const next = replaceSectionInMarkdown(content, change.key, change.after);
+      return next === null ? { ok: false, reason: "conflict" } : { ok: true, content: next };
     }
     return { ok: true, content: insertSection(content, change) };
   }

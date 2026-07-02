@@ -169,6 +169,14 @@ function ensureMarkdownPath(value: string) {
   return trimmed.endsWith(".md") ? trimmed : `${trimmed}.md`;
 }
 
+function documentSlugFromPath(path: string) {
+  return path.replace(/\.md$/i, "").replace(/\//g, "-");
+}
+
+function folderSlugFromPath(path: string) {
+  return path.replace(/\//g, "-");
+}
+
 function documentGithubDefault(name: "OWNER" | "REPO" | "BRANCH") {
   return process.env[`CREED_DOCUMENTS_GITHUB_${name}`]?.trim() || null;
 }
@@ -510,7 +518,7 @@ export async function createSharedDocumentFolder(
   const { data, error } = (await db
     .from("creed_document_folders")
     .insert({
-      slug: path.replace(/\//g, "-"),
+      slug: folderSlugFromPath(path),
       name,
       path,
       parent_id: parent?.id ?? null,
@@ -572,7 +580,7 @@ export async function createSharedDocument(
   }
 
   const path = folder ? `${folder.path}/${titleSlug}.md` : `${titleSlug}.md`;
-  const slug = path.replace(/\.md$/i, "").replace(/\//g, "-");
+  const slug = documentSlugFromPath(path);
   const githubPath = ensureMarkdownPath(input.githubPath?.trim() || path);
   const githubRepoOwner = input.githubRepoOwner?.trim() || documentGithubDefault("OWNER");
   const githubRepoName = input.githubRepoName?.trim() || documentGithubDefault("REPO");
@@ -751,12 +759,54 @@ export async function updateSharedDocumentMetadata(
     };
   }
 
+  const targetFolderId =
+    input.patch.folderId !== undefined ? input.patch.folderId : current.folderId;
+  const targetFolder = await readFolderById(client, targetFolderId);
+  if (targetFolderId && !targetFolder) {
+    return { ok: false, code: "not-found", error: "Folder was not found." };
+  }
+
+  const title = typeof input.patch.title === "string" ? input.patch.title.trim() : current.title;
+  const titleSlug = slugifyDocumentPart(title);
+  if (!titleSlug) {
+    return { ok: false, code: "invalid", error: "Document title must include letters or numbers." };
+  }
+  const path = targetFolder ? `${targetFolder.path}/${titleSlug}.md` : `${titleSlug}.md`;
+  const pathPatch: { slug?: string; path?: string; github_path?: string } =
+    input.patch.title !== undefined || input.patch.folderId !== undefined
+      ? {
+          slug: documentSlugFromPath(path),
+          path,
+          github_path: path,
+        }
+      : {};
+
   const now = nowIso();
   const db = client as SupabaseLikeClient;
+
+  if (pathPatch.path && pathPatch.slug) {
+    const [pathConflictResult, slugConflictResult] = (await Promise.all([
+      db.from("creed_documents").select("id").eq("path", pathPatch.path).maybeSingle(),
+      db.from("creed_documents").select("id").eq("slug", pathPatch.slug).maybeSingle(),
+    ])) as [
+      { data: { id: string } | null; error: { message: string } | null },
+      { data: { id: string } | null; error: { message: string } | null },
+    ];
+    assertNoError(pathConflictResult.error, "Could not check document path.");
+    assertNoError(slugConflictResult.error, "Could not check document slug.");
+    if (pathConflictResult.data && pathConflictResult.data.id !== input.id) {
+      return { ok: false, code: "conflict", error: "A document with that path already exists." };
+    }
+    if (slugConflictResult.data && slugConflictResult.data.id !== input.id) {
+      return { ok: false, code: "conflict", error: "A document with that name already exists." };
+    }
+  }
+
   const { data, error } = (await db
     .from("creed_documents")
     .update({
       ...metadata.patch,
+      ...pathPatch,
       revision: current.revision + 1,
       sync_status: "local-ahead",
       updated_by: input.actorUserId ?? null,
@@ -836,6 +886,147 @@ export async function archiveSharedDocument(
   }
 
   return { ok: true, value: { ...mapDocumentSummary(data), content: data.content ?? "" } };
+}
+
+export async function updateSharedDocumentFolder(
+  client: unknown,
+  input: {
+    id: string;
+    name: string;
+    actorUserId?: string | null;
+  }
+): Promise<MutationResult<SharedDocumentFolder>> {
+  const current = await readFolderById(client, input.id);
+  if (!current) {
+    return { ok: false, code: "not-found", error: "Folder not found." };
+  }
+
+  const name = input.name.trim();
+  if (!name) {
+    return { ok: false, code: "invalid", error: "Folder name is required." };
+  }
+
+  const slugBase = slugifyDocumentPart(name);
+  if (!slugBase) {
+    return { ok: false, code: "invalid", error: "Folder name must include letters or numbers." };
+  }
+
+  const parent = await readFolderById(client, current.parentId);
+  const oldPath = current.path;
+  const nextPath = parent ? `${parent.path}/${slugBase}` : slugBase;
+  const now = nowIso();
+  const db = client as SupabaseLikeClient;
+
+  const [foldersResult, documentsResult] = (await Promise.all([
+    db
+      .from("creed_document_folders")
+      .select("id, slug, name, path, parent_id, archived_at, updated_at"),
+    db
+      .from("creed_documents")
+      .select("id, slug, path, archived_at"),
+  ])) as [
+    { data: SharedDocumentFolderRow[] | null; error: { message: string } | null },
+    {
+      data: Array<{ id: string; slug: string; path: string | null; archived_at: string | null }> | null;
+      error: { message: string } | null;
+    },
+  ];
+  assertNoError(foldersResult.error, "Could not load folders.");
+  assertNoError(documentsResult.error, "Could not load documents.");
+
+  const allFolders = foldersResult.data ?? [];
+  const allDocuments = documentsResult.data ?? [];
+  const folderUpdates = allFolders
+    .filter((folder) => folder.path === oldPath || folder.path.startsWith(`${oldPath}/`))
+    .map((folder) => {
+      const path = folder.path === oldPath ? nextPath : `${nextPath}${folder.path.slice(oldPath.length)}`;
+      return { ...folder, nextPath: path, nextSlug: folderSlugFromPath(path) };
+    });
+  const documentUpdates = allDocuments
+    .filter((document) => {
+      const path = document.path ?? "";
+      return path.startsWith(`${oldPath}/`);
+    })
+    .map((document) => {
+      const path = `${nextPath}${(document.path ?? "").slice(oldPath.length)}`;
+      return { ...document, nextPath: path, nextSlug: documentSlugFromPath(path) };
+    });
+
+  const subtreeFolderIds = new Set(folderUpdates.map((folder) => folder.id));
+  const subtreeDocumentIds = new Set(documentUpdates.map((document) => document.id));
+  const conflictingFolder = allFolders.find(
+    (folder) =>
+      !subtreeFolderIds.has(folder.id) &&
+      folderUpdates.some(
+        (update) => update.nextPath === folder.path || update.nextSlug === folder.slug
+      )
+  );
+  if (conflictingFolder) {
+    return { ok: false, code: "conflict", error: "A folder with that path already exists." };
+  }
+  const conflictingDocument = allDocuments.find(
+    (document) =>
+      !subtreeDocumentIds.has(document.id) &&
+      documentUpdates.some(
+        (update) => update.nextPath === document.path || update.nextSlug === document.slug
+      )
+  );
+  if (conflictingDocument) {
+    return { ok: false, code: "conflict", error: "A document with that path already exists." };
+  }
+
+  for (const folder of folderUpdates) {
+    const { data, error } = (await db
+      .from("creed_document_folders")
+      .update({
+        ...(folder.id === current.id ? { name } : {}),
+        slug: folder.nextSlug,
+        path: folder.nextPath,
+        updated_by: input.actorUserId ?? null,
+        updated_at: now,
+      })
+      .eq("id", folder.id)
+      .select("id, slug, name, path, parent_id, archived_at, updated_at")
+      .maybeSingle()) as {
+      data: SharedDocumentFolderRow | null;
+      error: { message: string } | null;
+    };
+    if (error) {
+      return { ok: false, code: "conflict", error: error.message };
+    }
+    if (!data) {
+      return { ok: false, code: "not-found", error: "Folder not found." };
+    }
+  }
+
+  for (const document of documentUpdates) {
+    const { error } = (await db
+      .from("creed_documents")
+      .update({
+        slug: document.nextSlug,
+        path: document.nextPath,
+        github_path: document.nextPath,
+        sync_status: "local-ahead",
+        last_synced_content_hash: null,
+        updated_by: input.actorUserId ?? null,
+        updated_at: now,
+        last_edited_by: input.actorUserId ?? null,
+        last_edited_via: "creed",
+      })
+      .eq("id", document.id)) as {
+      data: unknown;
+      error: { message: string } | null;
+    };
+    if (error) {
+      return { ok: false, code: "conflict", error: error.message };
+    }
+  }
+
+  const renamed = await readFolderById(client, input.id);
+  if (!renamed) {
+    return { ok: false, code: "not-found", error: "Folder not found." };
+  }
+  return { ok: true, value: renamed };
 }
 
 // Collects a folder and all of its descendant folder ids (depth-first). Includes

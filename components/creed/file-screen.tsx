@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -699,12 +700,9 @@ function DocumentPropertyTypeIcon({ property }: { property: DocumentPropertyName
   return <TShirt className={className} />;
 }
 
-function parseDocumentSections(markdown: string, title: string): CreedSection[] {
+function parseDocumentSections(markdown: string): CreedSection[] {
   const normalized = markdown.replace(/\r\n/g, "\n").trim();
-  const titleHeading = title.trim().toLowerCase();
-  const withoutDocumentTitle = normalized.replace(/^#\s+(.+)\n?/i, (match, heading: string) =>
-    heading.trim().toLowerCase() === titleHeading ? "" : match
-  );
+  const withoutDocumentTitle = normalized.replace(/^#\s+.+\n?/i, "");
   const parsed = parseCreedMarkdown(withoutDocumentTitle.trim());
   if (parsed.sections.length > 0) {
     return parsed.sections;
@@ -901,6 +899,7 @@ export function FileScreen({
 }: {
   sharedDocument?: SharedDocumentFilePayload | null;
 } = {}) {
+  const router = useRouter();
   const {
     state,
     toggleLock,
@@ -931,13 +930,13 @@ export function FileScreen({
   );
   const [documentSections, setDocumentSections] = useState<CreedSection[]>(() =>
     sharedDocument
-      ? parseDocumentSections(sharedDocument.document.content, sharedDocument.document.title)
+      ? parseDocumentSections(sharedDocument.document.content)
       : []
   );
   const [savedDocumentMarkdown, setSavedDocumentMarkdown] = useState(() =>
     sharedDocument
       ? documentSectionsToMarkdown(
-          parseDocumentSections(sharedDocument.document.content, sharedDocument.document.title),
+          parseDocumentSections(sharedDocument.document.content),
           sharedDocument.document.title
         )
       : ""
@@ -986,10 +985,12 @@ export function FileScreen({
       setDocumentActivity([]);
       setActiveDocumentPanel(null);
       setActiveDocumentCommentId(null);
+      setRenameDocumentOpen(false);
+      setRenameDocumentTitle("");
       return;
     }
 
-    const parsed = parseDocumentSections(sharedDocument.document.content, sharedDocument.document.title);
+    const parsed = parseDocumentSections(sharedDocument.document.content);
     setCurrentDocument(sharedDocument.document);
     setDocumentSections(parsed);
     setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, sharedDocument.document.title));
@@ -1000,6 +1001,8 @@ export function FileScreen({
     setActiveDocumentCommentId(sharedDocument.activeCommentId ?? null);
     setReplyingTo(null);
     setReplyBody("");
+    setRenameDocumentOpen(false);
+    setRenameDocumentTitle(sharedDocument.document.title);
   }, [sharedDocument]);
 
   const documentMarkdown = useMemo(
@@ -1129,6 +1132,11 @@ export function FileScreen({
   const [showPushPreview, setShowPushPreview] = useState(false);
   const [pushPreviewBusy, setPushPreviewBusy] = useState(false);
   const [selectedVersionAction, setSelectedVersionAction] = useState<"push" | "pull">("push");
+  const [renameDocumentOpen, setRenameDocumentOpen] = useState(false);
+  const [renameDocumentTitle, setRenameDocumentTitle] = useState(
+    sharedDocument?.document.title ?? ""
+  );
+  const [renamingDocument, setRenamingDocument] = useState(false);
   const [renameSectionState, setRenameSectionState] = useState<{
     id: string;
     name: string;
@@ -1541,7 +1549,7 @@ export function FileScreen({
       }
       if (action === "accept" && payload.document) {
         setCurrentDocument(payload.document);
-        const parsed = parseDocumentSections(payload.document.content, payload.document.title);
+        const parsed = parseDocumentSections(payload.document.content);
         setDocumentSections(parsed);
         setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, payload.document.title));
         void reloadDocumentActivity(payload.document.id);
@@ -1629,7 +1637,7 @@ export function FileScreen({
       }
       if (payload.document) {
         setCurrentDocument(payload.document);
-        const parsed = parseDocumentSections(payload.document.content, payload.document.title);
+        const parsed = parseDocumentSections(payload.document.content);
         setDocumentSections(parsed);
         setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, payload.document.title));
         await reloadDocumentActivity(payload.document.id);
@@ -1643,6 +1651,53 @@ export function FileScreen({
       return null;
     } finally {
       setDocumentSaving(false);
+    }
+  }
+
+  async function renameCurrentDocument() {
+    if (!currentDocument || renamingDocument) {
+      return;
+    }
+
+    const title = renameDocumentTitle.trim();
+    if (!title || title === currentDocument.title.trim()) {
+      return;
+    }
+
+    try {
+      setRenamingDocument(true);
+      const response = await fetch(`/api/app/documents/${encodeURIComponent(currentDocument.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          expectedRevision: currentDocument.revision,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(await readError(response, "Could not rename document."));
+      }
+
+      const payload = (await response.json()) as { document?: SharedDocument };
+      if (!payload.document) {
+        throw new Error("Rename did not return the updated document.");
+      }
+
+      const previousSlug = currentDocument.slug;
+      const savedSections = parseDocumentSections(savedDocumentMarkdown);
+      setCurrentDocument(payload.document);
+      setSavedDocumentMarkdown(documentSectionsToMarkdown(savedSections, payload.document.title));
+      setRenameDocumentTitle(payload.document.title);
+      setRenameDocumentOpen(false);
+      if (payload.document.slug !== previousSlug) {
+        router.replace(`/file?document=${encodeURIComponent(payload.document.slug)}`);
+      }
+      await reloadDocumentActivity(payload.document.id);
+      toast.success("Document renamed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not rename document.");
+    } finally {
+      setRenamingDocument(false);
     }
   }
 
@@ -2332,21 +2387,41 @@ export function FileScreen({
                       }}
                     />
                     {documentMode ? (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Save document"
-                        title="Save document"
-                        className={documentHeaderIconButtonClass}
-                        disabled={documentSaving || !documentDirty}
-                        onClick={() => void handleSaveDocument()}
-                      >
-                        {documentSaving ? (
-                          <LoaderCircle className="inline-flex h-3.5 w-3.5 shrink-0 animate-spin" />
-                        ) : (
-                          <Save className="inline-flex h-3.5 w-3.5 shrink-0" />
-                        )}
-                      </Button>
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Rename document"
+                          title="Rename document"
+                          className={documentHeaderIconButtonClass}
+                          disabled={renamingDocument || documentSaving}
+                          onClick={() => {
+                            setRenameDocumentTitle(currentDocument?.title ?? "");
+                            setRenameDocumentOpen(true);
+                          }}
+                        >
+                          {renamingDocument ? (
+                            <LoaderCircle className="inline-flex h-3.5 w-3.5 shrink-0 animate-spin" />
+                          ) : (
+                            <SquarePen className="inline-flex h-3.5 w-3.5 shrink-0" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Save document"
+                          title="Save document"
+                          className={documentHeaderIconButtonClass}
+                          disabled={documentSaving || !documentDirty}
+                          onClick={() => void handleSaveDocument()}
+                        >
+                          {documentSaving ? (
+                            <LoaderCircle className="inline-flex h-3.5 w-3.5 shrink-0 animate-spin" />
+                          ) : (
+                            <Save className="inline-flex h-3.5 w-3.5 shrink-0" />
+                          )}
+                        </Button>
+                      </>
                     ) : null}
                     {!documentMode ? (
                     <div
@@ -2735,7 +2810,7 @@ export function FileScreen({
                     onHeightChange={handleDocumentReviewPanelHeightChange}
                     onDocumentUpdated={(doc) => {
                       setCurrentDocument(doc);
-                      const parsed = parseDocumentSections(doc.content, doc.title);
+                      const parsed = parseDocumentSections(doc.content);
                       setDocumentSections(parsed);
                       setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, doc.title));
                       void reloadDocumentActivity(doc.id);
@@ -3188,6 +3263,61 @@ export function FileScreen({
             >
               {pullBusy ? "Importing" : documentMode ? "Import remote document" : "Import remote Creed"}
               {pullBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={renameDocumentOpen}
+        onOpenChange={(open) => {
+          if (renamingDocument) return;
+          setRenameDocumentOpen(open);
+          if (open) {
+            setRenameDocumentTitle(currentDocument?.title ?? "");
+          }
+        }}
+      >
+        <DialogContent className="rounded-[var(--radius-xl)] border-[var(--creed-border)] bg-[var(--creed-surface)]">
+          <DialogHeader>
+            <DialogTitle>Rename document</DialogTitle>
+            <DialogDescription>
+              Update the file name and URL slug.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={renameDocumentTitle}
+            onChange={(event) => setRenameDocumentTitle(event.target.value)}
+            className="h-11 rounded-xl border-[var(--creed-border)] bg-[var(--creed-surface)] px-4 text-[15px]"
+            disabled={renamingDocument}
+            autoFocus
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && renameDocumentTitle.trim()) {
+                event.preventDefault();
+                void renameCurrentDocument();
+              }
+            }}
+          />
+          <DialogFooter className="flex-row items-center justify-between border-t-[var(--creed-border)] bg-[var(--creed-surface)] sm:justify-between">
+            <Button
+              variant="ghost"
+              className="rounded-md"
+              disabled={renamingDocument}
+              onClick={() => setRenameDocumentOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="rounded-md bg-[var(--creed-accent)] text-white transition-colors hover:bg-[var(--creed-accent-hover)]"
+              disabled={
+                renamingDocument ||
+                !renameDocumentTitle.trim() ||
+                renameDocumentTitle.trim() === currentDocument?.title.trim()
+              }
+              onClick={() => void renameCurrentDocument()}
+            >
+              {renamingDocument ? "Renaming" : "Rename"}
+              {renamingDocument ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
             </Button>
           </DialogFooter>
         </DialogContent>

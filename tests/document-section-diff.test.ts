@@ -121,6 +121,24 @@ describe("applySectionChange", () => {
     if (result.ok) expect(result.content).toContain("## Routines");
   });
 
+  it("updates a newly-created section when a later proposal targets the same added section", () => {
+    const firstAfter = `${doc}\n\n## Routines\nFirst draft.`;
+    const secondAfter = `${doc}\n\n## Routines\nSecond draft.`;
+    const firstChange = change(doc, firstAfter);
+    const secondChange = change(doc, secondAfter);
+
+    const first = applySectionChange(doc, firstChange);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    const second = applySectionChange(first.content, secondChange);
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.content).toContain("## Routines\nSecond draft.");
+      expect(second.content).not.toContain("First draft.");
+    }
+  });
+
   it("inserts a new section at its proposed position before an existing sibling", () => {
     const before = ["# Doc", "Intro.", "", "## Alpha", "A.", "", "## Omega", "Z."].join("\n");
     const after = [

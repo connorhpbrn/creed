@@ -522,4 +522,53 @@ describe("Per-section proposals (batching + independent accept)", () => {
     expect(second.ok).toBe(true);
     expect(client.rows(DOCS)[0].content).toBe(after);
   });
+
+  it("accepts a later proposal update to a section that another proposal just created", async () => {
+    const before = ["# Doc", "Intro.", "", "## Existing", "Old."].join("\n");
+    const firstDraft = `${before}\n\n## New Section\nFirst draft.`;
+    const secondDraft = `${before}\n\n## New Section\nSecond draft.`;
+    const { client, documentId } = createFakeClientWithDocument({ content: before });
+    setPolicy(client, { human: "propose" });
+
+    const firstProposed = await routeDocumentEdit(client, {
+      documentId,
+      actorType: "human",
+      author: { userId: "author-A" },
+      content: firstDraft,
+      expectedRevision: 1,
+      summary: "add new section",
+    });
+    if (!(firstProposed.ok && firstProposed.outcome === "proposed")) throw new Error("setup failed");
+
+    const secondProposed = await routeDocumentEdit(client, {
+      documentId,
+      actorType: "human",
+      author: { userId: "author-A" },
+      content: secondDraft,
+      expectedRevision: 1,
+      summary: "update new section",
+    });
+    if (!(secondProposed.ok && secondProposed.outcome === "proposed")) throw new Error("setup failed");
+
+    const first = firstProposed.proposals.find((p) => p.sectionHeading === "New Section")!;
+    const second = secondProposed.proposals.find((p) => p.sectionHeading === "New Section")!;
+
+    const acceptedFirst = await acceptDocumentProposal(client, {
+      documentId,
+      proposalId: first.id,
+      actorUserId: "u-B",
+    });
+    expect(acceptedFirst.ok).toBe(true);
+    expect(client.rows(DOCS)[0].content).toContain("First draft.");
+
+    const acceptedSecond = await acceptDocumentProposal(client, {
+      documentId,
+      proposalId: second.id,
+      actorUserId: "u-B",
+    });
+    expect(acceptedSecond.ok).toBe(true);
+    expect(client.rows(DOCS)[0].content).toContain("## New Section\nSecond draft.");
+    expect(client.rows(DOCS)[0].content).not.toContain("First draft.");
+    expect(client.rows(DOCS)[0].revision).toBe(3);
+  });
 });
