@@ -46,18 +46,21 @@ export function AuthScreen({
   configured = true,
   nextPath = "/dashboard",
   authError,
+  showGoogle = true,
 }: {
   configured?: boolean;
   // Where to land after a successful auth (e.g. back to /authorize for an MCP
   // connect). Defaults to the root router.
   nextPath?: string;
   authError?: "oauth_email_mismatch" | "invite_required";
+  showGoogle?: boolean;
 }) {
   const t = copy;
 
-  // Google is part of the invite-only auth surface. X remains behind an
-  // explicit flag because it is not part of the current sign-in contract.
-  const googleEnabled = true;
+  // Google is available on normal sign-in, but setup flows can suppress it.
+  // X remains behind an explicit flag because it is not part of the current
+  // sign-in contract.
+  const googleEnabled = showGoogle;
   const xEnabled = process.env.NEXT_PUBLIC_ENABLE_X_AUTH === "1";
   const anyOAuth = googleEnabled || xEnabled;
 

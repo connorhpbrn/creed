@@ -18,6 +18,7 @@ export default async function LoginPage({
   const configured = isSupabaseConfigured();
   const params = await searchParams;
   const nextPath = params.next ? sanitizeNextPath(params.next) : "/dashboard";
+  const showGoogle = !nextPath.startsWith("/accept-invite");
   const error =
     typeof params.error === "string" &&
     (params.error === "oauth_email_mismatch" ||
@@ -40,5 +41,12 @@ export default async function LoginPage({
     }
   }
 
-  return <AuthScreen configured={configured} nextPath={nextPath} authError={error} />;
+  return (
+    <AuthScreen
+      configured={configured}
+      nextPath={nextPath}
+      authError={error}
+      showGoogle={showGoogle}
+    />
+  );
 }
