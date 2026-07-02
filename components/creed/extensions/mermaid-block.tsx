@@ -89,7 +89,27 @@ export const MermaidBlock = Node.create({
     // `<pre>`. CodeBlockLowlight's `pre` rule is broad, so without a higher
     // priority here a `<pre data-type="mermaid">` gets claimed as a plain code
     // block and renders as highlighted source instead of a live diagram.
-    return [{ tag: 'pre[data-type="mermaid"]', priority: 100, preserveWhitespace: "full" }];
+    return [
+      { tag: 'pre[data-type="mermaid"]', priority: 100, preserveWhitespace: "full" },
+      {
+        tag: "pre",
+        priority: 90,
+        preserveWhitespace: "full",
+        getAttrs: (element) => {
+          if (!(element instanceof HTMLElement)) return false;
+          const code = element.querySelector("code");
+          const language =
+            element.getAttribute("data-language") ||
+            code?.getAttribute("data-language") ||
+            "";
+          const className = `${element.className} ${code?.className ?? ""}`;
+          return language.toLowerCase() === "mermaid" ||
+            /\blanguage-mermaid\b/.test(className)
+            ? {}
+            : false;
+        },
+      },
+    ];
   },
 
   renderHTML({ node, HTMLAttributes }) {
@@ -186,6 +206,13 @@ export const MermaidBlock = Node.create({
 
       let mode: "diagram" | "code" = "diagram";
 
+      function canEditDiagram() {
+        return (
+          editor.isEditable &&
+          !editor.view.dom.closest('[data-creed-readonly="true"]')
+        );
+      }
+
       function commit(next: string) {
         const pos = typeof getPos === "function" ? getPos() : null;
         if (pos == null) return;
@@ -201,7 +228,9 @@ export const MermaidBlock = Node.create({
         const trimmed = source.trim();
         if (!trimmed) {
           preview.innerHTML =
-            '<span class="creed-mermaid-empty">Empty diagram. Click “Edit” to add Mermaid syntax.</span>';
+            canEditDiagram()
+              ? '<span class="creed-mermaid-empty">Empty diagram. Click “Edit” to add Mermaid syntax.</span>'
+              : '<span class="creed-mermaid-empty">Empty diagram.</span>';
           return;
         }
 
@@ -232,6 +261,7 @@ export const MermaidBlock = Node.create({
       }
 
       function syncTabs() {
+        editTab.style.display = canEditDiagram() ? "" : "none";
         diagramTab.classList.toggle("is-active", mode === "diagram" && !editing);
         codeTab.classList.toggle("is-active", mode === "code" && !editing);
         editTab.classList.toggle("is-active", editing);
@@ -259,7 +289,7 @@ export const MermaidBlock = Node.create({
       }
 
       function enterEdit() {
-        if (!editor.isEditable) return;
+        if (!canEditDiagram()) return;
         editing = true;
         textarea.value = source;
         preview.style.display = "none";

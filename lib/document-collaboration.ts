@@ -30,6 +30,7 @@ export type DocumentComment = {
   resolvedBy: string | null;
   createdBy: string | null;
   publicAuthorLabel: string | null;
+  publicAuthorClientId: string | null;
   authorLabel: string;
   authorEmail: string;
   mentionedUserIds: string[];
@@ -84,6 +85,7 @@ type CommentRow = {
   created_by: string | null;
   updated_by: string | null;
   public_author_label: string | null;
+  public_author_client_id: string | null;
   created_at: string;
   updated_at: string;
   proposal_status: string | null;
@@ -150,6 +152,7 @@ const COMMENT_COLUMNS = [
   "created_by",
   "updated_by",
   "public_author_label",
+  "public_author_client_id",
   "created_at",
   "updated_at",
   "proposal_status",
@@ -218,6 +221,12 @@ function cleanPublicAuthorLabel(value: string | null | undefined) {
   return trimmed.slice(0, 80);
 }
 
+function cleanPublicAuthorClientId(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed || trimmed.length > 120) return "";
+  return /^[a-zA-Z0-9._:-]+$/.test(trimmed) ? trimmed : "";
+}
+
 function mapMetadata(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -245,6 +254,7 @@ function mapComment(
     resolvedBy: row.resolved_by,
     createdBy: row.created_by,
     publicAuthorLabel,
+    publicAuthorClientId: cleanPublicAuthorClientId(row.public_author_client_id) || null,
     authorLabel: buildUserLabel(author, publicAuthorLabel ?? row.created_by),
     authorEmail: author?.email ?? "",
     mentionedUserIds: mentionsByComment.get(row.id) ?? [],
@@ -594,6 +604,7 @@ export async function createDocumentComment(
     mentionedUserIds?: string[];
     source?: "creed" | "mcp" | "public";
     publicAuthorLabel?: string | null;
+    publicAuthorClientId?: string | null;
     // When "pending", the comment is a private agent proposal: it is stored
     // with its mentions but produces no notifications, emails, or activity
     // until the proposer approves it. Defaults to "shared" (normal comment).
@@ -607,6 +618,8 @@ export async function createDocumentComment(
   }
   const publicAuthorLabel =
     input.source === "public" ? cleanPublicAuthorLabel(input.publicAuthorLabel) : "";
+  const publicAuthorClientId =
+    input.source === "public" ? cleanPublicAuthorClientId(input.publicAuthorClientId) : "";
   if (input.source === "public" && !publicAuthorLabel) {
     return { ok: false, code: "invalid", error: "Name is required." };
   }
@@ -658,6 +671,7 @@ export async function createDocumentComment(
       proposal_status: input.proposalStatus === "pending" ? "pending" : "shared",
       proposed_by_agent_label: input.proposedByAgentLabel ?? null,
       public_author_label: publicAuthorLabel || null,
+      public_author_client_id: publicAuthorClientId || null,
       created_by: input.actorUserId ?? null,
       updated_by: input.actorUserId ?? null,
       created_at: now,
@@ -727,6 +741,79 @@ export async function createDocumentComment(
       comment: mapComment(data, usersMap, mentions),
       notifications,
       pendingEmails,
+    },
+  };
+}
+
+export async function updatePublicCommentAuthorLabel(
+  client: unknown,
+  input: {
+    documentId: string;
+    publicAuthorClientId?: string | null;
+    previousAuthorLabel?: string | null;
+    nextAuthorLabel: string;
+  }
+): Promise<MutationResult<{ comments: DocumentComment[] }>> {
+  const nextAuthorLabel = cleanPublicAuthorLabel(input.nextAuthorLabel);
+  if (!nextAuthorLabel) {
+    return { ok: false, code: "invalid", error: "Name is required." };
+  }
+
+  const publicAuthorClientId = cleanPublicAuthorClientId(input.publicAuthorClientId);
+  const previousAuthorLabel = cleanPublicAuthorLabel(input.previousAuthorLabel);
+  if (!publicAuthorClientId && !previousAuthorLabel) {
+    return { ok: false, code: "invalid", error: "No public commenter identity was provided." };
+  }
+
+  const document = await readSharedDocumentById(client, input.documentId);
+  if (!document) {
+    return { ok: false, code: "not-found", error: "Document not found." };
+  }
+
+  const db = client as SupabaseLikeClient;
+  const now = nowIso();
+
+  if (publicAuthorClientId) {
+    const { error } = (await db
+      .from("creed_document_comments")
+      .update({
+        public_author_label: nextAuthorLabel,
+        updated_at: now,
+      })
+      .eq("document_id", input.documentId)
+      .eq("public_author_client_id", publicAuthorClientId)) as {
+      data: unknown;
+      error: { message: string } | null;
+    };
+    if (error) {
+      return { ok: false, code: "invalid", error: error.message };
+    }
+  }
+
+  if (previousAuthorLabel) {
+    const { error } = (await db
+      .from("creed_document_comments")
+      .update({
+        public_author_label: nextAuthorLabel,
+        public_author_client_id: publicAuthorClientId || null,
+        updated_at: now,
+      })
+      .eq("document_id", input.documentId)
+      .is("created_by", null)
+      .is("public_author_client_id", null)
+      .eq("public_author_label", previousAuthorLabel)) as {
+      data: unknown;
+      error: { message: string } | null;
+    };
+    if (error) {
+      return { ok: false, code: "invalid", error: error.message };
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      comments: await listDocumentComments(client, input.documentId),
     },
   };
 }

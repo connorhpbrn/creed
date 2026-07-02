@@ -15,7 +15,7 @@ import Suggestion, {
   type SuggestionProps,
 } from "@tiptap/suggestion";
 import { EditorContent, useEditor } from "@tiptap/react";
-import { NodeSelection, PluginKey } from "@tiptap/pm/state";
+import { NodeSelection, Plugin, PluginKey } from "@tiptap/pm/state";
 import { DOMSerializer } from "@tiptap/pm/model";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -83,6 +83,19 @@ import { cn } from "@/lib/utils";
 const slashPluginKey = new PluginKey("creedSlashCommand");
 const mentionPluginKey = new PluginKey("creedReferenceMention");
 
+const ReadOnlySelectionGuard = Extension.create({
+  name: "readOnlySelectionGuard",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        filterTransaction(transaction) {
+          return !transaction.docChanged;
+        },
+      }),
+    ];
+  },
+});
+
 // Escape user text before interpolating it into section-body HTML. Mirrors the
 // helper used by the write API / creed-data serializers so promoted selections
 // can't inject markup into a new section's content.
@@ -148,6 +161,7 @@ type CommentDraftState = {
   x: number;
   y: number;
   placeBelow: boolean;
+  showAuthorNameInput: boolean;
 };
 
 // A comment surfaced inside the editor: enough to highlight the anchored text,
@@ -195,6 +209,12 @@ type RichTextEditorProps = {
     body: string;
     mentionedUserIds: string[];
   }) => Promise<void> | void;
+  // Enables the selection/comment toolbar while the editor is otherwise
+  // read-only. Document-changing transactions remain blocked.
+  allowReadOnlyComments?: boolean;
+  commentAuthorName?: string;
+  onCommentAuthorNameChange?: (value: string) => void;
+  requireCommentAuthorName?: boolean;
   // Comments anchored inside this section - painted as highlights and shown on
   // hover. Empty outside document mode.
   comments?: EditorCommentAnchor[];
@@ -284,6 +304,10 @@ export function RichTextEditor({
   onCreateSectionFromSelection,
   commentUsers = [],
   onCreateComment,
+  allowReadOnlyComments = false,
+  commentAuthorName = "",
+  onCommentAuthorNameChange,
+  requireCommentAuthorName = false,
   comments = [],
   activeCommentId = null,
   onSelectComment,
@@ -326,6 +350,9 @@ export function RichTextEditor({
   const [commentHover, setCommentHover] = useState<CommentHoverState | null>(null);
   const commentHoverTimer = useRef<number | null>(null);
   const commentsEnabled = Boolean(onCreateComment);
+  const readOnlyCommentsEnabled = readOnly && allowReadOnlyComments && commentsEnabled;
+  const commentSelectionEnabled = commentsEnabled && (!readOnly || allowReadOnlyComments);
+  const editorEditable = !readOnly || readOnlyCommentsEnabled;
   const router = useRouter();
   // Stable navigation callback handed to the reference node views so a click
   // on a chip / card routes via the SPA router instead of a full page load.
@@ -858,7 +885,7 @@ export function RichTextEditor({
 
   const editor = useEditor({
     immediatelyRender: false,
-    editable: !readOnly,
+    editable: editorEditable,
     extensions: [
       StarterKit.configure({
         heading: {
@@ -915,6 +942,7 @@ export function RichTextEditor({
         },
       }),
       CommentHighlight,
+      ...(readOnlyCommentsEnabled ? [ReadOnlySelectionGuard] : []),
       slashCommandExtension,
       ...referenceExtensions,
     ],
@@ -927,6 +955,10 @@ export function RichTextEditor({
             : "pb-2 text-[var(--creed-text-primary)]",
       },
       handleKeyDown: (view, event) => {
+        if (readOnly) {
+          return false;
+        }
+
         if (event.key !== "Backspace") {
           return false;
         }
@@ -983,7 +1015,7 @@ export function RichTextEditor({
         const instance = editorRef.current;
         if (!instance) return false;
 
-        const { from, to, empty } = view.state.selection;
+        const { from, empty } = view.state.selection;
         event.preventDefault();
 
         if (!empty) {
@@ -1129,7 +1161,7 @@ export function RichTextEditor({
   }
 
   function syncSelectionToolbar(currentEditor: Editor) {
-    if (readOnly) {
+    if (readOnly && !commentSelectionEnabled) {
       setSelectionToolbar(null);
       return;
     }
@@ -1141,7 +1173,8 @@ export function RichTextEditor({
     // For an atom node (mermaid, embed, reference card) only the comment and
     // make-section actions apply - text formatting does not. Show the reduced
     // bubble only if one of those actions is actually available.
-    const hasNodeAction = Boolean(onCreateSectionFromSelection) || commentsEnabled;
+    const hasNodeAction =
+      (!readOnly && Boolean(onCreateSectionFromSelection)) || commentSelectionEnabled;
 
     // Bail for empty selections, focus loss, and node selections with no
     // applicable action. A live text range shows the full bubble.
@@ -1314,7 +1347,7 @@ export function RichTextEditor({
   }
 
   function openCommentComposer() {
-    if (!editor || !commentsEnabled) {
+    if (!editor || !commentSelectionEnabled) {
       return;
     }
     const { from, to } = editor.state.selection;
@@ -1331,7 +1364,13 @@ export function RichTextEditor({
       placeBelow: true,
     };
     setCommentBody("");
-    setCommentDraft({ quote, x: anchor.x, y: anchor.y, placeBelow: anchor.placeBelow });
+    setCommentDraft({
+      quote,
+      x: anchor.x,
+      y: anchor.y,
+      placeBelow: anchor.placeBelow,
+      showAuthorNameInput: requireCommentAuthorName && !commentAuthorName.trim(),
+    });
     setSelectionToolbar(null);
   }
 
@@ -1341,7 +1380,12 @@ export function RichTextEditor({
   }
 
   async function submitComment() {
-    if (!commentDraft || !onCreateComment || !commentBody.trim()) {
+    if (
+      !commentDraft ||
+      !onCreateComment ||
+      !commentBody.trim() ||
+      (requireCommentAuthorName && !commentAuthorName.trim())
+    ) {
       return;
     }
     // Mentions are derived from the body text: any workspace member whose
@@ -1494,7 +1538,7 @@ export function RichTextEditor({
     // Fast path: the parent re-rendered with the exact string we just emitted -
     // no need to serialize + diff the doc, definitely no need to setContent.
     if (content === lastEmittedHtmlRef.current) {
-      editor.setEditable(!readOnly);
+      editor.setEditable(editorEditable);
       return;
     }
 
@@ -1504,7 +1548,7 @@ export function RichTextEditor({
     // the newer editor state (e.g. delete a reference chip the user just
     // inserted), so treat it as a no-op and let the latest onChange settle.
     if (emittedHtmlHistoryRef.current.includes(content)) {
-      editor.setEditable(!readOnly);
+      editor.setEditable(editorEditable);
       return;
     }
 
@@ -1516,17 +1560,22 @@ export function RichTextEditor({
       if (history.length > 8) history.shift();
     }
 
-    editor.setEditable(!readOnly);
-  }, [content, editor, readOnly]);
+    editor.setEditable(editorEditable);
+  }, [content, editor, editorEditable]);
 
   useEffect(() => {
     editorRef.current = editor ?? null;
   }, [editor]);
 
   return (
-    <div ref={containerRef} className="relative" style={editorThemeStyle}>
+    <div
+      ref={containerRef}
+      className="relative"
+      data-creed-readonly={readOnly ? "true" : undefined}
+      style={editorThemeStyle}
+    >
       <AnimatePresence>
-        {editor && selectionToolbar && !readOnly ? (
+        {editor && selectionToolbar && (!readOnly || commentSelectionEnabled) ? (
           <motion.div
             initial={{ opacity: 0, y: selectionToolbar.placeBelow ? -4 : 4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1543,7 +1592,7 @@ export function RichTextEditor({
               event.preventDefault();
             }}
           >
-            {!selectionToolbar.nodeSelection ? (
+            {!readOnly && !selectionToolbar.nodeSelection ? (
               <>
                 <ToolbarButton
                   active={editor.isActive("heading", { level: 2 })}
@@ -1614,7 +1663,7 @@ export function RichTextEditor({
                 </ToolbarButton>
               </>
             ) : null}
-            {onCreateSectionFromSelection ? (
+            {!readOnly && onCreateSectionFromSelection ? (
               <>
                 {!selectionToolbar.nodeSelection ? <ToolbarDivider /> : null}
                 <ToolbarButton
@@ -1625,9 +1674,9 @@ export function RichTextEditor({
                 </ToolbarButton>
               </>
             ) : null}
-            {commentsEnabled ? (
+            {commentSelectionEnabled ? (
               <>
-                {!selectionToolbar.nodeSelection || onCreateSectionFromSelection ? (
+                {!readOnly && (!selectionToolbar.nodeSelection || onCreateSectionFromSelection) ? (
                   <ToolbarDivider />
                 ) : null}
                 <ToolbarButton
@@ -1645,9 +1694,12 @@ export function RichTextEditor({
       <CommentComposerPopover
         draft={commentDraft}
         body={commentBody}
+        authorName={commentAuthorName}
+        showAuthorNameInput={commentDraft?.showAuthorNameInput ?? false}
         users={commentUsers}
         saving={savingComment}
         onBodyChange={setCommentBody}
+        onAuthorNameChange={onCommentAuthorNameChange}
         onSubmit={() => void submitComment()}
         onClose={closeCommentComposer}
       />
@@ -1965,17 +2017,23 @@ function TableToolbarButton({
 function CommentComposerPopover({
   draft,
   body,
+  authorName,
+  showAuthorNameInput,
   users,
   saving,
   onBodyChange,
+  onAuthorNameChange,
   onSubmit,
   onClose,
 }: {
   draft: CommentDraftState | null;
   body: string;
+  authorName: string;
+  showAuthorNameInput: boolean;
   users: WorkspaceUser[];
   saving: boolean;
   onBodyChange: (value: string) => void;
+  onAuthorNameChange?: (value: string) => void;
   onSubmit: () => void;
   onClose: () => void;
 }) {
@@ -2008,12 +2066,26 @@ function CommentComposerPopover({
             style={{ left: draft.x, top: draft.y }}
             onMouseDown={(event) => event.stopPropagation()}
           >
+            {showAuthorNameInput ? (
+              <Input
+                value={authorName}
+                onChange={(event) => onAuthorNameChange?.(event.target.value)}
+                placeholder="Your name"
+                autoFocus
+                className="mb-2 h-9 rounded-md border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[13px]"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                  }
+                }}
+              />
+            ) : null}
             <MentionTextarea
               value={body}
               onChange={onBodyChange}
               users={users}
-              placeholder="Add a comment. Type @ to mention someone."
-              autoFocus
+              placeholder={users.length > 0 ? "Add a comment. Type @ to mention someone." : "Add a comment."}
+              autoFocus={!showAuthorNameInput}
               className="min-h-20"
               onSubmit={onSubmit}
             />
@@ -2025,7 +2097,7 @@ function CommentComposerPopover({
               <Button
                 size="sm"
                 className="h-8 px-3 text-[13px]"
-                disabled={saving || !body.trim()}
+                disabled={saving || !body.trim() || (showAuthorNameInput && !authorName.trim())}
                 onClick={onSubmit}
               >
                 {saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
@@ -2097,4 +2169,3 @@ function CommentHoverCard({
     </AnimatePresence>
   );
 }
-

@@ -75,6 +75,7 @@ import {
   TextStrikethrough,
   Trash,
   TreeStructure,
+  UserCircle,
   Warning,
   X,
   type IconProps,
@@ -173,6 +174,7 @@ const SquarePenIcon = icon(PencilSimple);
 const TagIcon = icon(Tag);
 const TShirtIcon = icon(TShirt);
 const UnplugIcon = icon(Plugs);
+const UserCircleIcon = icon(UserCircle);
 const AlertTriangleIcon = icon(Warning);
 export const XIcon = icon(X);
 
@@ -252,5 +254,6 @@ export {
   FolderTreeIcon as TreeStructure,
   TShirtIcon as TShirt,
   UnplugIcon as Unplug,
+  UserCircleIcon as UserCircle,
   XIcon as X,
 };

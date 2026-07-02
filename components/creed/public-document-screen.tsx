@@ -4,6 +4,14 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { toast } from "sonner";
 import { AnimatedCheckmark } from "@/components/ui/animated-checkmark";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Contrast,
@@ -14,9 +22,11 @@ import {
   LoaderCircle,
   MessageSquare,
   SlidersHorizontal,
+  UserCircle,
   X,
 } from "@/components/ui/phosphor-icons";
 import { Textarea } from "@/components/ui/textarea";
+import { htmlToText } from "@/components/creed/inline-proposal-diff";
 import { RichTextEditor } from "@/components/creed/rich-text-editor";
 import { useTheme } from "@/components/creed/theme-provider";
 import type {
@@ -50,6 +60,7 @@ type PublicDocumentScreenProps = {
 type PublicPanel = "comments" | "activity" | "view" | null;
 
 const PUBLIC_COMMENT_NAME_STORAGE_KEY = "creed:public-comment-name";
+const PUBLIC_COMMENT_CLIENT_ID_STORAGE_KEY = "creed:public-comment-client-id";
 
 function formatRelativeTime(timestamp?: string) {
   if (!timestamp) return "just now";
@@ -75,6 +86,13 @@ function fileBaseName(path: string, fallback: string) {
   return path.split("/").pop()?.replace(/\.[^.]+$/, "") || fallback;
 }
 
+function createPublicCommentClientId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `public-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function PublicDocumentScreen({
   shareId,
   document,
@@ -94,10 +112,14 @@ export function PublicDocumentScreen({
   const [comments, setComments] = useState(initialComments);
   const [activity, setActivity] = useState(initialActivity);
   const [commentName, setCommentName] = useState("");
-  const [commentBody, setCommentBody] = useState("");
+  const [commentClientId, setCommentClientId] = useState("");
+  const [nameDialogOpen, setNameDialogOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyNamePromptCommentId, setReplyNamePromptCommentId] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
-  const [submittingComment, setSubmittingComment] = useState(false);
   const [submittingReplyId, setSubmittingReplyId] = useState<string | null>(null);
   const [copiedAction, setCopiedAction] = useState<string | null>(null);
   const rootComments = useMemo(
@@ -116,8 +138,17 @@ export function PublicDocumentScreen({
   useEffect(() => {
     try {
       setCommentName(window.localStorage.getItem(PUBLIC_COMMENT_NAME_STORAGE_KEY) ?? "");
+      const existingClientId = window.localStorage.getItem(PUBLIC_COMMENT_CLIENT_ID_STORAGE_KEY);
+      if (existingClientId) {
+        setCommentClientId(existingClientId);
+      } else {
+        const nextClientId = createPublicCommentClientId();
+        window.localStorage.setItem(PUBLIC_COMMENT_CLIENT_ID_STORAGE_KEY, nextClientId);
+        setCommentClientId(nextClientId);
+      }
     } catch {
       setCommentName("");
+      setCommentClientId(createPublicCommentClientId());
     }
   }, []);
 
@@ -192,7 +223,11 @@ export function PublicDocumentScreen({
     }, 120);
   }
 
-  async function createPublicComment(input: { body: string; parentId?: string | null }) {
+  async function createPublicComment(input: {
+    body: string;
+    parentId?: string | null;
+    referenceQuote?: string | null;
+  }) {
     const name = commentName.trim();
     const body = input.body.trim();
 
@@ -213,8 +248,10 @@ export function PublicDocumentScreen({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name,
+            clientId: commentClientId,
             body,
             parentId: input.parentId ?? null,
+            referenceQuote: input.referenceQuote ?? null,
           }),
         }
       );
@@ -235,6 +272,8 @@ export function PublicDocumentScreen({
         // Local persistence is helpful, but not required for commenting.
       }
       setComments((current) => [...current, createdComment]);
+      setPanel("comments");
+      setActiveCommentId(createdComment.id);
       if (payload.activity) setActivity(payload.activity);
       return true;
     } catch (error) {
@@ -243,11 +282,18 @@ export function PublicDocumentScreen({
     }
   }
 
-  async function submitRootComment() {
-    setSubmittingComment(true);
-    const created = await createPublicComment({ body: commentBody });
-    setSubmittingComment(false);
-    if (created) setCommentBody("");
+  async function createPublicCommentFromEditor(input: {
+    quote: string;
+    body: string;
+  }) {
+    const created = await createPublicComment({
+      body: input.body,
+      referenceQuote: input.quote || null,
+    });
+
+    if (!created) {
+      throw new Error("Could not add the comment.");
+    }
   }
 
   async function submitReply(parentId: string) {
@@ -257,6 +303,57 @@ export function PublicDocumentScreen({
     if (created) {
       setReplyBody("");
       setReplyingTo(null);
+      setReplyNamePromptCommentId(null);
+    }
+  }
+
+  function openNameDialog() {
+    setNameDraft(commentName);
+    setNameDialogOpen(true);
+  }
+
+  async function savePublicName() {
+    const nextName = nameDraft.trim();
+    if (!nextName) {
+      toast.error("Name is required.");
+      return;
+    }
+
+    try {
+      setSavingName(true);
+      const response = await fetch(
+        `/api/public/documents/${encodeURIComponent(shareId)}/comments`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: nextName,
+            previousName: commentName || null,
+            clientId: commentClientId,
+          }),
+        }
+      );
+      const payload = (await response.json()) as {
+        comments?: DocumentComment[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Could not update your name.");
+      }
+
+      try {
+        window.localStorage.setItem(PUBLIC_COMMENT_NAME_STORAGE_KEY, nextName);
+      } catch {
+        // Name still updates in memory if localStorage is unavailable.
+      }
+      setCommentName(nextName);
+      if (payload.comments) setComments(payload.comments);
+      setNameDialogOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update your name.");
+    } finally {
+      setSavingName(false);
     }
   }
 
@@ -265,52 +362,9 @@ export function PublicDocumentScreen({
       data-file-export-shell
       className={cn(
         "grid min-h-screen overflow-hidden bg-[var(--creed-surface)] text-[var(--creed-text-primary)]",
-        panel
-          ? "grid-cols-[minmax(0,1fr)] md:grid-cols-[48px_minmax(0,1fr)] lg:grid-cols-[48px_minmax(0,1fr)_360px]"
-          : "grid-cols-[minmax(0,1fr)] md:grid-cols-[48px_minmax(0,1fr)]"
+        panel ? "grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)]"
       )}
     >
-      <aside
-        data-file-export-hidden
-        className="hidden h-screen bg-[var(--creed-surface)] px-1.5 py-3 md:block"
-      >
-        <div className="flex h-full flex-col items-center gap-2.5">
-          <RailButton
-            label="Activity"
-            active={panel === "activity"}
-            onClick={() => setPanel((current) => current === "activity" ? null : "activity")}
-          >
-            <History className="h-4 w-4" />
-          </RailButton>
-          <RailButton
-            label="Comments"
-            active={panel === "comments"}
-            badge={rootComments.length}
-            onClick={() => setPanel((current) => current === "comments" ? null : "comments")}
-          >
-            <MessageSquare className="h-4 w-4" />
-          </RailButton>
-          <RailButton label="Export PDF" active={false} onClick={exportPdf}>
-            {copiedAction === "pdf" ? <AnimatedCheckmark /> : <FileText className="h-4 w-4" />}
-          </RailButton>
-          <RailButton label="Download" active={false} onClick={downloadMarkdown}>
-            {copiedAction === "download" ? <AnimatedCheckmark /> : <Download className="h-4 w-4" />}
-          </RailButton>
-          <RailButton label="Copy" active={false} onClick={() => void copyMarkdown()}>
-            {copiedAction === "copy" ? <AnimatedCheckmark /> : <Copy className="h-4 w-4" />}
-          </RailButton>
-          <RailButton
-            label="View"
-            active={panel === "view"}
-            onClick={() => setPanel((current) => current === "view" ? null : "view")}
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-          </RailButton>
-          <div className="min-h-0 flex-1" />
-          <PublicThemeButton />
-        </div>
-      </aside>
-
       <main
         ref={scrollRef}
         data-file-export-scroll
@@ -318,7 +372,7 @@ export function PublicDocumentScreen({
       >
         <article
           data-file-export-content
-          className="mx-auto px-4 py-8 pb-16 md:px-12 md:py-12 xl:px-16"
+          className="mx-auto px-4 py-8 pb-28 md:px-12 md:py-12 md:pb-32 xl:px-16"
           style={{
             maxWidth: EDITOR_WIDTH_PX[editorView.width],
             "--editor-font-scale": String(EDITOR_FONT_SCALE[editorView.textScale]),
@@ -335,6 +389,20 @@ export function PublicDocumentScreen({
             {sections.map((section) => {
               const depth = sectionDepth(section);
               const accent = accentColorMap[section.accent];
+              const sectionText = htmlToText(section.content).toLocaleLowerCase();
+              const sectionCommentAnchors = comments
+                .filter((comment) => {
+                  if (comment.status !== "open") return false;
+                  const quote = comment.referenceQuote.trim();
+                  return quote.length > 0 && sectionText.includes(quote.toLocaleLowerCase());
+                })
+                .map((comment) => ({
+                  id: comment.id,
+                  quote: comment.referenceQuote,
+                  body: comment.body,
+                  authorLabel: comment.authorLabel,
+                  status: comment.status,
+                }));
               const titleSizeClass =
                 depth >= 2
                   ? "text-[13px] md:text-[14px]"
@@ -369,6 +437,17 @@ export function PublicDocumentScreen({
                     accentColor={accent}
                     onChange={() => {}}
                     enableReferences={false}
+                    allowReadOnlyComments
+                    commentAuthorName={commentName}
+                    onCommentAuthorNameChange={setCommentName}
+                    requireCommentAuthorName
+                    comments={sectionCommentAnchors}
+                    activeCommentId={activeCommentId}
+                    onCreateComment={createPublicCommentFromEditor}
+                    onSelectComment={(commentId) => {
+                      setPanel("comments");
+                      setActiveCommentId(commentId);
+                    }}
                   />
                 </section>
               );
@@ -384,23 +463,83 @@ export function PublicDocumentScreen({
           repliesByParent={repliesByParent}
           activity={activity}
           commentName={commentName}
-          commentBody={commentBody}
+          activeCommentId={activeCommentId}
           replyingTo={replyingTo}
+          replyNamePromptCommentId={replyNamePromptCommentId}
           replyBody={replyBody}
-          submittingComment={submittingComment}
           submittingReplyId={submittingReplyId}
           editorTextScale={editorView.textScale}
           editorWidth={editorView.width}
           onClose={() => setPanel(null)}
           onCommentNameChange={setCommentName}
-          onCommentBodyChange={setCommentBody}
-          onReplyingToChange={setReplyingTo}
+          onActiveCommentChange={setActiveCommentId}
+          onReplyingToChange={(commentId) => {
+            setReplyingTo(commentId);
+            if (commentId && !commentName.trim()) {
+              setReplyNamePromptCommentId(commentId);
+            }
+          }}
           onReplyBodyChange={setReplyBody}
-          onSubmitComment={() => void submitRootComment()}
           onSubmitReply={(commentId) => void submitReply(commentId)}
           onTextScaleChange={(textScale) => setEditorView({ textScale })}
           onWidthChange={(width) => setEditorView({ width })}
         />
+      ) : null}
+
+      {!panel ? (
+        <div
+          data-file-export-hidden
+          className={cn(
+            "fixed inset-x-0 bottom-6 z-40 hidden items-center justify-center px-6 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:flex",
+            mobileBarVisible ? "translate-y-0" : "translate-y-[calc(100%+2rem)]"
+          )}
+        >
+          <div className="flex items-center gap-4 rounded-full border border-[var(--creed-border)] bg-[var(--creed-surface)] px-4 py-3 shadow-[0_16px_44px_rgba(28,28,26,0.16)] dark:shadow-[0_16px_44px_rgba(0,0,0,0.32)]">
+            <RailButton
+              label="Activity"
+              active={panel === "activity"}
+              size="desktop"
+              onClick={() => setPanel((current) => current === "activity" ? null : "activity")}
+            >
+              <History className="h-5 w-5" />
+            </RailButton>
+            <RailButton
+              label="Comments"
+              active={panel === "comments"}
+              badge={rootComments.length}
+              size="desktop"
+              onClick={() => setPanel((current) => current === "comments" ? null : "comments")}
+            >
+              <MessageSquare className="h-5 w-5" />
+            </RailButton>
+            <RailButton label="Export PDF" active={false} size="desktop" onClick={exportPdf}>
+              {copiedAction === "pdf" ? <AnimatedCheckmark /> : <FileText className="h-5 w-5" />}
+            </RailButton>
+            <RailButton label="Download" active={false} size="desktop" onClick={downloadMarkdown}>
+              {copiedAction === "download" ? <AnimatedCheckmark /> : <Download className="h-5 w-5" />}
+            </RailButton>
+            <RailButton label="Copy" active={false} size="desktop" onClick={() => void copyMarkdown()}>
+              {copiedAction === "copy" ? <AnimatedCheckmark /> : <Copy className="h-5 w-5" />}
+            </RailButton>
+            <RailButton
+              label="View"
+              active={panel === "view"}
+              size="desktop"
+              onClick={() => setPanel((current) => current === "view" ? null : "view")}
+            >
+              <SlidersHorizontal className="h-5 w-5" />
+            </RailButton>
+            <RailButton
+              label="Name"
+              active={nameDialogOpen}
+              size="desktop"
+              onClick={openNameDialog}
+            >
+              <UserCircle className="h-5 w-5" />
+            </RailButton>
+            <PublicThemeButton size="desktop" />
+          </div>
+        </div>
       ) : null}
 
       {/* Mobile-only floating toolbar. Reveals on scroll up, hides on scroll
@@ -444,8 +583,47 @@ export function PublicDocumentScreen({
         >
           <SlidersHorizontal className="h-4 w-4" />
         </RailButton>
+        <RailButton label="Name" active={nameDialogOpen} onClick={openNameDialog}>
+          <UserCircle className="h-4 w-4" />
+        </RailButton>
         <PublicThemeButton />
       </div>
+
+      <Dialog open={nameDialogOpen} onOpenChange={setNameDialogOpen}>
+        <DialogContent className="rounded-[var(--radius-xl)] border-[var(--creed-border)] bg-[var(--creed-surface)]">
+          <DialogHeader>
+            <DialogTitle>Your comment name</DialogTitle>
+            <DialogDescription>
+              This name will be used for future public comments and will update your previous comments from this browser.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={nameDraft}
+            onChange={(event) => setNameDraft(event.target.value)}
+            placeholder="Your name"
+            className="h-10 rounded-md border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[13px]"
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void savePublicName();
+              }
+            }}
+          />
+          <DialogFooter className="flex-row items-center justify-between border-t-[var(--creed-border)] bg-[var(--creed-surface)] sm:justify-between">
+            <Button variant="ghost" className="rounded-md" onClick={() => setNameDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="rounded-md bg-[var(--creed-text-primary)] px-4 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
+              disabled={savingName || !nameDraft.trim()}
+              onClick={() => void savePublicName()}
+            >
+              {savingName ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -454,12 +632,14 @@ function RailButton({
   label,
   active,
   badge,
+  size = "mobile",
   onClick,
   children,
 }: {
   label: string;
   active: boolean;
   badge?: number;
+  size?: "mobile" | "desktop";
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -471,6 +651,7 @@ function RailButton({
       onClick={onClick}
       className={cn(
         "relative inline-flex h-8 w-8 items-center justify-center rounded-[10px] text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+        size === "desktop" && "h-10 w-10 rounded-[12px]",
         active && "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)]"
       )}
     >
@@ -484,7 +665,7 @@ function RailButton({
   );
 }
 
-function PublicThemeButton() {
+function PublicThemeButton({ size = "mobile" }: { size?: "mobile" | "desktop" }) {
   const { theme, toggleTheme } = useTheme();
 
   return (
@@ -492,7 +673,10 @@ function PublicThemeButton() {
       type="button"
       variant="ghost"
       size="icon"
-      className="h-8 w-8 rounded-[10px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
+      className={cn(
+        "h-8 w-8 rounded-[10px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]",
+        size === "desktop" && "h-10 w-10 rounded-[12px]"
+      )}
       aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
       title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
       onClick={(event) => {
@@ -500,7 +684,7 @@ function PublicThemeButton() {
         toggleTheme({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
       }}
     >
-      <Contrast className="h-4 w-4" />
+      <Contrast className={cn("h-4 w-4", size === "desktop" && "h-5 w-5")} />
     </Button>
   );
 }
@@ -511,19 +695,18 @@ function PublicSidePanel({
   repliesByParent,
   activity,
   commentName,
-  commentBody,
+  activeCommentId,
   replyingTo,
+  replyNamePromptCommentId,
   replyBody,
-  submittingComment,
   submittingReplyId,
   editorTextScale,
   editorWidth,
   onClose,
   onCommentNameChange,
-  onCommentBodyChange,
+  onActiveCommentChange,
   onReplyingToChange,
   onReplyBodyChange,
-  onSubmitComment,
   onSubmitReply,
   onTextScaleChange,
   onWidthChange,
@@ -533,19 +716,18 @@ function PublicSidePanel({
   repliesByParent: Map<string, DocumentComment[]>;
   activity: DocumentActivityEvent[];
   commentName: string;
-  commentBody: string;
+  activeCommentId: string | null;
   replyingTo: string | null;
+  replyNamePromptCommentId: string | null;
   replyBody: string;
-  submittingComment: boolean;
   submittingReplyId: string | null;
   editorTextScale: EditorTextScale;
   editorWidth: EditorWidth;
   onClose: () => void;
   onCommentNameChange: (value: string) => void;
-  onCommentBodyChange: (value: string) => void;
+  onActiveCommentChange: (value: string | null) => void;
   onReplyingToChange: (value: string | null) => void;
   onReplyBodyChange: (value: string) => void;
-  onSubmitComment: () => void;
   onSubmitReply: (commentId: string) => void;
   onTextScaleChange: (value: EditorTextScale) => void;
   onWidthChange: (value: EditorWidth) => void;
@@ -576,16 +758,15 @@ function PublicSidePanel({
           comments={comments}
           repliesByParent={repliesByParent}
           commentName={commentName}
-          commentBody={commentBody}
+          activeCommentId={activeCommentId}
           replyingTo={replyingTo}
+          replyNamePromptCommentId={replyNamePromptCommentId}
           replyBody={replyBody}
-          submittingComment={submittingComment}
           submittingReplyId={submittingReplyId}
           onCommentNameChange={onCommentNameChange}
-          onCommentBodyChange={onCommentBodyChange}
+          onActiveCommentChange={onActiveCommentChange}
           onReplyingToChange={onReplyingToChange}
           onReplyBodyChange={onReplyBodyChange}
-          onSubmitComment={onSubmitComment}
           onSubmitReply={onSubmitReply}
         />
       ) : panel === "activity" ? (
@@ -606,111 +787,102 @@ function CommentsPanel({
   comments,
   repliesByParent,
   commentName,
-  commentBody,
+  activeCommentId,
   replyingTo,
+  replyNamePromptCommentId,
   replyBody,
-  submittingComment,
   submittingReplyId,
   onCommentNameChange,
-  onCommentBodyChange,
+  onActiveCommentChange,
   onReplyingToChange,
   onReplyBodyChange,
-  onSubmitComment,
   onSubmitReply,
 }: {
   comments: DocumentComment[];
   repliesByParent: Map<string, DocumentComment[]>;
   commentName: string;
-  commentBody: string;
+  activeCommentId: string | null;
   replyingTo: string | null;
+  replyNamePromptCommentId: string | null;
   replyBody: string;
-  submittingComment: boolean;
   submittingReplyId: string | null;
   onCommentNameChange: (value: string) => void;
-  onCommentBodyChange: (value: string) => void;
+  onActiveCommentChange: (value: string | null) => void;
   onReplyingToChange: (value: string | null) => void;
   onReplyBodyChange: (value: string) => void;
-  onSubmitComment: () => void;
   onSubmitReply: (commentId: string) => void;
 }) {
   return (
-    <>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 creed-scrollbar">
-        {comments.length === 0 ? (
-          <div className="rounded-md border border-dashed border-[var(--creed-border)] px-3 py-8 text-center text-[13px] text-[var(--creed-text-secondary)]">
-            No comments yet.
-          </div>
-        ) : (
-          <div className="space-y-5">
-            {comments.map((comment) => (
-              <CommentThread
-                key={comment.id}
-                comment={comment}
-                replies={repliesByParent.get(comment.id) ?? []}
-                replyingTo={replyingTo}
-                replyBody={replyBody}
-                submittingReply={submittingReplyId === comment.id}
-                onReplyingToChange={onReplyingToChange}
-                onReplyBodyChange={onReplyBodyChange}
-                onSubmitReply={() => onSubmitReply(comment.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="border-t border-[var(--creed-border)] p-4">
-        <div className="space-y-2">
-          <Input
-            value={commentName}
-            onChange={(event) => onCommentNameChange(event.target.value)}
-            placeholder="Name"
-            className="h-10 rounded-md border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[13px]"
-          />
-          <Textarea
-            value={commentBody}
-            onChange={(event) => onCommentBodyChange(event.target.value)}
-            placeholder="Add a comment"
-            className="min-h-24 rounded-md border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 py-2 text-[13px] leading-6"
-          />
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 creed-scrollbar">
+      {comments.length === 0 ? (
+        <div className="rounded-md border border-dashed border-[var(--creed-border)] px-3 py-8 text-center text-[13px] text-[var(--creed-text-secondary)]">
+          Highlight text in the document and use the comment button to start a thread.
         </div>
-        <div className="mt-3 flex justify-end">
-          <Button
-            type="button"
-            className="h-9 rounded-md bg-[var(--creed-text-primary)] px-4 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
-            disabled={submittingComment}
-            onClick={onSubmitComment}
-          >
-            {submittingComment ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-            Comment
-          </Button>
+      ) : (
+        <div className="space-y-5">
+          {comments.map((comment) => (
+            <CommentThread
+              key={comment.id}
+              comment={comment}
+              replies={repliesByParent.get(comment.id) ?? []}
+              active={activeCommentId === comment.id}
+              commentName={commentName}
+              replyingTo={replyingTo}
+              showNamePrompt={replyNamePromptCommentId === comment.id}
+              replyBody={replyBody}
+              submittingReply={submittingReplyId === comment.id}
+              onCommentNameChange={onCommentNameChange}
+              onActiveCommentChange={onActiveCommentChange}
+              onReplyingToChange={onReplyingToChange}
+              onReplyBodyChange={onReplyBodyChange}
+              onSubmitReply={() => onSubmitReply(comment.id)}
+            />
+          ))}
         </div>
-      </div>
-    </>
+      )}
+    </div>
   );
 }
 
 function CommentThread({
   comment,
   replies,
+  active,
+  commentName,
   replyingTo,
+  showNamePrompt,
   replyBody,
   submittingReply,
+  onCommentNameChange,
+  onActiveCommentChange,
   onReplyingToChange,
   onReplyBodyChange,
   onSubmitReply,
 }: {
   comment: DocumentComment;
   replies: DocumentComment[];
+  active: boolean;
+  commentName: string;
   replyingTo: string | null;
+  showNamePrompt: boolean;
   replyBody: string;
   submittingReply: boolean;
+  onCommentNameChange: (value: string) => void;
+  onActiveCommentChange: (value: string | null) => void;
   onReplyingToChange: (value: string | null) => void;
   onReplyBodyChange: (value: string) => void;
   onSubmitReply: () => void;
 }) {
   return (
-    <div className="border-b border-[var(--creed-border)] pb-5 last:border-b-0">
+    <div
+      className={cn(
+        "rounded-md border border-transparent p-3 transition-colors",
+        active
+          ? "border-[var(--creed-border)] bg-[var(--creed-surface-raised)]"
+          : "border-b-[var(--creed-border)] pb-5 last:border-b-transparent"
+      )}
+      onClick={() => onActiveCommentChange(comment.id)}
+    >
       <CommentItem comment={comment} />
       <button
         type="button"
@@ -730,6 +902,14 @@ function CommentThread({
 
       {replyingTo === comment.id ? (
         <div className="mt-4 space-y-2">
+          {showNamePrompt ? (
+            <Input
+              value={commentName}
+              onChange={(event) => onCommentNameChange(event.target.value)}
+              placeholder="Your name"
+              className="h-9 rounded-md border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[13px]"
+            />
+          ) : null}
           <Textarea
             value={replyBody}
             onChange={(event) => onReplyBodyChange(event.target.value)}
@@ -751,7 +931,7 @@ function CommentThread({
             <Button
               type="button"
               className="h-8 rounded-md bg-[var(--creed-text-primary)] px-3 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
-              disabled={submittingReply}
+              disabled={submittingReply || !replyBody.trim() || !commentName.trim()}
               onClick={onSubmitReply}
             >
               {submittingReply ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
