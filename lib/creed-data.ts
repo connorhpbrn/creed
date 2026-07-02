@@ -2214,7 +2214,8 @@ export const initialCreedState: CreedState = {
       icon: "codex",
       status: "not-connected",
       description: "Add Creed as a remote MCP server for agentic coding runs.",
-      connectHint: "Run the command, then codex mcp login creed to authorize in the browser.",
+      connectHint:
+        "Run the command, then codex mcp login creed. If Codex later reports OAuth authorization required, run codex mcp login creed again.",
       command: "codex mcp add creed --url https://creed.md/mcp",
     },
     {

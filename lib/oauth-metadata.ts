@@ -22,6 +22,7 @@ export function protectedResourceMetadata() {
     {
       resource: `${site}/mcp`,
       authorization_servers: [site],
+      scopes_supported: ["read", "propose", "direct_edit"],
       bearer_methods_supported: ["header"],
     },
     { headers: PRM_CORS_HEADERS }

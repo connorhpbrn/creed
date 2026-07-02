@@ -37,7 +37,7 @@ type TokenRow = {
   refresh_expires_at: string;
 };
 
-const ACCESS_TTL_MS = 60 * 60 * 1000; // 1 hour
+const ACCESS_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const CODE_TTL_MS = 60 * 1000; // 60 seconds
 
