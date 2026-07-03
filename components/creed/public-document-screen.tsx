@@ -35,11 +35,7 @@ import type {
   DocumentComment,
   WorkspaceUser,
 } from "@/lib/document-collaboration";
-import { accentColorMap } from "@/lib/creed-data";
-import {
-  documentSectionsToMarkdown,
-  parseDocumentSections,
-} from "@/lib/document-sections";
+import { markdownToRichHtml } from "@/lib/rich-text";
 import {
   EDITOR_FONT_SCALE,
   EDITOR_WIDTH_PX,
@@ -49,7 +45,6 @@ import {
   type EditorWidth,
 } from "@/lib/editor-view";
 import type { SharedDocument } from "@/lib/shared-documents";
-import { sectionDepth } from "@/lib/section-hierarchy";
 import { cn } from "@/lib/utils";
 
 type PublicDocumentScreenProps = {
@@ -89,6 +84,11 @@ function fileBaseName(path: string, fallback: string) {
   return path.split("/").pop()?.replace(/\.[^.]+$/, "") || fallback;
 }
 
+function normalizePublicMarkdown(markdown: string) {
+  const body = markdown.replace(/\r\n/g, "\n").trim();
+  return body ? `${body}\n` : "";
+}
+
 function createPublicCommentClientId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -104,11 +104,11 @@ export function PublicDocumentScreen({
   mentionUsers,
 }: PublicDocumentScreenProps) {
   const editorView = useEditorView();
-  const sections = useMemo(() => parseDocumentSections(document.content), [document.content]);
   const markdown = useMemo(
-    () => documentSectionsToMarkdown(sections, document.title),
-    [document.title, sections]
+    () => normalizePublicMarkdown(document.content),
+    [document.content]
   );
+  const contentHtml = useMemo(() => markdownToRichHtml(document.content), [document.content]);
   const [panel, setPanel] = useState<PublicPanel>(null);
   const scrollRef = useRef<HTMLElement>(null);
   // Mobile-only bottom toolbar: reveal on scroll up, hide on scroll down.
@@ -138,6 +138,22 @@ export function PublicDocumentScreen({
     }
     return map;
   }, [comments]);
+  const documentCommentAnchors = useMemo(() => {
+    const documentText = htmlToText(contentHtml).toLocaleLowerCase();
+    return comments
+      .filter((comment) => {
+        if (comment.status !== "open") return false;
+        const quote = comment.referenceQuote.trim();
+        return quote.length > 0 && documentText.includes(quote.toLocaleLowerCase());
+      })
+      .map((comment) => ({
+        id: comment.id,
+        quote: comment.referenceQuote,
+        body: comment.body,
+        authorLabel: comment.authorLabel,
+        status: comment.status,
+      }));
+  }, [comments, contentHtml]);
 
   useEffect(() => {
     try {
@@ -399,75 +415,27 @@ export function PublicDocumentScreen({
             </h1>
           </header>
 
-          <div className="space-y-10 md:space-y-16">
-            {sections.map((section) => {
-              const depth = sectionDepth(section);
-              const accent = accentColorMap[section.accent];
-              const sectionText = htmlToText(section.content).toLocaleLowerCase();
-              const sectionCommentAnchors = comments
-                .filter((comment) => {
-                  if (comment.status !== "open") return false;
-                  const quote = comment.referenceQuote.trim();
-                  return quote.length > 0 && sectionText.includes(quote.toLocaleLowerCase());
-                })
-                .map((comment) => ({
-                  id: comment.id,
-                  quote: comment.referenceQuote,
-                  body: comment.body,
-                  authorLabel: comment.authorLabel,
-                  status: comment.status,
-                }));
-              const titleSizeClass =
-                depth >= 2
-                  ? "text-[13px] md:text-[14px]"
-                  : depth === 1
-                    ? "text-[14px] md:text-[15px]"
-                    : "text-[16px] md:text-[18px]";
-              const accentBarHeightClass = depth >= 2 ? "h-6" : depth === 1 ? "h-7" : "h-9";
-
-              return (
-                <section
-                  key={section.id}
-                  data-section-id={section.id}
-                  className="scroll-mt-10"
-                  style={depth > 0 ? { paddingLeft: depth * 18 } : undefined}
-                >
-                  <div className="mb-6 flex items-center gap-3">
-                    <span
-                      className={cn("inline-block w-[3px] rounded-full", accentBarHeightClass)}
-                      style={{ backgroundColor: accent }}
-                    />
-                    <h2
-                      className={cn("font-medium leading-none tracking-[0]", titleSizeClass)}
-                      style={{ color: accent }}
-                    >
-                      {section.name}
-                    </h2>
-                  </div>
-                  <RichTextEditor
-                    sectionId={section.id}
-                    content={section.content}
-                    readOnly
-                    accentColor={accent}
-                    onChange={() => {}}
-                    enableReferences={false}
-                    allowReadOnlyComments
-                    commentAuthorName={commentName}
-                    onCommentAuthorNameChange={setCommentName}
-                    requireCommentAuthorName
-                    commentUsers={mentionUsers}
-                    comments={sectionCommentAnchors}
-                    activeCommentId={activeCommentId}
-                    onCreateComment={createPublicCommentFromEditor}
-                    onSelectComment={(commentId) => {
-                      setPanel("comments");
-                      setActiveCommentId(commentId);
-                    }}
-                  />
-                </section>
-              );
-            })}
-          </div>
+          <RichTextEditor
+            sectionId={`public-document-${document.id}`}
+            content={contentHtml}
+            readOnly
+            accentColor="#2563EB"
+            onChange={() => {}}
+            enableReferences={false}
+            allowReadOnlyComments
+            allowHeading1
+            commentAuthorName={commentName}
+            onCommentAuthorNameChange={setCommentName}
+            requireCommentAuthorName
+            commentUsers={mentionUsers}
+            comments={documentCommentAnchors}
+            activeCommentId={activeCommentId}
+            onCreateComment={createPublicCommentFromEditor}
+            onSelectComment={(commentId) => {
+              setPanel("comments");
+              setActiveCommentId(commentId);
+            }}
+          />
         </article>
       </main>
 

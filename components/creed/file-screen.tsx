@@ -17,7 +17,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  Archive,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -40,7 +39,6 @@ import {
   Lock,
   LockOpen,
   MessageSquare,
-  Plus,
   Reply,
   RotateCcw,
   Save,
@@ -79,6 +77,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
 import { RichTextEditor } from "@/components/creed/rich-text-editor";
 import { MentionText } from "@/components/creed/mention-text";
@@ -95,9 +94,7 @@ import {
 import { ReviewPill } from "@/components/creed/review-pill";
 import {
   DocumentReviewPanel,
-  InlineDocumentProposal,
-  resolveProposalPerson,
-  type DocumentProposal as DocumentReviewProposal,
+  type DocumentProposal,
 } from "@/components/creed/document-review-panel";
 import {
   useCreedShellFileActions,
@@ -106,10 +103,7 @@ import {
 } from "@/components/creed/shell";
 import { useCreed } from "@/components/creed/creed-provider";
 import { parseCreedMarkdown } from "@/lib/creed-markdown";
-import {
-  documentSectionsToMarkdown,
-  parseDocumentSections,
-} from "@/lib/document-sections";
+import { markdownToRichHtml } from "@/lib/rich-text";
 import {
   accentColorMap,
   accentLabelMap,
@@ -118,6 +112,7 @@ import {
   getProposalPreviewText,
   normalizeLegacyProposalDraft,
   normalizeProposalForSection,
+  richHtmlToMarkdown,
   type AccentKey,
   type ActivityEntry,
   type ActivityStatus,
@@ -150,9 +145,7 @@ import type {
 import type { SharedDocument } from "@/lib/shared-documents";
 import {
   canIndentSection,
-  canNestUnder,
   canOutdentSection,
-  insertSectionRelativeTo,
   normalizeSectionDepths,
   sectionDepth,
   shiftSubtreeDepth,
@@ -184,6 +177,78 @@ const FILE_NAV_INTENT_KEY = "creed:file-nav-intent";
 
 const documentHeaderIconButtonClass =
   "h-8 w-8 min-h-8 min-w-8 rounded-full border-0 bg-transparent p-0 text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]";
+
+type DocumentBlockOutlineItem = {
+  id: string;
+  name: string;
+  level: 1 | 2 | 3;
+  depth: number;
+};
+
+function normalizeDocumentMarkdown(markdown: string) {
+  const normalized = markdown.replace(/\r\n/g, "\n").trim();
+  return normalized ? `${normalized}\n` : "";
+}
+
+function documentHtmlToMarkdown(html: string) {
+  return normalizeDocumentMarkdown(richHtmlToMarkdown(html));
+}
+
+function documentMarkdownToHtml(markdown: string) {
+  return markdownToRichHtml(normalizeDocumentMarkdown(markdown).trim());
+}
+
+function slugifyDocumentHeading(value: string) {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "heading"
+  );
+}
+
+function documentOutlineFromHtml(html: string): DocumentBlockOutlineItem[] {
+  const matches = Array.from(html.matchAll(/<h([1-3])[^>]*>([\s\S]*?)<\/h\1>/g));
+  const levels = matches
+    .map((match) => Number.parseInt(match[1], 10))
+    .filter((level): level is 1 | 2 | 3 => level === 1 || level === 2 || level === 3);
+  const rootLevel = levels.length > 0 ? Math.min(...levels) : 1;
+  const counts = new Map<string, number>();
+  return matches.flatMap((match) => {
+    const name = htmlToText(match[2]).trim();
+    if (!name) return [];
+    const level = Number.parseInt(match[1], 10) as 1 | 2 | 3;
+    const slug = slugifyDocumentHeading(name);
+    const count = (counts.get(slug) ?? 0) + 1;
+    counts.set(slug, count);
+    return [
+      {
+        id: `doc-heading-${slug}${count > 1 ? `-${count}` : ""}`,
+        name,
+        level,
+        depth: Math.max(0, level - rootLevel),
+      },
+    ];
+  });
+}
+
+function documentOutlineToShellSections(outline: DocumentBlockOutlineItem[]): CreedSection[] {
+  return outline.map((item) => ({
+    id: item.id,
+    kind: "rich-text",
+    template: "freeform",
+    name: item.name,
+    accent: "mono",
+    content: "",
+    depth: item.depth,
+    agentWritable: true,
+    agentPermission: "propose",
+    lastEditedBy: "Creed",
+    lastEditedType: "user",
+    lastEditedLabel: "just now",
+  }));
+}
 
 function getProposalStatusStyles(status: ActivityStatus) {
   if (status === "pending") {
@@ -865,6 +930,261 @@ function DocumentPropertyBar({
   );
 }
 
+type DocumentDiffSegment =
+  | { type: "content"; key: string; markdown: string }
+  | { type: "proposal"; key: string; proposal: DocumentProposal; conflict: boolean };
+
+function positionsOf(content: string, needle: string) {
+  if (!needle) return [];
+  const positions: number[] = [];
+  let index = content.indexOf(needle);
+  while (index !== -1) {
+    positions.push(index);
+    index = content.indexOf(needle, index + Math.max(needle.length, 1));
+  }
+  return positions;
+}
+
+function matchesPrefix(content: string, index: number, prefix: string) {
+  if (!prefix) return true;
+  return content.slice(Math.max(0, index - prefix.length), index) === prefix;
+}
+
+function matchesSuffix(content: string, index: number, suffix: string) {
+  if (!suffix) return true;
+  return content.slice(index, index + suffix.length) === suffix;
+}
+
+function resolveProposalRange(
+  content: string,
+  proposal: DocumentProposal,
+  cursor: number
+): { start: number; end: number; conflict: boolean } {
+  const directStart = Math.max(0, Math.min(content.length, proposal.hunkBeforeStart));
+  const directEnd = Math.max(directStart, Math.min(content.length, proposal.hunkBeforeEnd));
+
+  if (proposal.hunkBefore.length > 0) {
+    if (
+      directStart >= cursor &&
+      content.slice(directStart, directEnd) === proposal.hunkBefore
+    ) {
+      return {
+        start: directStart,
+        end: directEnd,
+        conflict: proposal.conflictStatus === "conflict",
+      };
+    }
+
+    const contextual = positionsOf(content, proposal.hunkBefore).filter(
+      (start) =>
+        start >= cursor &&
+        matchesPrefix(content, start, proposal.hunkPrefix) &&
+        matchesSuffix(content, start + proposal.hunkBefore.length, proposal.hunkSuffix)
+    );
+    if (contextual.length === 1) {
+      return {
+        start: contextual[0],
+        end: contextual[0] + proposal.hunkBefore.length,
+        conflict: proposal.conflictStatus === "conflict",
+      };
+    }
+  } else if (
+    directStart >= cursor &&
+    matchesPrefix(content, directStart, proposal.hunkPrefix) &&
+    matchesSuffix(content, directStart, proposal.hunkSuffix)
+  ) {
+    return {
+      start: directStart,
+      end: directStart,
+      conflict: proposal.conflictStatus === "conflict",
+    };
+  }
+
+  return {
+    start: Math.max(cursor, directStart),
+    end: Math.max(cursor, directStart),
+    conflict: true,
+  };
+}
+
+function buildDocumentDiffSegments(content: string, proposals: DocumentProposal[]): DocumentDiffSegment[] {
+  const segments: DocumentDiffSegment[] = [];
+  const ordered = [...proposals].sort(
+    (a, b) => a.hunkBeforeStart - b.hunkBeforeStart || a.hunkIndex - b.hunkIndex || a.id.localeCompare(b.id)
+  );
+  let cursor = 0;
+
+  for (const proposal of ordered) {
+    const range = resolveProposalRange(content, proposal, cursor);
+    if (range.start > cursor) {
+      segments.push({
+        type: "content",
+        key: `content:${cursor}:${range.start}`,
+        markdown: content.slice(cursor, range.start),
+      });
+    }
+
+    segments.push({
+      type: "proposal",
+      key: `proposal:${proposal.id}`,
+      proposal,
+      conflict: range.conflict,
+    });
+    cursor = Math.max(cursor, range.end);
+  }
+
+  if (cursor < content.length) {
+    segments.push({
+      type: "content",
+      key: `content:${cursor}:end`,
+      markdown: content.slice(cursor),
+    });
+  }
+
+  return segments;
+}
+
+function proposalDiffLabel(proposal: DocumentProposal) {
+  return proposal.classification || `Proposal ${proposal.hunkIndex + 1}`;
+}
+
+function RenderedMarkdownSegment({ markdown }: { markdown: string }) {
+  const html = useMemo(() => markdownToRichHtml(markdown), [markdown]);
+  if (!markdown.trim() || !html.trim()) return null;
+
+  return (
+    <div
+      className="creed-rendered-markdown"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
+function DocumentProposalInlineDiff({
+  proposal,
+  conflict,
+  active,
+}: {
+  proposal: DocumentProposal;
+  conflict: boolean;
+  active: boolean;
+}) {
+  const parts = useMemo(
+    () =>
+      computeDiffParts(markdownToRichHtml(proposal.hunkBefore), markdownToRichHtml(proposal.hunkAfter)),
+    [proposal.hunkAfter, proposal.hunkBefore]
+  );
+
+  return (
+    <div
+      data-document-diff-proposal-id={proposal.id}
+      data-active={active ? "true" : "false"}
+      className={cn(
+        "group/document-diff relative -mx-3 scroll-mt-32 rounded-md px-3 py-1.5 transition-colors",
+        conflict
+          ? "bg-[#FFFBEB] ring-1 ring-inset ring-[#F59E0B]/45 dark:bg-[#451a03]/35 dark:ring-[#fbbf24]/45"
+          : active
+            ? "bg-[color-mix(in_srgb,var(--creed-accent)_9%,transparent)]"
+            : "hover:bg-[color-mix(in_srgb,var(--creed-accent)_7%,transparent)]"
+      )}
+    >
+      <div className="creed-diff-block">
+        {parts.length === 0 ? (
+          <span className="text-[var(--creed-text-tertiary)]">No textual change</span>
+        ) : (
+          parts.map((part, index) => {
+            if (part.added) {
+              return (
+                <span key={index} className="creed-diff-add">
+                  {part.value}
+                </span>
+              );
+            }
+            if (part.removed) {
+              return (
+                <span key={index} className="creed-diff-remove">
+                  {part.value}
+                </span>
+              );
+            }
+            return <span key={index}>{part.value}</span>;
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DocumentProposalDiffBody({
+  content,
+  proposals,
+  busyProposal,
+  activeProposalId,
+  onResolve,
+}: {
+  content: string;
+  proposals: DocumentProposal[];
+  busyProposal: string | null;
+  activeProposalId: string | null;
+  onResolve: (proposalId: string, action: "accept" | "reject") => Promise<void>;
+}) {
+  const segments = useMemo(
+    () => buildDocumentDiffSegments(content, proposals),
+    [content, proposals]
+  );
+  const anyBusy = proposals.some((proposal) => busyProposal === proposal.id);
+
+  async function resolveAll(action: "accept" | "reject") {
+    for (const proposal of proposals) {
+      await onResolve(proposal.id, action);
+    }
+  }
+
+  return (
+    <>
+      <div className="space-y-4 md:space-y-5" data-document-diff-body>
+        {segments.map((segment) =>
+          segment.type === "content" ? (
+            <RenderedMarkdownSegment key={segment.key} markdown={segment.markdown} />
+          ) : (
+            <DocumentProposalInlineDiff
+              key={segment.key}
+              proposal={segment.proposal}
+              conflict={segment.conflict}
+              active={activeProposalId === segment.proposal.id}
+            />
+          )
+        )}
+      </div>
+      {proposals.length > 0 ? (
+        <div data-file-export-hidden className="sticky bottom-4 z-20 mt-10 flex justify-center">
+          <div className="inline-flex items-center gap-1 rounded-[16px] border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1.5 shadow-[0_14px_40px_rgba(28,28,26,0.16)]">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={anyBusy}
+              className="h-8 gap-1 rounded-md px-2.5 text-sm text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
+              onClick={() => void resolveAll("reject")}
+            >
+              <X className="h-3.5 w-3.5" />
+              Reject all
+            </Button>
+            <Button
+              size="sm"
+              disabled={anyBusy}
+              className="h-8 gap-1 rounded-md bg-[var(--creed-accent)] px-3 text-sm text-white hover:bg-[var(--creed-accent-hover)]"
+              onClick={() => void resolveAll("accept")}
+            >
+              <Check className="h-3.5 w-3.5" />
+              Accept all
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function FileScreen({
   sharedDocument = null,
 }: {
@@ -877,16 +1197,12 @@ export function FileScreen({
     toggleSectionLock,
     updateRichTextSection,
     reorderSections,
-    addSection,
-    addSectionAfter,
     indentSection,
     outdentSection,
     renameSection,
     setSectionAccent,
     duplicateSection,
     deleteSection,
-    archiveSection,
-    archiveCreed,
     clearSections,
     acceptProposal,
     acceptProposals,
@@ -899,18 +1215,12 @@ export function FileScreen({
   const [currentDocument, setCurrentDocument] = useState<SharedDocument | null>(
     sharedDocument?.document ?? null
   );
-  const [documentSections, setDocumentSections] = useState<CreedSection[]>(() =>
-    sharedDocument
-      ? parseDocumentSections(sharedDocument.document.content)
-      : []
+  const [documentSections, setDocumentSections] = useState<CreedSection[]>([]);
+  const [documentContentHtml, setDocumentContentHtml] = useState(() =>
+    sharedDocument ? documentMarkdownToHtml(sharedDocument.document.content) : ""
   );
   const [savedDocumentMarkdown, setSavedDocumentMarkdown] = useState(() =>
-    sharedDocument
-      ? documentSectionsToMarkdown(
-          parseDocumentSections(sharedDocument.document.content),
-          sharedDocument.document.title
-        )
-      : ""
+    sharedDocument ? normalizeDocumentMarkdown(sharedDocument.document.content) : ""
   );
   const [documentComments, setDocumentComments] = useState<DocumentComment[]>(
     sharedDocument?.comments ?? []
@@ -934,12 +1244,19 @@ export function FileScreen({
   const [documentLocked, setDocumentLocked] = useState(false);
   const [documentSaving, setDocumentSaving] = useState(false);
   const [reviewRefreshKey, setReviewRefreshKey] = useState(0);
-  const [documentProposals, setDocumentProposals] = useState<DocumentReviewProposal[]>([]);
-  const [busyDocumentProposalId, setBusyDocumentProposalId] = useState<string | null>(null);
+  const [documentDiffOpen, setDocumentDiffOpen] = useState(false);
+  const [documentPendingProposals, setDocumentPendingProposals] = useState<DocumentProposal[]>([]);
+  const [busyDocumentDiffProposal, setBusyDocumentDiffProposal] = useState<string | null>(null);
+  const [activeDocumentDiffProposalId, setActiveDocumentDiffProposalId] = useState<string | null>(null);
   const [savingDocumentProperty, setSavingDocumentProperty] = useState<DocumentPropertyName | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [shareUrlBusy, setShareUrlBusy] = useState(false);
+  const [renameDocumentOpen, setRenameDocumentOpen] = useState(false);
+  const [renameDocumentTitle, setRenameDocumentTitle] = useState(
+    sharedDocument?.document.title ?? ""
+  );
+  const [renamingDocument, setRenamingDocument] = useState(false);
   const documentUsers = useMemo(() => sharedDocument?.users ?? [], [sharedDocument]);
   const currentUserId = sharedDocument?.currentUserId ?? null;
   // People you can @mention: everyone except yourself (tagging yourself is a
@@ -953,6 +1270,7 @@ export function FileScreen({
     if (!sharedDocument) {
       setCurrentDocument(null);
       setDocumentSections([]);
+      setDocumentContentHtml("");
       setSavedDocumentMarkdown("");
       setDocumentComments([]);
       setPendingComments([]);
@@ -963,13 +1281,17 @@ export function FileScreen({
       setRenameDocumentTitle("");
       setShareDialogOpen(false);
       setShareUrl("");
+      setDocumentDiffOpen(false);
+      setDocumentPendingProposals([]);
+      setBusyDocumentDiffProposal(null);
+      setActiveDocumentDiffProposalId(null);
       return;
     }
 
-    const parsed = parseDocumentSections(sharedDocument.document.content);
     setCurrentDocument(sharedDocument.document);
-    setDocumentSections(parsed);
-    setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, sharedDocument.document.title));
+    setDocumentSections([]);
+    setDocumentContentHtml(documentMarkdownToHtml(sharedDocument.document.content));
+    setSavedDocumentMarkdown(normalizeDocumentMarkdown(sharedDocument.document.content));
     setDocumentComments(sharedDocument.comments);
     setPendingComments(sharedDocument.pendingComments);
     setDocumentActivity(sharedDocument.activity);
@@ -979,6 +1301,10 @@ export function FileScreen({
     setReplyBody("");
     setRenameDocumentOpen(false);
     setRenameDocumentTitle(sharedDocument.document.title);
+    setDocumentDiffOpen(false);
+    setDocumentPendingProposals([]);
+    setBusyDocumentDiffProposal(null);
+    setActiveDocumentDiffProposalId(null);
     setShareUrl(
       sharedDocument.document.publicShareEnabled && sharedDocument.document.publicShareId
         ? `${window.location.origin}/share/${encodeURIComponent(sharedDocument.document.publicShareId)}`
@@ -987,11 +1313,63 @@ export function FileScreen({
   }, [sharedDocument]);
 
   const documentMarkdown = useMemo(
-    () => (documentMode ? documentSectionsToMarkdown(documentSections, currentDocument?.title) : ""),
-    [currentDocument?.title, documentMode, documentSections]
+    () => (documentMode ? documentHtmlToMarkdown(documentContentHtml) : ""),
+    [documentContentHtml, documentMode]
   );
   const documentDirty = documentMode && documentMarkdown !== savedDocumentMarkdown;
-  const editorSections = documentMode ? documentSections : state.sections;
+
+  useEffect(() => {
+    if (!documentMode || documentPendingProposals.length === 0) {
+      setDocumentDiffOpen(false);
+      setActiveDocumentDiffProposalId(null);
+    }
+  }, [documentMode, documentPendingProposals.length]);
+
+  const scrollToDocumentDiffProposal = useCallback((proposalId: string) => {
+    setActiveDocumentDiffProposalId(proposalId);
+    const selector = `[data-document-diff-proposal-id="${(window.CSS?.escape ?? ((value: string) => value))(proposalId)}"]`;
+    editorScrollRef.current
+      ?.querySelector<HTMLElement>(selector)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  const documentOutline = useMemo(
+    () => (documentMode ? documentOutlineFromHtml(documentContentHtml) : []),
+    [documentContentHtml, documentMode]
+  );
+  const documentOutlineSections = useMemo(
+    () => documentOutlineToShellSections(documentOutline),
+    [documentOutline]
+  );
+
+  useEffect(() => {
+    if (!documentMode) return;
+    const frame = window.requestAnimationFrame(() => {
+      const container = editorScrollRef.current;
+      if (!container) return;
+      const headings = Array.from(
+        container.querySelectorAll<HTMLElement>(".ProseMirror h1, .ProseMirror h2, .ProseMirror h3")
+      );
+      headings.forEach((heading, index) => {
+        const outlineItem = documentOutline[index];
+        if (!outlineItem) {
+          heading.removeAttribute("data-section-id");
+          heading.removeAttribute("data-document-heading-level");
+          return;
+        }
+        heading.id = outlineItem.id;
+        heading.dataset.sectionId = outlineItem.id;
+        heading.dataset.documentHeadingLevel = String(outlineItem.level);
+        heading.classList.add("scroll-mt-24");
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [documentContentHtml, documentMode, documentOutline]);
+
+  const editorSections = useMemo(
+    () => (documentMode ? [] : state.sections),
+    [documentMode, state.sections]
+  );
   const rootDocumentComments = useMemo(
     () => documentComments.filter((comment) => !comment.parentId),
     [documentComments]
@@ -1008,13 +1386,30 @@ export function FileScreen({
     }
     return replies;
   }, [documentComments]);
+  const documentEditorCommentAnchors = useMemo(() => {
+    if (!documentMode) return [];
+    const documentText = htmlToText(documentContentHtml).toLocaleLowerCase();
+    return [...rootDocumentComments, ...pendingComments]
+      .filter((comment) => {
+        if (comment.status !== "open") return false;
+        const quote = comment.referenceQuote.trim();
+        return quote.length > 0 && documentText.includes(quote.toLocaleLowerCase());
+      })
+      .map((comment) => ({
+        id: comment.id,
+        quote: comment.referenceQuote,
+        body: comment.body,
+        authorLabel: comment.authorLabel,
+        status: comment.status,
+      }));
+  }, [documentContentHtml, documentMode, pendingComments, rootDocumentComments]);
   // Archived sections stay in state (so they persist) but are hidden from the
   // editor; the section list renders from this live set.
   const visibleSections = useMemo(
     () => editorSections.filter((section) => !section.archived),
     [editorSections]
   );
-  useCreedShellLiveSections(documentMode ? visibleSections : null);
+  useCreedShellLiveSections(documentMode ? documentOutlineSections : null);
   // Section collapse lives only in the sidebar outline (see shell.tsx). The
   // editor always renders every visible section, so the rendered list is just
   // the un-archived sections in their current order.
@@ -1036,29 +1431,6 @@ export function FileScreen({
       ),
     [editorSections, pendingProposals]
   );
-  // Map each pending document section-proposal to the rendered section it
-  // targets, so the editor can show an inline card at the bottom of that
-  // section (like the personal file's InlineProposalDiff). Section proposals
-  // carry the section heading; match it to the rendered section by name, and
-  // never reuse a proposal across two sections.
-  const documentProposalsBySection = useMemo(() => {
-    const map = new Map<string, DocumentReviewProposal[]>();
-    if (!documentMode) return map;
-    const norm = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
-    const used = new Set<string>();
-    for (const section of renderSections) {
-      const matches = documentProposals.filter(
-        (proposal) =>
-          proposal.kind === "document-section" &&
-          proposal.status === "pending" &&
-          !used.has(proposal.id) &&
-          norm(proposal.sectionHeading) === norm(section.name)
-      );
-      for (const match of matches) used.add(match.id);
-      if (matches.length > 0) map.set(section.id, matches);
-    }
-    return map;
-  }, [documentMode, documentProposals, renderSections]);
   const [activityOpen, setActivityOpen] = useState(false);
 
   // Global ⌘A / Ctrl+A → toggle the activity sidebar instead of select-all.
@@ -1086,13 +1458,6 @@ export function FileScreen({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-  const [composerOpen, setComposerOpen] = useState(false);
-  const [composerName, setComposerName] = useState("");
-  const [composerStarter, setComposerStarter] = useState<string | undefined>();
-  const [insertAfterId, setInsertAfterId] = useState<string | null>(null);
-  // Whether the composer will create a sibling of the anchor or nest a child
-  // under it. Set by the slash command / per-section add controls.
-  const [composerMode, setComposerMode] = useState<"sibling" | "child">("sibling");
   const [copiedAction, setCopiedAction] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [pushDialogOpen, setPushDialogOpen] = useState(false);
@@ -1113,11 +1478,6 @@ export function FileScreen({
   const [showPushPreview, setShowPushPreview] = useState(false);
   const [pushPreviewBusy, setPushPreviewBusy] = useState(false);
   const [selectedVersionAction, setSelectedVersionAction] = useState<"push" | "pull">("push");
-  const [renameDocumentOpen, setRenameDocumentOpen] = useState(false);
-  const [renameDocumentTitle, setRenameDocumentTitle] = useState(
-    sharedDocument?.document.title ?? ""
-  );
-  const [renamingDocument, setRenamingDocument] = useState(false);
   const [renameSectionState, setRenameSectionState] = useState<{
     id: string;
     name: string;
@@ -1127,13 +1487,10 @@ export function FileScreen({
     name: string;
   } | null>(null);
   const [deleteFileOpen, setDeleteFileOpen] = useState(false);
-  const [archiveAllOpen, setArchiveAllOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const editorScrollRef = useRef<HTMLDivElement | null>(null);
   const documentReviewPanelHeightRef = useRef<number | null>(null);
   const editorView = useEditorView();
-  const composerAreaRef = useRef<HTMLDivElement | null>(null);
   const lastDocumentStatusKeyRef = useRef<string | null>(null);
   // `exportMarkdown` is re-created by the provider whenever state changes,
   // so depending on it alone is sufficient - listing `state.sections`
@@ -1166,7 +1523,7 @@ export function FileScreen({
     const headerTop = stickyHeader.getBoundingClientRect().top;
     if (Math.abs(headerTop - containerTop) > 2) return;
 
-    container.scrollTop = Math.max(container.scrollTop - delta, 0);
+    container.scrollTo({ top: Math.max(container.scrollTop - delta, 0) });
   }, []);
 
   // Documents are Supabase-only (no GitHub sync); GitHub version control here
@@ -1200,12 +1557,6 @@ export function FileScreen({
       setSelectedVersionAction(primaryVersionAction);
     }
   }, [primaryVersionAction, pullDisabled, pushDisabled]);
-
-  useEffect(() => {
-    if (composerOpen) {
-      inputRef.current?.focus();
-    }
-  }, [composerOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1276,44 +1627,6 @@ export function FileScreen({
     state.settings.versionControl.lastSyncedContentHash,
   ]);
 
-  const openComposer = useCallback(
-    (afterSectionId?: string, mode: "sibling" | "child" = "sibling") => {
-      setInsertAfterId(afterSectionId ?? null);
-      setComposerMode(afterSectionId ? mode : "sibling");
-      setComposerOpen(true);
-      setComposerName("");
-      setComposerStarter(undefined);
-    },
-    []
-  );
-
-  const scrollComposerIntoView = useCallback((behavior: ScrollBehavior = "smooth") => {
-    const container = editorScrollRef.current;
-    const composerArea = composerAreaRef.current;
-
-    if (!container || !composerArea) {
-      return false;
-    }
-
-    container.scrollTo({
-      top: Math.max(composerArea.offsetTop - 24, 0),
-      behavior,
-    });
-
-    return true;
-  }, []);
-
-  const openComposerAndReveal = useCallback(
-    (afterSectionId?: string, mode: "sibling" | "child" = "sibling") => {
-      openComposer(afterSectionId, mode);
-
-      window.setTimeout(() => {
-        scrollComposerIntoView("smooth");
-      }, 60);
-    },
-    [openComposer, scrollComposerIntoView]
-  );
-
   function createDocumentSection(name: string, starter?: string): CreedSection {
     const slug = name
       .trim()
@@ -1342,20 +1655,6 @@ export function FileScreen({
       lastEditedType: "user",
       lastEditedLabel: "just now",
     };
-  }
-
-  function addDocumentSection(
-    name: string,
-    starter?: string,
-    afterSectionId?: string | null,
-    mode: "sibling" | "child" = "sibling"
-  ) {
-    setDocumentSections((current) => {
-      const nextSection = createDocumentSection(name, starter);
-      // "sibling" lands after the anchor's whole subtree at the same depth;
-      // "child" nests it one level deeper as the anchor's first child.
-      return insertSectionRelativeTo(current, afterSectionId, nextSection, mode);
-    });
   }
 
   function updateDocumentSection(sectionId: string, patch: Partial<CreedSection>) {
@@ -1420,43 +1719,6 @@ export function FileScreen({
     } else {
       reorderSections(reorderedVisibleIds);
     }
-  }
-
-  // Promote a text selection (captured inside a section's editor) into a new
-  // section placed right after the source section. Routes through the same
-  // add-section paths as the composer so profile and document modes stay in
-  // sync; the editor has already stripped the selected text from the source.
-  function createSectionFromSelection(
-    afterSectionId: string,
-    input: { name: string; content?: string }
-  ) {
-    const name = input.name.trim() || "New section";
-    const starter = input.content?.trim() ? input.content : undefined;
-    if (documentMode) {
-      addDocumentSection(name, starter, afterSectionId, "sibling");
-    } else {
-      addSectionAfter(afterSectionId, name, starter, "sibling");
-    }
-  }
-
-  function submitComposer() {
-    if (!composerName.trim()) {
-      return;
-    }
-
-    if (documentMode) {
-      addDocumentSection(composerName, composerStarter, insertAfterId, composerMode);
-    } else if (insertAfterId) {
-      addSectionAfter(insertAfterId, composerName, composerStarter, composerMode);
-    } else {
-      addSection(composerName, composerStarter);
-    }
-
-    setComposerOpen(false);
-    setComposerName("");
-    setComposerStarter(undefined);
-    setInsertAfterId(null);
-    setComposerMode("sibling");
   }
 
   async function copyValue(key: string, value: string) {
@@ -1548,17 +1810,20 @@ export function FileScreen({
       setCopiedAction(null);
 
       const markdown = await file.text();
+      if (documentMode) {
+        setDocumentContentHtml(documentMarkdownToHtml(markdown));
+        toast.success(`Imported ${file.name}`);
+        markActionComplete("import");
+        return;
+      }
+
       const parsed = parseCreedMarkdown(markdown);
 
       if (parsed.sections.length === 0) {
         throw new Error(parsed.warnings[0] ?? "Could not import this markdown file");
       }
 
-      if (documentMode) {
-        setDocumentSections(parsed.sections);
-      } else {
-        await importSections(parsed.sections);
-      }
+      await importSections(parsed.sections);
       if (parsed.warnings.length > 0) {
         toast.warning(`Imported ${file.name} with warnings`);
       } else {
@@ -1585,41 +1850,6 @@ export function FileScreen({
     const payload = (await response.json()) as { activity?: DocumentActivityEvent[] };
     if (payload.activity) {
       setDocumentActivity(payload.activity);
-    }
-  }
-
-  // Accept or reject a pending document section-proposal from its inline card in
-  // the body. On accept the returned document replaces local state and sections
-  // re-parse; either way the review panel is refreshed (which re-emits the
-  // pending list via onProposalsChange, updating the inline cards).
-  async function resolveDocumentProposal(id: string, action: "accept" | "reject") {
-    if (!currentDocument) return;
-    setBusyDocumentProposalId(id);
-    try {
-      const response = await fetch(
-        `/api/app/documents/${encodeURIComponent(currentDocument.id)}/proposals/${encodeURIComponent(id)}/${action}`,
-        { method: "POST" }
-      );
-      const payload = (await response.json()) as {
-        document?: SharedDocument;
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(payload.error || `Could not ${action} the proposal.`);
-      }
-      if (action === "accept" && payload.document) {
-        setCurrentDocument(payload.document);
-        const parsed = parseDocumentSections(payload.document.content);
-        setDocumentSections(parsed);
-        setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, payload.document.title));
-        void reloadDocumentActivity(payload.document.id);
-      }
-      setReviewRefreshKey((key) => key + 1);
-      toast.success(action === "accept" ? "Proposal accepted" : "Proposal rejected");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : `Could not ${action} the proposal.`);
-    } finally {
-      setBusyDocumentProposalId(null);
     }
   }
 
@@ -1697,9 +1927,8 @@ export function FileScreen({
       }
       if (payload.document) {
         setCurrentDocument(payload.document);
-        const parsed = parseDocumentSections(payload.document.content);
-        setDocumentSections(parsed);
-        setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, payload.document.title));
+        setDocumentContentHtml(documentMarkdownToHtml(payload.document.content));
+        setSavedDocumentMarkdown(normalizeDocumentMarkdown(payload.document.content));
         await reloadDocumentActivity(payload.document.id);
         lastDocumentStatusKeyRef.current = null;
         toast.success("Document saved");
@@ -1711,6 +1940,49 @@ export function FileScreen({
       return null;
     } finally {
       setDocumentSaving(false);
+    }
+  }
+
+  async function resolveDocumentDiffProposal(proposalId: string, action: "accept" | "reject") {
+    if (!currentDocument) {
+      return;
+    }
+
+    try {
+      setBusyDocumentDiffProposal(proposalId);
+      const response = await fetch(
+        `/api/app/documents/${encodeURIComponent(currentDocument.id)}/proposals/${encodeURIComponent(proposalId)}/${action}`,
+        { method: "POST" }
+      );
+      const payload = (await response.json()) as { document?: SharedDocument; error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || `Could not ${action} the proposal.`);
+      }
+
+      setDocumentPendingProposals((rows) => {
+        const next = rows.filter((proposal) => proposal.id !== proposalId);
+        if (next.length === 0) {
+          setDocumentDiffOpen(false);
+        }
+        return next;
+      });
+      setActiveDocumentDiffProposalId((current) => current === proposalId ? null : current);
+
+      if (action === "accept" && payload.document) {
+        setCurrentDocument(payload.document);
+        setDocumentContentHtml(documentMarkdownToHtml(payload.document.content));
+        setSavedDocumentMarkdown(normalizeDocumentMarkdown(payload.document.content));
+        await reloadDocumentActivity(payload.document.id);
+      } else {
+        await reloadDocumentActivity(currentDocument.id);
+      }
+
+      setReviewRefreshKey((key) => key + 1);
+      toast.success(action === "accept" ? "Proposal accepted" : "Proposal rejected");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Could not ${action} the proposal.`);
+    } finally {
+      setBusyDocumentDiffProposal(null);
     }
   }
 
@@ -1744,9 +2016,8 @@ export function FileScreen({
       }
 
       const previousSlug = currentDocument.slug;
-      const savedSections = parseDocumentSections(savedDocumentMarkdown);
       setCurrentDocument(payload.document);
-      setSavedDocumentMarkdown(documentSectionsToMarkdown(savedSections, payload.document.title));
+      setSavedDocumentMarkdown(normalizeDocumentMarkdown(savedDocumentMarkdown));
       setRenameDocumentTitle(payload.document.title);
       setRenameDocumentOpen(false);
       if (payload.document.slug !== previousSlug) {
@@ -1797,16 +2068,6 @@ export function FileScreen({
   // New comments are created from the in-editor popup composer, which supplies
   // the selected text as the anchor quote. Replies use the sidebar and go
   // through createDocumentReply below.
-  // A proposal comment was posted from a review card: surface it in the
-  // comments sidebar immediately, reusing the same comment placement as
-  // section-anchored comments (dedupe so a later reload can't double it).
-  function handleProposalCommentPosted(comment: DocumentComment) {
-    setDocumentComments((rows) =>
-      rows.some((row) => row.id === comment.id) ? rows : [...rows, comment]
-    );
-    setActiveDocumentPanel("comments");
-  }
-
   async function createDocumentCommentFromEditor(input: {
     quote: string;
     body: string;
@@ -1840,6 +2101,40 @@ export function FileScreen({
       setDocumentComments((rows) => [...rows, payload.comment!]);
       setActiveDocumentPanel("comments");
       setActiveDocumentCommentId(payload.comment.id);
+    }
+    await reloadDocumentActivity(currentDocument.id);
+  }
+
+  async function createDocumentCommentForProposal(proposal: DocumentProposal, bodyValue: string) {
+    if (!currentDocument) {
+      return;
+    }
+    const body = bodyValue.trim();
+    if (!body) {
+      return;
+    }
+    const quote = htmlToText(markdownToRichHtml(proposal.hunkBefore || proposal.hunkAfter))
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 280);
+    const response = await fetch(`/api/app/documents/${encodeURIComponent(currentDocument.id)}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        body,
+        parentId: null,
+        proposalId: proposal.id,
+        referenceQuote: quote || null,
+        mentionedUserIds: [],
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(await readError(response, "Could not add comment."));
+    }
+    const payload = (await response.json()) as { comment?: DocumentComment };
+    if (payload.comment) {
+      setDocumentComments((rows) => [...rows, payload.comment!]);
+      toast.success("Comment added");
     }
     await reloadDocumentActivity(currentDocument.id);
   }
@@ -2161,11 +2456,10 @@ export function FileScreen({
 
   const shellFileActions = useMemo(
     () => ({
-      onAddSection: () => openComposerAndReveal(),
       onSectionSelect: handleSectionSelect,
       onProposalSelect: handleProposalSelect,
     }),
-    [handleSectionSelect, handleProposalSelect, openComposerAndReveal]
+    [handleSectionSelect, handleProposalSelect]
   );
   useCreedShellFileActions(shellFileActions);
 
@@ -2311,29 +2605,7 @@ export function FileScreen({
       try {
         const intent = JSON.parse(rawIntent) as
           | { type: "section"; sectionId: string }
-          | { type: "compose" }
           | { type: "proposal"; proposalId: string };
-
-        if (intent.type === "compose") {
-          const scrolled = scrollComposerIntoView("smooth");
-          const openDelay = scrolled ? 280 : 0;
-          const openTimeoutId = window.setTimeout(() => {
-            if (!cancelled) {
-              openComposer();
-              window.setTimeout(() => {
-                if (!cancelled) {
-                  scrollComposerIntoView("smooth");
-                }
-              }, 60);
-            }
-            window.sessionStorage.removeItem(FILE_NAV_INTENT_KEY);
-          }, openDelay);
-
-          if (cancelled) {
-            window.clearTimeout(openTimeoutId);
-          }
-          return;
-        }
 
         let attempts = 0;
 
@@ -2376,7 +2648,7 @@ export function FileScreen({
       window.clearTimeout(timeoutId);
       window.cancelAnimationFrame(frameId);
     };
-  }, [handleSectionSelect, handleProposalSelect, openComposer, scrollComposerIntoView]);
+  }, [handleSectionSelect, handleProposalSelect]);
 
   return (
     <>
@@ -2860,15 +3132,6 @@ export function FileScreen({
                           <>
                             <DropdownMenuSeparator />
                             <AnimatedMenuIconItem
-                              icon={Archive}
-                              className="text-sm"
-                              onSelect={() => {
-                                window.setTimeout(() => setArchiveAllOpen(true), 0);
-                              }}
-                            >
-                              Archive
-                            </AnimatedMenuIconItem>
-                            <AnimatedMenuIconItem
                               icon={Delete}
                               className="mt-1 bg-[#DC2626] text-sm text-white hover:bg-[#B91C1C] hover:text-white focus:bg-[#B91C1C] focus:text-white data-[highlighted]:bg-[#B91C1C] data-[highlighted]:text-white not-data-[variant=destructive]:focus:**:text-white"
                               onSelect={() => {
@@ -2896,22 +3159,21 @@ export function FileScreen({
                 ) : null}
 
                 {documentMode && currentDocument ? (
-                  <DocumentReviewPanel
-                    documentId={currentDocument.id}
-                    revision={currentDocument.revision}
-                    currentContent={currentDocument.content}
-                    users={documentUsers}
-                    refreshSignal={reviewRefreshKey}
-                    onProposalsChange={setDocumentProposals}
-                    onCommentPosted={handleProposalCommentPosted}
-                    focusVersionId={focusVersionId}
+	                  <DocumentReviewPanel
+	                    documentId={currentDocument.id}
+	                    revision={currentDocument.revision}
+	                    users={documentUsers}
+	                    refreshSignal={reviewRefreshKey}
+	                    focusVersionId={focusVersionId}
                     onFocusVersionHandled={() => setFocusVersionId(null)}
                     onHeightChange={handleDocumentReviewPanelHeightChange}
+                    diffOpen={documentDiffOpen}
+                    onDiffOpenChange={setDocumentDiffOpen}
+                    onPendingProposalsChange={setDocumentPendingProposals}
                     onDocumentUpdated={(doc) => {
                       setCurrentDocument(doc);
-                      const parsed = parseDocumentSections(doc.content);
-                      setDocumentSections(parsed);
-                      setSavedDocumentMarkdown(documentSectionsToMarkdown(parsed, doc.title));
+                      setDocumentContentHtml(documentMarkdownToHtml(doc.content));
+                      setSavedDocumentMarkdown(normalizeDocumentMarkdown(doc.content));
                       void reloadDocumentActivity(doc.id);
                     }}
                   />
@@ -2969,278 +3231,227 @@ export function FileScreen({
                 ) : null}
               </div>
 
-              <Reorder.Group
-                axis="y"
-                values={renderSections.map((section) => section.id)}
-                onReorder={handleSectionReorder}
-                className="space-y-10 md:space-y-16"
-              >
-                {renderSections.map((section) => {
-                  const editorIndex = visibleSections.findIndex((item) => item.id === section.id);
-                  const depth = sectionDepth(section);
-                  const canIndent = canIndentSection(visibleSections, editorIndex);
-                  const canOutdent = canOutdentSection(visibleSections, editorIndex);
-                  const canAddSubsection = canNestUnder(section);
+              {documentMode && documentDiffOpen && currentDocument ? (
+                <DocumentProposalDiffBody
+                  content={currentDocument.content}
+                  proposals={documentPendingProposals}
+                  busyProposal={busyDocumentDiffProposal}
+                  activeProposalId={activeDocumentDiffProposalId}
+                  onResolve={resolveDocumentDiffProposal}
+                />
+              ) : documentMode && currentDocument ? (
+                <div data-document-block-editor className="scroll-mt-24">
+                  <RichTextEditor
+                    sectionId={`document-${currentDocument.id}`}
+                    content={documentContentHtml}
+                    readOnly={documentLocked}
+                    accentColor="#2563EB"
+                    onChange={setDocumentContentHtml}
+                    commentUsers={mentionableUsers}
+                    onCreateComment={createDocumentCommentFromEditor}
+                    comments={documentEditorCommentAnchors}
+                    activeCommentId={activeDocumentCommentId}
+                    onSelectComment={(commentId) => {
+                      setActiveDocumentPanel("comments");
+                      setActiveDocumentCommentId(commentId);
+                    }}
+                    enableReferences
+                    allowHeading1
+                  />
+                </div>
+              ) : (
+                <>
+                  <Reorder.Group
+                    axis="y"
+                    values={renderSections.map((section) => section.id)}
+                    onReorder={handleSectionReorder}
+                    className="space-y-10 md:space-y-16"
+                  >
+                    {renderSections.map((section) => {
+                      const editorIndex = visibleSections.findIndex((item) => item.id === section.id);
+                      const depth = sectionDepth(section);
+                      const canIndent = canIndentSection(visibleSections, editorIndex);
+                      const canOutdent = canOutdentSection(visibleSections, editorIndex);
 
-                  const isOverridden = !documentMode && state.sectionLockOverrides.includes(section.id);
-                  const sectionLocked = documentMode
-                    ? documentLocked
-                    : isOverridden ? !state.locked : state.locked;
-                  return (
-                    <SectionCard
-                      key={section.id}
-                      section={section}
-                      depth={depth}
-                      canIndent={canIndent}
-                      canOutdent={canOutdent}
-                      onIndent={() => {
-                        if (documentMode) indentDocumentSection(section.id);
-                        else indentSection(section.id);
-                      }}
-                      onOutdent={() => {
-                        if (documentMode) outdentDocumentSection(section.id);
-                        else outdentSection(section.id);
-                      }}
-                      locked={sectionLocked}
-                      globalLocked={documentMode ? documentLocked : state.locked}
-                      onToggleLock={
-                        documentMode
-                          ? () => setDocumentLocked((current) => !current)
-                          : () => toggleSectionLock(section.id)
-                      }
-                      proposals={normalizedPendingProposals.filter((item) => item.sectionId === section.id)}
-                      documentProposals={documentProposalsBySection.get(section.id) ?? []}
-                      documentUsers={documentUsers}
-                      documentReviewDocumentId={currentDocument?.id ?? ""}
-                      busyDocumentProposalId={busyDocumentProposalId}
-                      onAcceptDocumentProposal={(id) => void resolveDocumentProposal(id, "accept")}
-                      onRejectDocumentProposal={(id) => void resolveDocumentProposal(id, "reject")}
-                      onDocumentCommentPosted={handleProposalCommentPosted}
-                      onAcceptProposal={(id) => {
-                        void acceptProposal(id);
-                      }}
-                      onRejectProposal={(id) => {
-                        rejectProposal(id);
-                      }}
-                      onChangeRichText={(content) => {
-                        if (documentMode) {
-                          updateDocumentSection(section.id, { content });
-                        } else {
-                          updateRichTextSection(section.id, content);
-                        }
-                      }}
-                      onRename={() =>
-                        setRenameSectionState({
-                          id: section.id,
-                          name: section.name,
-                        })
-                      }
-                      onDuplicate={() => {
-                        if (documentMode) {
-                          setDocumentSections((current) => {
-                            const index = current.findIndex((item) => item.id === section.id);
-                            if (index === -1) return current;
-                            const copy = createDocumentSection(`${section.name} copy`, section.content);
-                            copy.accent = section.accent;
-                            return [
-                              ...current.slice(0, index + 1),
-                              copy,
-                              ...current.slice(index + 1),
-                            ];
-                          });
-                        } else {
-                          duplicateSection(section.id);
-                        }
-                      }}
-                      onSetAccent={(accent) => {
-                        if (documentMode) {
-                          updateDocumentSection(section.id, { accent });
-                        } else {
-                          setSectionAccent(section.id, accent);
-                        }
-                      }}
-                      onDelete={() =>
-                        // Defer so the section menu closes before the dialog
-                        // opens, letting the dialog play its enter animation.
-                        window.setTimeout(
-                          () =>
-                            setDeleteSectionState({
+                      const isOverridden = !documentMode && state.sectionLockOverrides.includes(section.id);
+                      const sectionLocked = documentMode
+                        ? documentLocked
+                        : isOverridden ? !state.locked : state.locked;
+                      return (
+                        <SectionCard
+                          key={section.id}
+                          section={section}
+                          depth={depth}
+                          canIndent={canIndent}
+                          canOutdent={canOutdent}
+                          onIndent={() => {
+                            if (documentMode) indentDocumentSection(section.id);
+                            else indentSection(section.id);
+                          }}
+                          onOutdent={() => {
+                            if (documentMode) outdentDocumentSection(section.id);
+                            else outdentSection(section.id);
+                          }}
+                          locked={sectionLocked}
+                          globalLocked={documentMode ? documentLocked : state.locked}
+                          onToggleLock={
+                            documentMode
+                              ? () => setDocumentLocked((current) => !current)
+                              : () => toggleSectionLock(section.id)
+	                          }
+	                          proposals={normalizedPendingProposals.filter((item) => item.sectionId === section.id)}
+	                          onAcceptProposal={(id) => {
+                            void acceptProposal(id);
+                          }}
+                          onRejectProposal={(id) => {
+                            rejectProposal(id);
+                          }}
+                          onChangeRichText={(content) => {
+                            if (documentMode) {
+                              updateDocumentSection(section.id, { content });
+                            } else {
+                              updateRichTextSection(section.id, content);
+                            }
+                          }}
+                          onRename={() =>
+                            setRenameSectionState({
                               id: section.id,
                               name: section.name,
-                            }),
-                          0
-                        )
-                      }
-                      onArchive={() => {
-                        if (documentMode) {
-                          updateDocumentSection(section.id, { archived: true });
-                        } else {
-                          archiveSection(section.id);
-                          toast.success(`Archived "${section.name}"`);
-                        }
-                      }}
-                      onAddSectionAfter={(mode) => openComposerAndReveal(section.id, mode)}
-                      canAddSubsection={canAddSubsection}
-                      onCreateSectionFromSelection={(input) =>
-                        createSectionFromSelection(section.id, input)
-                      }
-                      comments={documentMode ? [...rootDocumentComments, ...pendingComments] : []}
-                      activeCommentId={activeDocumentCommentId}
-                      commentUsers={documentMode ? mentionableUsers : []}
-                      onCreateComment={
-                        documentMode ? createDocumentCommentFromEditor : undefined
-                      }
-                      onSelectComment={
-                        documentMode
-                          ? (commentId) => {
-                              setActiveDocumentPanel("comments");
-                              setActiveDocumentCommentId(commentId);
+                            })
+                          }
+                          onDuplicate={() => {
+                            if (documentMode) {
+                              setDocumentSections((current) => {
+                                const index = current.findIndex((item) => item.id === section.id);
+                                if (index === -1) return current;
+                                const copy = createDocumentSection(`${section.name} copy`, section.content);
+                                copy.accent = section.accent;
+                                return [
+                                  ...current.slice(0, index + 1),
+                                  copy,
+                                  ...current.slice(index + 1),
+                                ];
+                              });
+                            } else {
+                              duplicateSection(section.id);
                             }
-                          : undefined
-                      }
-                      enableReferences={documentMode}
-                    />
-                  );
-                })}
-              </Reorder.Group>
-
-              {visibleSections.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 rounded-[var(--radius-xl)] border border-dashed border-[var(--creed-border)] px-4 py-16 text-center">
-                  <div className="text-[15px] font-medium text-[var(--creed-text-primary)]">
-                    Every section is archived
-                  </div>
-                  <div className="max-w-sm text-[13px] leading-6 text-[var(--creed-text-secondary)]">
-                    Restore a section from Settings, under Archived, to bring it back into your Creed.
-                  </div>
-                </div>
-              ) : null}
-
-              {normalizedPendingProposals.filter((p) => p.draft.kind === "new-section").length > 0 ? (
-                <div data-file-export-hidden className="mt-10 space-y-3 md:mt-16">
-                  {normalizedPendingProposals
-                    .filter((p) => p.draft.kind === "new-section")
-                    .map((p) => (
-                      <div key={p.id} data-proposal-id={p.id}>
-                        <InlineNewSectionProposal
-                          proposal={p}
-                          agentName={p.agentName}
-                          onAccept={() => {
-                            void acceptProposal(p.id);
                           }}
-                          onReject={() => {
-                            rejectProposal(p.id);
+                          onSetAccent={(accent) => {
+                            if (documentMode) {
+                              updateDocumentSection(section.id, { accent });
+                            } else {
+                              setSectionAccent(section.id, accent);
+                            }
                           }}
+                          onDelete={() =>
+                            // Defer so the section menu closes before the dialog
+                            // opens, letting the dialog play its enter animation.
+                            window.setTimeout(
+                              () =>
+                                setDeleteSectionState({
+                                  id: section.id,
+                                  name: section.name,
+                                }),
+                              0
+                            )
+                          }
+	                          comments={documentMode ? [...rootDocumentComments, ...pendingComments] : []}
+                          activeCommentId={activeDocumentCommentId}
+                          commentUsers={documentMode ? mentionableUsers : []}
+                          onCreateComment={
+                            documentMode ? createDocumentCommentFromEditor : undefined
+                          }
+                          onSelectComment={
+                            documentMode
+                              ? (commentId) => {
+                                  setActiveDocumentPanel("comments");
+                                  setActiveDocumentCommentId(commentId);
+                                }
+                              : undefined
+                          }
+                          enableReferences={documentMode}
                         />
+                      );
+                    })}
+                  </Reorder.Group>
+
+                  {visibleSections.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center gap-2 rounded-[var(--radius-xl)] border border-dashed border-[var(--creed-border)] px-4 py-16 text-center">
+                      <div className="text-[15px] font-medium text-[var(--creed-text-primary)]">
+                        No content yet
                       </div>
-                    ))}
-                </div>
-              ) : null}
-
-              <div ref={composerAreaRef} data-file-export-hidden className="mt-10 md:mt-16">
-                {composerOpen ? (
-                  <motion.div
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                    className="rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-4 sm:p-5"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-[13px] font-medium text-[var(--creed-text-primary)]">
-                          {composerMode === "child" ? "New subsection" : "New section"}
-                        </div>
-                        <div className="mt-0.5 hidden text-[12px] text-[var(--creed-text-secondary)] sm:block">
-                          {composerMode === "child" && insertAfterId
-                            ? `Nested under "${
-                                visibleSections.find((item) => item.id === insertAfterId)?.name ??
-                                "section"
-                              }". Pick a starter or name your own.`
-                            : "Pick a starter or name your own."}
-                        </div>
+                      <div className="max-w-sm text-[13px] leading-6 text-[var(--creed-text-secondary)]">
+                        Start writing in the editor to build this document.
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="rounded-md"
-                        onClick={() => setComposerOpen(false)}
-                        aria-label="Close composer"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
                     </div>
+                  ) : null}
 
-                    <Input
-                      ref={inputRef}
-                      value={composerName}
-                      onChange={(event) => setComposerName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          submitComposer();
-                        }
-                      }}
-                      placeholder="Section name..."
-                      className="mt-4 h-10 rounded-md border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[14px]"
-                    />
-
-                    <div className="mt-4 flex items-center justify-between gap-2">
-                      <Button
-                        variant="ghost"
-                        className="rounded-md text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
-                        onClick={() => setComposerOpen(false)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        onClick={submitComposer}
-                        className="rounded-md bg-[var(--creed-text-primary)] px-4 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
-                      >
-                        Create
-                      </Button>
+                  {normalizedPendingProposals.filter((p) => p.draft.kind === "new-section").length > 0 ? (
+                    <div data-file-export-hidden className="mt-10 space-y-3 md:mt-16">
+                      {normalizedPendingProposals
+                        .filter((p) => p.draft.kind === "new-section")
+                        .map((p) => (
+                          <div key={p.id} data-proposal-id={p.id}>
+                            <InlineNewSectionProposal
+                              proposal={p}
+                              agentName={p.agentName}
+                              onAccept={() => {
+                                void acceptProposal(p.id);
+                              }}
+                              onReject={() => {
+                                rejectProposal(p.id);
+                              }}
+                            />
+                          </div>
+                        ))}
                     </div>
-                  </motion.div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => openComposerAndReveal()}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--creed-border-strong)] bg-[var(--creed-surface)] px-4 py-3.5 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:border-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add section
-                  </button>
-                )}
-              </div>
+                  ) : null}
+                </>
+              )}
+
             </div>
           </div>
         </div>
 
         {documentMode ? (
           <div data-file-export-hidden>
-          <DocumentCollaborationRail
-            panel={activeDocumentPanel}
-            comments={rootDocumentComments}
-            pendingComments={pendingComments}
-            repliesByParent={documentRepliesByParent}
-            activity={documentActivity}
-            users={documentUsers}
-            mentionUsers={mentionableUsers}
-            currentUserId={currentUserId}
-            activeCommentId={activeDocumentCommentId}
-            replyingTo={replyingTo}
-            replyBody={replyBody}
-            savingReply={savingReply}
-            onReplyingToChange={setReplyingTo}
-            onReplyBodyChange={setReplyBody}
-            onCreateReply={(commentId) => void createDocumentReply(commentId)}
-            onUpdateCommentStatus={(commentId, status) => void updateDocumentCommentStatus(commentId, status)}
-            onUpdateCommentBody={updateDocumentCommentBody}
-            onDeleteComment={(commentId) => void deleteDocumentCommentById(commentId)}
-            onApprovePending={(commentId) => void approvePendingComment(commentId)}
-            onRejectPending={(commentId) => void rejectPendingComment(commentId)}
-            onActiveCommentChange={setActiveDocumentCommentId}
-            onOpenVersion={(versionId) => setFocusVersionId(versionId)}
-            onClose={() => setActiveDocumentPanel(null)}
-          />
+            {documentDiffOpen ? (
+              <DocumentDiffRail
+                proposals={documentPendingProposals}
+                busyProposal={busyDocumentDiffProposal}
+                activeProposalId={activeDocumentDiffProposalId}
+                onNavigate={scrollToDocumentDiffProposal}
+                onResolve={resolveDocumentDiffProposal}
+                onComment={createDocumentCommentForProposal}
+                onClose={() => setDocumentDiffOpen(false)}
+              />
+            ) : (
+              <DocumentCollaborationRail
+                panel={activeDocumentPanel}
+                comments={rootDocumentComments}
+                pendingComments={pendingComments}
+                repliesByParent={documentRepliesByParent}
+                activity={documentActivity}
+                users={documentUsers}
+                mentionUsers={mentionableUsers}
+                currentUserId={currentUserId}
+                activeCommentId={activeDocumentCommentId}
+                replyingTo={replyingTo}
+                replyBody={replyBody}
+                savingReply={savingReply}
+                onReplyingToChange={setReplyingTo}
+                onReplyBodyChange={setReplyBody}
+                onCreateReply={(commentId) => void createDocumentReply(commentId)}
+                onUpdateCommentStatus={(commentId, status) => void updateDocumentCommentStatus(commentId, status)}
+                onUpdateCommentBody={updateDocumentCommentBody}
+                onDeleteComment={(commentId) => void deleteDocumentCommentById(commentId)}
+                onApprovePending={(commentId) => void approvePendingComment(commentId)}
+                onRejectPending={(commentId) => void rejectPendingComment(commentId)}
+                onActiveCommentChange={setActiveDocumentCommentId}
+                onOpenVersion={(versionId) => setFocusVersionId(versionId)}
+                onClose={() => setActiveDocumentPanel(null)}
+              />
+            )}
           </div>
         ) : (
           <div data-file-export-hidden>
@@ -3577,32 +3788,6 @@ export function FileScreen({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={archiveAllOpen} onOpenChange={setArchiveAllOpen}>
-        <DialogContent className="rounded-[var(--radius-xl)] border-[var(--creed-border)] bg-[var(--creed-surface)]">
-          <DialogHeader>
-            <DialogTitle>Archive all sections</DialogTitle>
-            <DialogDescription>
-              This moves every section to your archive and starts you with a single fresh section.
-              Nothing is deleted - restore any section anytime in Settings, under Archived.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-row items-center justify-between border-t-[var(--creed-border)] bg-[var(--creed-surface)] sm:justify-between">
-            <Button variant="ghost" className="rounded-md" onClick={() => setArchiveAllOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="rounded-md bg-[var(--creed-text-primary)] px-4 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
-              onClick={() => {
-                archiveCreed();
-                setArchiveAllOpen(false);
-                toast.success("All sections archived");
-              }}
-            >
-              Archive all
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
@@ -3620,22 +3805,11 @@ function SectionCard({
   proposals,
   onAcceptProposal,
   onRejectProposal,
-  documentProposals = [],
-  documentUsers = [],
-  documentReviewDocumentId = "",
-  busyDocumentProposalId = null,
-  onAcceptDocumentProposal,
-  onRejectDocumentProposal,
-  onDocumentCommentPosted,
   onChangeRichText,
   onRename,
   onSetAccent,
   onDuplicate,
   onDelete,
-  onArchive,
-  onAddSectionAfter,
-  canAddSubsection,
-  onCreateSectionFromSelection,
   comments = [],
   activeCommentId = null,
   commentUsers = [],
@@ -3655,22 +3829,11 @@ function SectionCard({
   proposals: Proposal[];
   onAcceptProposal: (proposalId: string) => void;
   onRejectProposal: (proposalId: string) => void;
-  documentProposals?: DocumentReviewProposal[];
-  documentUsers?: WorkspaceUser[];
-  documentReviewDocumentId?: string;
-  busyDocumentProposalId?: string | null;
-  onAcceptDocumentProposal?: (proposalId: string) => void;
-  onRejectDocumentProposal?: (proposalId: string) => void;
-  onDocumentCommentPosted?: (comment: DocumentComment) => void;
   onChangeRichText: (content: string) => void;
   onRename: () => void;
   onSetAccent: (accent: AccentKey) => void;
   onDuplicate: () => void;
   onDelete: () => void;
-  onArchive: () => void;
-  onAddSectionAfter: (mode: "sibling" | "child") => void;
-  canAddSubsection: boolean;
-  onCreateSectionFromSelection: (input: { name: string; content?: string }) => void;
   comments?: DocumentComment[];
   activeCommentId?: string | null;
   commentUsers?: WorkspaceUser[];
@@ -3888,9 +4051,6 @@ function SectionCard({
                 Duplicate
               </AnimatedMenuIconItem>
               <DropdownMenuSeparator />
-              <AnimatedMenuIconItem icon={Archive} className="text-sm" onSelect={onArchive}>
-                Archive
-              </AnimatedMenuIconItem>
               {/* Solid red, matching the file menu's Delete. */}
               <AnimatedMenuIconItem
                 icon={Delete}
@@ -3946,9 +4106,6 @@ function SectionCard({
             readOnly={locked}
             accentColor={accentColorMap[section.accent]}
             onChange={onChangeRichText}
-            onAddSectionAfter={onAddSectionAfter}
-            canAddSubsection={canAddSubsection}
-            onCreateSectionFromSelection={onCreateSectionFromSelection}
             commentUsers={commentUsers}
             onCreateComment={onCreateComment}
             comments={sectionCommentAnchors}
@@ -3958,27 +4115,6 @@ function SectionCard({
           />
         </div>
 
-        {documentProposals.length > 0 ? (
-          <div data-file-export-hidden className="mt-4 space-y-3">
-            {documentProposals.map((documentProposal) => (
-              <InlineDocumentProposal
-                key={documentProposal.id}
-                proposal={documentProposal}
-                person={resolveProposalPerson(
-                  documentUsers,
-                  documentProposal.authorUserId,
-                  documentProposal.authorAgentLabel
-                )}
-                busy={busyDocumentProposalId === documentProposal.id}
-                documentId={documentReviewDocumentId}
-                users={documentUsers}
-                onCommentPosted={onDocumentCommentPosted}
-                onAccept={() => onAcceptDocumentProposal?.(documentProposal.id)}
-                onReject={() => onRejectDocumentProposal?.(documentProposal.id)}
-              />
-            ))}
-          </div>
-        ) : null}
       </section>
     </Reorder.Item>
   );
@@ -4086,6 +4222,204 @@ function SectionLockButton({
   onToggle: () => void;
 }) {
   return <AnimatedLockButton locked={locked} onToggle={onToggle} title={title} size="sm" />;
+}
+
+function DocumentDiffRail({
+  proposals,
+  busyProposal,
+  activeProposalId,
+  onNavigate,
+  onResolve,
+  onComment,
+  onClose,
+}: {
+  proposals: DocumentProposal[];
+  busyProposal: string | null;
+  activeProposalId: string | null;
+  onNavigate: (proposalId: string) => void;
+  onResolve: (proposalId: string, action: "accept" | "reject") => Promise<void>;
+  onComment: (proposal: DocumentProposal, body: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [commentingProposalId, setCommentingProposalId] = useState<string | null>(null);
+  const [commentBody, setCommentBody] = useState("");
+  const [commentingBusy, setCommentingBusy] = useState(false);
+
+  async function submitComment(proposal: DocumentProposal) {
+    const body = commentBody.trim();
+    if (!body || commentingBusy) return;
+    try {
+      setCommentingBusy(true);
+      await onComment(proposal, body);
+      setCommentBody("");
+      setCommentingProposalId(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not add comment.");
+    } finally {
+      setCommentingBusy(false);
+    }
+  }
+
+  return (
+    <motion.aside
+      initial={false}
+      animate={{
+        width: 356,
+        opacity: 1,
+        x: 0,
+      }}
+      transition={{
+        duration: 0.34,
+        ease: [0.22, 1, 0.36, 1],
+      }}
+      className="absolute inset-y-0 right-0 z-30 h-full overflow-hidden border-l border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[-18px_0_50px_rgba(28,28,26,0.12)] lg:static lg:h-full lg:shrink-0 lg:shadow-none"
+      style={{ maxWidth: "min(86vw, 356px)" }}
+    >
+      <div className="flex h-full w-full flex-col p-4 lg:w-[356px]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[15px] font-medium text-[var(--creed-text-primary)]">
+              Proposed changes
+            </div>
+            <div className="mt-1 text-[12px] leading-5 text-[var(--creed-text-tertiary)]">
+              {proposals.length === 1 ? "1 proposal" : `${proposals.length} proposals`}
+            </div>
+          </div>
+          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Hide diff">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <ScrollArea className="mt-4 min-h-0 flex-1">
+          <div className="space-y-2.5 pr-3">
+            {proposals.length ? (
+              proposals.map((proposal) => {
+                const label = proposalDiffLabel(proposal);
+                const stats = summarizeDiff(
+                  computeDiffParts(
+                    markdownToRichHtml(proposal.hunkBefore),
+                    markdownToRichHtml(proposal.hunkAfter)
+                  )
+                );
+                const busy = busyProposal === proposal.id;
+                const conflict = proposal.conflictStatus === "conflict";
+                const active = activeProposalId === proposal.id;
+                const commenting = commentingProposalId === proposal.id;
+
+                return (
+                  <div
+                    key={proposal.id}
+                    className={cn(
+                      "rounded-[14px] border bg-[var(--creed-surface)] p-3 transition-colors",
+                      conflict
+                        ? "border-[#F59E0B]/55 bg-[#FFFBEB] dark:border-[#fbbf24]/55 dark:bg-[#451a03]/35"
+                        : active
+                          ? "border-[var(--creed-accent)] bg-[color-mix(in_srgb,var(--creed-accent)_8%,transparent)]"
+                          : "border-[var(--creed-border)] hover:bg-[var(--creed-background)]"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onNavigate(proposal.id)}
+                      className="block w-full text-left"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[13px] font-medium text-[var(--creed-text-primary)]">
+                            {label}
+                          </div>
+                          {conflict ? (
+                            <div className="mt-1 text-[11px] font-medium text-[#C26A00] dark:text-[#fbbf24]">
+                              Conflict
+                            </div>
+                          ) : null}
+                        </div>
+                        <span className="inline-flex shrink-0 items-center gap-1.5">
+                          <DiffBadge tone="added" count={stats.added} size="md" />
+                          <DiffBadge tone="removed" count={stats.removed} size="md" />
+                        </span>
+                      </div>
+                    </button>
+                    <div className="mt-3 grid grid-cols-3 gap-1.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 rounded-md px-2 text-[12px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
+                        disabled={commentingBusy}
+                        onClick={() => {
+                          onNavigate(proposal.id);
+                          setCommentingProposalId((current) => current === proposal.id ? null : proposal.id);
+                          setCommentBody("");
+                        }}
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        Comment
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 rounded-md px-2 text-[12px] text-[#B91C1C] hover:bg-[#FEE2E2] hover:text-[#991B1B] dark:text-[#f87171] dark:hover:bg-[#7f1d1d]/35"
+                        disabled={busy}
+                        onClick={() => void onResolve(proposal.id, "reject")}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Reject
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-7 gap-1 rounded-md bg-[#15803D] px-2 text-[12px] text-white hover:bg-[#166534]"
+                        disabled={busy}
+                        onClick={() => void onResolve(proposal.id, "accept")}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        Accept
+                      </Button>
+                    </div>
+                    {commenting ? (
+                      <div className="mt-3 space-y-2">
+                        <Textarea
+                          value={commentBody}
+                          onChange={(event) => setCommentBody(event.target.value)}
+                          placeholder="Comment on this diff"
+                          className="min-h-20 resize-none rounded-md border-[var(--creed-border)] bg-[var(--creed-background)] text-[13px]"
+                        />
+                        <div className="flex justify-end gap-1.5">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 rounded-md px-2 text-[12px]"
+                            disabled={commentingBusy}
+                            onClick={() => {
+                              setCommentingProposalId(null);
+                              setCommentBody("");
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-7 rounded-md bg-[var(--creed-accent)] px-2.5 text-[12px] text-white hover:bg-[var(--creed-accent-hover)]"
+                            disabled={!commentBody.trim() || commentingBusy}
+                            onClick={() => void submitComment(proposal)}
+                          >
+                            Save comment
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="rounded-[14px] border border-dashed border-[var(--creed-border)] px-4 py-10 text-center text-[13px] text-[var(--creed-text-secondary)]">
+                No proposals left.
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    </motion.aside>
+  );
 }
 
 function DocumentCollaborationRail({

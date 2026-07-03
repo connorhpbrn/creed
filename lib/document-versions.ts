@@ -1,4 +1,5 @@
 import "server-only";
+import type { DocumentHunkChange, DocumentHunkConflictStatus, DocumentHunkStatus } from "@/lib/document-hunk-diff";
 import type { ActorType } from "@/lib/workspace-settings";
 import type { SupabaseLikeClient } from "@/lib/supabase/types";
 
@@ -11,6 +12,7 @@ export type DocumentVersion = {
   documentId: string;
   revision: number;
   content: string;
+  changeHunks: DocumentHunkChange[];
   actorType: ActorType;
   authorUserId: string | null;
   authorAgentLabel: string | null;
@@ -28,6 +30,7 @@ type DocumentVersionRow = {
   document_id: string;
   revision: number;
   content: string | null;
+  change_hunks?: unknown;
   actor_type: string;
   author_user_id: string | null;
   author_agent_label: string | null;
@@ -41,6 +44,7 @@ const VERSION_COLUMNS = [
   "document_id",
   "revision",
   "content",
+  "change_hunks",
   "actor_type",
   "author_user_id",
   "author_agent_label",
@@ -49,12 +53,62 @@ const VERSION_COLUMNS = [
   "created_at",
 ].join(", ");
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringField(record: Record<string, unknown>, key: string, fallback = "") {
+  const value = record[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function numberField(record: Record<string, unknown>, key: string, fallback = 0) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function hunkStatus(value: unknown): DocumentHunkStatus {
+  return value === "added" || value === "removed" || value === "modified" ? value : "modified";
+}
+
+function conflictStatus(value: unknown): DocumentHunkConflictStatus {
+  return value === "clean" || value === "conflict" || value === "resolved" ? value : "clean";
+}
+
+function mapStoredHunk(value: unknown, index: number): DocumentHunkChange | null {
+  if (!isRecord(value)) return null;
+  return {
+    key: stringField(value, "key", `version-hunk:${index}`),
+    index: numberField(value, "index", index),
+    status: hunkStatus(value.status),
+    before: stringField(value, "before"),
+    after: stringField(value, "after"),
+    beforeStart: numberField(value, "beforeStart"),
+    beforeEnd: numberField(value, "beforeEnd"),
+    afterStart: numberField(value, "afterStart"),
+    afterEnd: numberField(value, "afterEnd"),
+    prefix: stringField(value, "prefix"),
+    suffix: stringField(value, "suffix"),
+    classification: stringField(value, "classification"),
+    conflictStatus: conflictStatus(value.conflictStatus),
+  };
+}
+
+function mapStoredHunks(value: unknown): DocumentHunkChange[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, index) => {
+    const hunk = mapStoredHunk(item, index);
+    return hunk ? [hunk] : [];
+  });
+}
+
 function mapVersion(row: DocumentVersionRow): DocumentVersion {
   return {
     id: row.id,
     documentId: row.document_id,
     revision: row.revision,
     content: row.content ?? "",
+    changeHunks: mapStoredHunks(row.change_hunks),
     actorType: row.actor_type === "agent" ? "agent" : "human",
     authorUserId: row.author_user_id,
     authorAgentLabel: row.author_agent_label,
@@ -75,6 +129,7 @@ export async function appendDocumentVersion(
     authorAgentLabel?: string | null;
     summary?: string;
     sourceProposalId?: string | null;
+    changeHunks?: DocumentHunkChange[];
   }
 ): Promise<DocumentVersion> {
   const db = client as SupabaseLikeClient;
@@ -89,6 +144,7 @@ export async function appendDocumentVersion(
       author_agent_label: input.authorAgentLabel ?? null,
       summary: input.summary ?? "",
       source_proposal_id: input.sourceProposalId ?? null,
+      change_hunks: input.changeHunks ?? [],
     })
     .select(VERSION_COLUMNS)
     .single()) as {

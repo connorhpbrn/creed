@@ -322,6 +322,15 @@ export function markdownToRichHtml(markdown: string) {
       continue;
     }
 
+    const heading1 = trimmed.match(/^#\s+(.*)$/);
+    if (heading1) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      blocks.push(`<h1>${inline(heading1[1])}</h1>`);
+      continue;
+    }
+
     const heading2 = trimmed.match(/^##\s+(.*)$/);
     if (heading2) {
       flushParagraph();

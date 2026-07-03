@@ -20,7 +20,13 @@ async function readNotifications() {
   return payload.notifications ?? [];
 }
 
-export function NotificationMenu({ iconOnly = false }: { iconOnly?: boolean }) {
+export function NotificationMenu({
+  iconOnly = false,
+  className,
+}: {
+  iconOnly?: boolean;
+  className?: string;
+}) {
   const router = useRouter();
   const [notifications, setNotifications] = useState<DocumentNotification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -71,7 +77,8 @@ export function NotificationMenu({ iconOnly = false }: { iconOnly?: boolean }) {
           size="icon"
           className={cn(
             "relative h-8 w-8 rounded-[10px]",
-            !iconOnly && "lg:h-8 lg:w-full lg:justify-start lg:gap-3 lg:px-2"
+            !iconOnly && "lg:h-8 lg:w-full lg:justify-start lg:gap-3 lg:px-2",
+            className
           )}
           aria-label="Notifications"
         >

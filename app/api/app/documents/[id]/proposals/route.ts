@@ -5,7 +5,7 @@ import { readSharedDocumentById } from "@/lib/shared-documents";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireApiAuth();
@@ -13,7 +13,13 @@ export async function GET(
 
   const { id } = await params;
   const admin = getSupabaseAdminClient();
-  const proposals = await listDocumentProposals(admin, id);
+  const url = new URL(request.url);
+  const requestedStatus = url.searchParams.get("status");
+  const status =
+    requestedStatus === "accepted" || requestedStatus === "rejected" || requestedStatus === "all"
+      ? requestedStatus
+      : "pending";
+  const proposals = await listDocumentProposals(admin, id, { status });
   return NextResponse.json({ proposals });
 }
 

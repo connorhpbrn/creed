@@ -49,7 +49,10 @@ create table if not exists public.creed_document_proposals (
   author_user_id uuid references auth.users(id) on delete set null,
   author_agent_label text,
   draft jsonb not null,
-  section_id text,
+  family_id uuid not null,
+  hunk_index integer not null,
+  classification text not null default '',
+  conflict_status text not null default 'clean',
   summary text not null default '',
   base_revision integer not null default 1,
   status text not null default 'pending',
@@ -58,11 +61,18 @@ create table if not exists public.creed_document_proposals (
   resolved_at timestamptz,
   resolved_by uuid references auth.users(id) on delete set null,
   constraint creed_document_proposals_actor_type_check check (actor_type in ('human', 'agent')),
-  constraint creed_document_proposals_status_check check (status in ('pending', 'accepted', 'rejected'))
+  constraint creed_document_proposals_status_check check (status in ('pending', 'accepted', 'rejected')),
+  constraint creed_document_proposals_conflict_status_check check (conflict_status in ('clean', 'conflict', 'resolved'))
 );
 
 create index if not exists creed_document_proposals_document_status_idx
   on public.creed_document_proposals (document_id, status, created_at desc);
+
+create index if not exists creed_document_proposals_family_idx
+  on public.creed_document_proposals (document_id, family_id, hunk_index, created_at);
+
+create index if not exists creed_document_proposals_conflict_idx
+  on public.creed_document_proposals (document_id, status, conflict_status, created_at desc);
 
 -- 3. Append-only document version history.
 create table if not exists public.creed_document_versions (
@@ -70,6 +80,7 @@ create table if not exists public.creed_document_versions (
   document_id uuid not null references public.creed_documents(id) on delete cascade,
   revision integer not null,
   content text not null default '',
+  change_hunks jsonb not null default '[]'::jsonb,
   actor_type text not null,
   author_user_id uuid references auth.users(id) on delete set null,
   author_agent_label text,

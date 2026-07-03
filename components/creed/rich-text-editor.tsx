@@ -22,6 +22,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   Bold,
   Code2,
+  Heading1,
   Heading2,
   Heading3,
   Italic,
@@ -35,7 +36,6 @@ import {
   MessageSquareQuote,
   Minus,
   Pilcrow,
-  PlusSquare,
   Strikethrough,
   Tag,
   Table,
@@ -96,18 +96,6 @@ const ReadOnlySelectionGuard = Extension.create({
     ];
   },
 });
-
-// Escape user text before interpolating it into section-body HTML. Mirrors the
-// helper used by the write API / creed-data serializers so promoted selections
-// can't inject markup into a new section's content.
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 // Pre-bundled curated language set: js/ts/jsx/tsx, python, ruby, go, rust,
 // java, c/cpp, cs, php, swift, kotlin, json, yaml, bash, sql, html, css,
@@ -189,16 +177,6 @@ type RichTextEditorProps = {
   accentColor?: string;
   density?: "default" | "continuation";
   onChange: (content: string) => void;
-  onAddSectionAfter?: (mode: "sibling" | "child") => void;
-  // Whether this section can still hold a nested child (its depth is below
-  // MAX_SECTION_DEPTH). Gates the "New subsection" slash command so the menu
-  // never offers a nesting level the tree can't represent.
-  canAddSubsection?: boolean;
-  // Promotes the current text selection into a brand-new section placed after
-  // this one. When provided, the selection toolbar shows a "Make section"
-  // button: the first line of the selection becomes the section name, the rest
-  // becomes its body, and the selected text is removed from this section.
-  onCreateSectionFromSelection?: (input: { name: string; content?: string }) => void;
   // Workspace members available to @mention from the in-editor comment
   // composer. Only supplied in document mode.
   commentUsers?: WorkspaceUser[];
@@ -228,6 +206,9 @@ type RichTextEditorProps = {
   // document" slash command, and the inline-chip / full-width-card nodes. Only
   // turned on in the shared document workspace.
   enableReferences?: boolean;
+  // Shared documents are block documents and can use H1 blocks. Legacy profile
+  // sections keep H2/H3 only because their section title already owns H2.
+  allowHeading1?: boolean;
 };
 
 // Convert a CSS color value (hex or CSS variable reference) into an
@@ -310,9 +291,6 @@ export function RichTextEditor({
   accentColor = "#6B7280",
   density = "default",
   onChange,
-  onAddSectionAfter,
-  canAddSubsection = false,
-  onCreateSectionFromSelection,
   commentUsers = [],
   onCreateComment,
   allowReadOnlyComments = false,
@@ -323,6 +301,7 @@ export function RichTextEditor({
   activeCommentId = null,
   onSelectComment,
   enableReferences = false,
+  allowHeading1 = false,
 }: RichTextEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Track the most recent HTML we emitted so the content-sync effect can
@@ -424,6 +403,18 @@ export function RichTextEditor({
             .run();
         },
       },
+      ...(allowHeading1
+        ? [
+            {
+              title: "Heading 1",
+              description: "Page heading",
+              icon: Heading1,
+              keywords: ["heading", "title", "h1"],
+              run: (editor: Editor, range: Range) =>
+                editor.chain().focus().deleteRange(range).setHeading({ level: 1 }).run(),
+            },
+          ]
+        : []),
       {
         title: "Heading 2",
         description: "Section heading",
@@ -568,32 +559,8 @@ export function RichTextEditor({
             true
           ),
       },
-      {
-        title: "New section",
-        description: "Add section below",
-        icon: PlusSquare,
-        keywords: ["new section", "add section", "insert section", "sibling"],
-        run: (editor, range) => {
-          editor.chain().focus().deleteRange(range).run();
-          onAddSectionAfter?.("sibling");
-        },
-      },
-      ...(canAddSubsection
-        ? [
-            {
-              title: "New subsection",
-              description: "Add nested section",
-              icon: TreeStructure,
-              keywords: ["new subsection", "add subsection", "nested", "child", "indent"],
-              run: (editor: Editor, range: Range) => {
-                editor.chain().focus().deleteRange(range).run();
-                onAddSectionAfter?.("child");
-              },
-            },
-          ]
-        : []),
     ],
-    [onAddSectionAfter, canAddSubsection, enableReferences]
+    [allowHeading1, enableReferences]
   );
 
   // We mirror the slash items + active index into refs *synchronously*
@@ -900,7 +867,7 @@ export function RichTextEditor({
     extensions: [
       StarterKit.configure({
         heading: {
-          levels: [2, 3],
+          levels: allowHeading1 ? [1, 2, 3] : [2, 3],
         },
         bulletList: {
           HTMLAttributes: {
@@ -1199,11 +1166,9 @@ export function RichTextEditor({
     const { selection } = state;
 
     const isNodeSelection = selection instanceof NodeSelection;
-    // For an atom node (mermaid, embed, reference card) only the comment and
-    // make-section actions apply - text formatting does not. Show the reduced
-    // bubble only if one of those actions is actually available.
-    const hasNodeAction =
-      (!readOnly && Boolean(onCreateSectionFromSelection)) || commentSelectionEnabled;
+    // For an atom node (mermaid, embed, reference card) only comment actions
+    // apply - text formatting does not.
+    const hasNodeAction = commentSelectionEnabled;
 
     // Bail for empty selections, focus loss, and node selections with no
     // applicable action. A live text range shows the full bubble.
@@ -1332,52 +1297,6 @@ export function RichTextEditor({
     const wrap = document.createElement("div");
     wrap.appendChild(serializer.serializeNode(node));
     return { label, html: wrap.innerHTML };
-  }
-
-  function makeSectionFromSelection() {
-    if (!editor || readOnly || !onCreateSectionFromSelection) {
-      return;
-    }
-    // Atom node selection (mermaid, embed, reference card): promote the node
-    // itself into a new section, using a derived label as the title.
-    const nodeInfo = selectedNodeInfo();
-    if (nodeInfo) {
-      const name =
-        nodeInfo.label.length > 120 ? `${nodeInfo.label.slice(0, 117)}...` : nodeInfo.label;
-      editor.chain().focus().deleteSelection().run();
-      setSelectionToolbar(null);
-      onCreateSectionFromSelection({ name, content: nodeInfo.html });
-      return;
-    }
-    const { from, to } = editor.state.selection;
-    if (from === to) {
-      return;
-    }
-    // Split on block boundaries so multi-paragraph selections keep their line
-    // structure; each resulting line becomes its own paragraph in the body.
-    const selectedText = editor.state.doc.textBetween(from, to, "\n", "\n");
-    const lines = selectedText
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    if (lines.length === 0) {
-      return;
-    }
-
-    const [nameLine, ...bodyLines] = lines;
-    // Keep the section title to a sensible length even if the user highlighted
-    // a long paragraph as the first line.
-    const name = nameLine.length > 120 ? `${nameLine.slice(0, 117)}...` : nameLine;
-    const content =
-      bodyLines.length > 0
-        ? bodyLines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")
-        : undefined;
-
-    // Remove the promoted text from the source section, then hand the derived
-    // name/body up so the parent can insert the new section after this one.
-    editor.chain().focus().deleteSelection().run();
-    setSelectionToolbar(null);
-    onCreateSectionFromSelection({ name, content });
   }
 
   function openCommentComposer() {
@@ -1661,6 +1580,16 @@ export function RichTextEditor({
           >
             {!readOnly && !selectionToolbar.nodeSelection ? (
               <>
+                {allowHeading1 ? (
+                  <ToolbarButton
+                    active={editor.isActive("heading", { level: 1 })}
+                    disabled={editor.isActive("code") || editor.isActive("codeBlock")}
+                    onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                    label="Heading 1"
+                  >
+                    <Heading1 className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                ) : null}
                 <ToolbarButton
                   active={editor.isActive("heading", { level: 2 })}
                   disabled={editor.isActive("code") || editor.isActive("codeBlock")}
@@ -1730,22 +1659,9 @@ export function RichTextEditor({
                 </ToolbarButton>
               </>
             ) : null}
-            {!readOnly && onCreateSectionFromSelection ? (
-              <>
-                {!selectionToolbar.nodeSelection ? <ToolbarDivider /> : null}
-                <ToolbarButton
-                  onClick={makeSectionFromSelection}
-                  label="Make section"
-                >
-                  <PlusSquare className="h-3.5 w-3.5" />
-                </ToolbarButton>
-              </>
-            ) : null}
             {commentSelectionEnabled ? (
               <>
-                {!readOnly && (!selectionToolbar.nodeSelection || onCreateSectionFromSelection) ? (
-                  <ToolbarDivider />
-                ) : null}
+                {!readOnly && !selectionToolbar.nodeSelection ? <ToolbarDivider /> : null}
                 <ToolbarButton
                   onClick={openCommentComposer}
                   label="Comment"

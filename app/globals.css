@@ -413,12 +413,18 @@
   margin-top: 1rem;
 }
 
+.ProseMirror h1,
 .ProseMirror h2,
 .ProseMirror h3 {
   font-family: var(--font-geist-sans), sans-serif;
   font-weight: 500;
   letter-spacing: -0.03em;
   color: var(--creed-text-primary);
+}
+
+.ProseMirror h1 {
+  font-size: 1.75em;
+  line-height: 1.2;
 }
 
 .ProseMirror h2 {
@@ -772,6 +778,14 @@
 
 .creed-rendered-markdown > * + * {
   margin-top: 0.85rem;
+}
+
+.creed-rendered-markdown h1 {
+  margin: 0;
+  font-size: 1.45em;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--creed-text-primary);
 }
 
 .creed-rendered-markdown h2 {
@@ -1532,6 +1546,32 @@
   background: rgba(248, 113, 113, 0.10);
   color: #f87171;
   text-decoration-color: rgba(248, 113, 113, 0.5);
+}
+
+[data-document-diff-proposal-id]:hover .creed-diff-add,
+[data-document-diff-proposal-id][data-active="true"] .creed-diff-add {
+  background: rgba(22, 163, 74, 0.28);
+  color: #166534;
+}
+
+[data-document-diff-proposal-id]:hover .creed-diff-remove,
+[data-document-diff-proposal-id][data-active="true"] .creed-diff-remove {
+  background: rgba(220, 38, 38, 0.24);
+  color: #991b1b;
+  text-decoration-color: rgba(153, 27, 27, 0.72);
+}
+
+.dark [data-document-diff-proposal-id]:hover .creed-diff-add,
+.dark [data-document-diff-proposal-id][data-active="true"] .creed-diff-add {
+  background: rgba(34, 197, 94, 0.24);
+  color: #86efac;
+}
+
+.dark [data-document-diff-proposal-id]:hover .creed-diff-remove,
+.dark [data-document-diff-proposal-id][data-active="true"] .creed-diff-remove {
+  background: rgba(248, 113, 113, 0.24);
+  color: #fecaca;
+  text-decoration-color: rgba(254, 202, 202, 0.75);
 }
 
 /* View Transition API hooks for the circular theme reveal (see

@@ -14,12 +14,11 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  Checkerboard,
   Contrast,
-  LayoutGrid,
   ChevronDown,
   Logout,
   Plug,
-  Plus,
   Settings,
 } from "@/components/ui/phosphor-icons";
 import { NotificationMenu } from "@/components/creed/notification-menu";
@@ -27,6 +26,7 @@ import { useTheme } from "@/components/creed/theme-provider";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { accentColorMap, type CreedSection } from "@/lib/creed-data";
 import { sectionDepth, sectionHasChildren, collapsedHiddenIds } from "@/lib/section-hierarchy";
 import { cn } from "@/lib/utils";
@@ -46,7 +46,6 @@ type ShellProps = {
 };
 
 type ShellFileActions = {
-  onAddSection?: () => void;
   onSectionSelect?: (sectionId: string) => void;
   onProposalSelect?: (proposalId: string) => void;
 };
@@ -60,7 +59,7 @@ type ShellActionsContextValue = {
 const ShellActionsContext = createContext<ShellActionsContextValue | null>(null);
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { href: "/dashboard", label: "Dashboard", icon: Checkerboard },
   { href: "/connections", label: "Connections", icon: Plug },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -121,14 +120,16 @@ export function CreedShell({
   // live sections are pushed in from file-screen via useCreedShellLiveSections.
   const visibleNavItems = documentOpen ? [] : navItems;
   // Only render the document outline once its live sections have actually
-  // arrived (file-screen pushes them via useCreedShellLiveSections). Until
-  // then liveSections is null, so we keep the sidebar clean during the
-  // document's skeleton load instead of showing a lone "Add section" button.
+  // arrived (file-screen pushes them via useCreedShellLiveSections). Until then
+  // liveSections is null, so we keep the sidebar clean during skeleton load.
   const showLegacySections: boolean = documentOpen && liveSections !== null;
   // In document mode the outline must come ONLY from the open document's live
   // sections. Never fall back to the personal-creed `sections` here or they
   // leak into the document sidebar during the brief window before mount.
-  const sidebarSections = liveSections ?? (documentOpen ? [] : sections);
+  const sidebarSections = useMemo(
+    () => liveSections ?? (documentOpen ? [] : sections),
+    [documentOpen, liveSections, sections]
+  );
   // Sidebar outline collapse. View-only and local to the rail: collapsing a
   // parent here hides its subtree in the outline without touching the editor's
   // own collapse state or anything serialized. Mirrors the editor's logic via
@@ -147,6 +148,10 @@ export function CreedShell({
   const activeSidebarSections = useMemo(
     () => sidebarSections.filter((section) => !section.archived),
     [sidebarSections]
+  );
+  const sidebarHasDisclosure = useMemo(
+    () => activeSidebarSections.some((_, index) => sectionHasChildren(activeSidebarSections, index)),
+    [activeSidebarSections]
   );
   const hiddenSidebarIds = useMemo(
     () => collapsedHiddenIds(activeSidebarSections, collapsedSidebarIds),
@@ -169,7 +174,6 @@ export function CreedShell({
     }),
     [registerFileActions]
   );
-  const showAvatarImage = Boolean(avatarUrl) && failedAvatarUrl !== avatarUrl;
   const pendingProposalCountBySection = useMemo(() => {
     if (documentOpen) {
       return new Map<string, number>();
@@ -214,7 +218,7 @@ export function CreedShell({
       if (proposal.draft.kind !== "new-section") continue;
       rows.push({
         id: proposal.id,
-        name: proposal.draft.name?.trim() || "New section",
+        name: proposal.draft.name?.trim() || "Untitled",
       });
     }
     return rows;
@@ -253,7 +257,6 @@ export function CreedShell({
   function setFileIntent(
     intent:
       | { type: "section"; sectionId: string }
-      | { type: "compose" }
       | { type: "proposal"; proposalId: string }
   ) {
     if (typeof window === "undefined") {
@@ -273,48 +276,48 @@ export function CreedShell({
     router.push("/file");
   }
 
-  function handleAddSectionClick() {
-    if (pathname === "/file" && fileActionsRef.current.onAddSection) {
-      fileActionsRef.current.onAddSection();
-      return;
-    }
-
-    setFileIntent({ type: "compose" });
-    router.push("/file");
-  }
-
   return (
     <ShellActionsContext.Provider value={shellActions}>
       <div className="grid h-screen grid-cols-[48px_minmax(0,1fr)] overflow-hidden bg-[var(--creed-surface)] lg:grid-cols-[220px_minmax(0,1fr)]">
         <aside className="h-screen overflow-hidden border-r border-[var(--creed-border)] bg-[var(--creed-surface)] px-1.5 py-3 lg:px-5 lg:py-5">
           <div className="flex h-full flex-col">
-            {/* Persistent identity. Static (no menu) so it always reads as a
-                label of who's signed in, not an action. Avatar-only on the
-                mobile rail, avatar + name on lg. */}
-            <div className="flex items-center justify-center gap-2.5 px-1 py-1 lg:justify-start lg:px-2 lg:py-1.5">
-              <Avatar className="h-6 w-6 overflow-hidden rounded-[8px] border border-[var(--creed-border)] bg-[var(--creed-surface-raised)] after:rounded-[8px]">
-                {showAvatarImage && avatarUrl ? (
-                  <Image
-                    key={avatarUrl}
-                    src={avatarUrl}
-                    alt={userName}
-                    fill
-                    className="rounded-[8px] object-cover"
-                    referrerPolicy="no-referrer"
-                    unoptimized
-                    onError={() => setFailedAvatarUrl(avatarUrl)}
-                  />
-                ) : (
-                  <AvatarFallback className="bg-transparent text-xs font-medium text-[var(--creed-text-primary)]">
-                    {avatarInitials}
-                  </AvatarFallback>
-                )}
-              </Avatar>
-              <span className="hidden min-w-0 flex-1 truncate text-left text-sm font-medium text-[var(--creed-text-primary)] lg:inline">
-                {userName}
-              </span>
+            <div className="hidden flex-col gap-3 px-1 lg:flex">
+              {documentOpen ? (
+                <ShellUtilityActions
+                  signOut={signOut}
+                  includeDashboard
+                  className="w-full flex-row justify-between gap-1"
+                  itemClassName="flex-1"
+                />
+              ) : null}
+              <div className="flex items-center gap-2.5 px-0.5">
+                <ShellAvatar
+                  avatarInitials={avatarInitials}
+                  avatarUrl={avatarUrl}
+                  failedAvatarUrl={failedAvatarUrl}
+                  userName={userName}
+                  onAvatarError={setFailedAvatarUrl}
+                  className="h-7 w-7 rounded-[9px] after:rounded-[9px]"
+                  imageClassName="rounded-[9px]"
+                />
+                <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-[var(--creed-text-primary)]">
+                  {userName}
+                </span>
+              </div>
             </div>
-            <Separator className="my-3 bg-[var(--creed-border)] lg:my-4" />
+
+            <div className="flex items-center justify-center px-1 py-1 lg:hidden">
+              <ShellAvatar
+                avatarInitials={avatarInitials}
+                avatarUrl={avatarUrl}
+                failedAvatarUrl={failedAvatarUrl}
+                userName={userName}
+                onAvatarError={setFailedAvatarUrl}
+                className="h-6 w-6 rounded-[8px] after:rounded-[8px]"
+                imageClassName="rounded-[8px]"
+              />
+            </div>
+            <Separator className="my-2 bg-[var(--creed-border)]" />
 
             {visibleNavItems.length > 0 ? (
               <nav className="space-y-1">
@@ -349,12 +352,10 @@ export function CreedShell({
                         style={{ width: depth * 10 }}
                       />
                     ) : null}
-                    {/* Disclosure slot. A parent gets a chevron that toggles its
-                        subtree; leaf rows get an equal-width spacer so every dot
-                        lines up regardless of whether the row has children. A
-                        span[role=button] is valid inside the row button (unlike a
-                        nested <button>) and stops propagation so toggling never
-                        navigates. lg only - the mobile rail is icon-only. */}
+                    {/* Only reserve disclosure space when this outline actually
+                        has expandable rows. A flat document should start its
+                        dots at the chevron position, not after an invisible
+                        placeholder. */}
                     {hasChildren ? (
                       <span
                         role="button"
@@ -381,8 +382,10 @@ export function CreedShell({
                           )}
                         />
                       </span>
-                    ) : (
+                    ) : sidebarHasDisclosure ? (
                       <span aria-hidden className="hidden h-3.5 w-3.5 shrink-0 lg:block" />
+                    ) : (
+                      null
                     )}
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-[3px] lg:h-1.5 lg:w-1.5 lg:rounded-[2px]"
@@ -477,16 +480,6 @@ export function CreedShell({
                 </button>
                 );
               })}
-
-              <button
-                type="button"
-                onClick={handleAddSectionClick}
-                className="flex h-8 w-8 mx-auto items-center justify-center rounded-[10px] text-left text-[12px] text-[var(--creed-text-tertiary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-1.5 lg:px-1.5 lg:py-1.5"
-                aria-label="Add section"
-              >
-                <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
-                <span className="hidden lg:inline"> Add section</span>
-              </button>
             </div>
               </>
             ) : (
@@ -494,35 +487,15 @@ export function CreedShell({
             )}
 
             <div className="mt-auto">
-              <Separator className="my-4 bg-[var(--creed-border)] lg:my-6" />
-              {/* Utility actions as plain icon buttons (no name dropdown).
-                  Stacked on the mobile rail, a single row on lg. */}
-              <div className="flex flex-col items-center gap-1 lg:flex-row lg:justify-center lg:gap-1.5">
-                <Button
-                  asChild
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-[10px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
-                  aria-label="Dashboard"
-                >
-                  <Link href="/dashboard">
-                    <LayoutGrid className="h-4 w-4" />
-                  </Link>
-                </Button>
-                <NotificationMenu iconOnly />
-                <DarkModeButton />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 rounded-[10px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
-                  aria-label="Log out"
-                  onClick={() => void signOut()}
-                >
-                  <Logout className="h-4 w-4" />
-                </Button>
-              </div>
+              <Separator className="my-4 bg-[var(--creed-border)] lg:my-5" />
+              <ShellUtilityActions
+                signOut={signOut}
+                includeDashboard={!documentOpen}
+                className={cn(
+                  "flex-col items-center gap-1 lg:flex-row lg:justify-center lg:gap-1.5",
+                  documentOpen && "lg:hidden"
+                )}
+              />
             </div>
           </div>
         </aside>
@@ -565,26 +538,128 @@ export function useCreedShellLiveSections(sections: CreedSection[] | null) {
   }, [context, sections]);
 }
 
-function DarkModeButton() {
-  const { theme, toggleTheme } = useTheme();
+function ShellAvatar({
+  avatarInitials,
+  avatarUrl,
+  failedAvatarUrl,
+  userName,
+  onAvatarError,
+  className,
+  imageClassName,
+}: {
+  avatarInitials: string;
+  avatarUrl?: string;
+  failedAvatarUrl: string | null;
+  userName: string;
+  onAvatarError: (url: string) => void;
+  className?: string;
+  imageClassName?: string;
+}) {
+  const showAvatarImage = Boolean(avatarUrl) && failedAvatarUrl !== avatarUrl;
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="h-8 w-8 rounded-[10px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
-      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-      onClick={(event) => {
-        // Emit the theme reveal from the centre of the button so the
-        // animation feels rooted where the user clicked.
-        const rect = event.currentTarget.getBoundingClientRect();
-        toggleTheme({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-      }}
+    <Avatar
+      className={cn(
+        "overflow-hidden border border-[var(--creed-border)] bg-[var(--creed-surface-raised)]",
+        className
+      )}
     >
-      <Contrast className="h-4 w-4" />
-    </Button>
+      {showAvatarImage && avatarUrl ? (
+        <Image
+          key={avatarUrl}
+          src={avatarUrl}
+          alt={userName}
+          fill
+          className={cn("object-cover", imageClassName)}
+          referrerPolicy="no-referrer"
+          unoptimized
+          onError={() => onAvatarError(avatarUrl)}
+        />
+      ) : (
+        <AvatarFallback className="bg-transparent text-xs font-medium text-[var(--creed-text-primary)]">
+          {avatarInitials}
+        </AvatarFallback>
+      )}
+    </Avatar>
   );
 }
 
+function ShellUtilityActions({
+  signOut,
+  includeDashboard,
+  className,
+  itemClassName,
+}: {
+  signOut: () => void | Promise<void>;
+  includeDashboard?: boolean;
+  className?: string;
+  itemClassName?: string;
+}) {
+  return (
+    <div className={cn("flex", className)}>
+      {includeDashboard ? (
+        <SimpleTooltip label="Dashboard">
+          <Button
+            asChild
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-8 w-8 rounded-[10px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]",
+              itemClassName
+            )}
+            aria-label="Dashboard"
+          >
+            <Link href="/dashboard">
+              <Checkerboard className="h-4 w-4" />
+            </Link>
+          </Button>
+        </SimpleTooltip>
+      ) : null}
+      <NotificationMenu iconOnly className={itemClassName} />
+      <DarkModeButton className={itemClassName} />
+      <SimpleTooltip label="Log out">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "h-8 w-8 rounded-[10px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]",
+            itemClassName
+          )}
+          aria-label="Log out"
+          onClick={() => void signOut()}
+        >
+          <Logout className="h-4 w-4" />
+        </Button>
+      </SimpleTooltip>
+    </div>
+  );
+}
 
+function DarkModeButton({ className }: { className?: string }) {
+  const { theme, toggleTheme } = useTheme();
+
+  return (
+    <SimpleTooltip label={theme === "dark" ? "Switch to light" : "Switch to dark"}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "h-8 w-8 rounded-[10px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]",
+          className
+        )}
+        aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        onClick={(event) => {
+          // Emit the theme reveal from the centre of the button so the
+          // animation feels rooted where the user clicked.
+          const rect = event.currentTarget.getBoundingClientRect();
+          toggleTheme({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+        }}
+      >
+        <Contrast className="h-4 w-4" />
+      </Button>
+    </SimpleTooltip>
+  );
+}

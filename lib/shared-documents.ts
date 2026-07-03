@@ -679,7 +679,7 @@ export async function createSharedDocument(
   // read the serialized file). Split it so `content` stays body-only and the
   // frontmatter seeds properties. Explicit structured args take precedence.
   const parsed = parseDocumentFile(input.content ?? "");
-  const content = (input.content !== undefined ? parsed.body : "") || `# ${title}\n`;
+  const content = input.content !== undefined ? parsed.body : "";
   const metadata = cleanMetadataPatch({
     documentType: input.documentType !== undefined ? input.documentType : parsed.metadata.documentType,
     stage: input.stage !== undefined ? input.stage : parsed.metadata.stage,
