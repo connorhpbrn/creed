@@ -6,6 +6,7 @@
 //   NEXT_PUBLIC_TWITTER_URL     = absolute URL of the project's X / Twitter profile
 //   NEXT_PUBLIC_INSTAGRAM_URL   = absolute URL of the project's Instagram profile
 //   NEXT_PUBLIC_GITHUB_URL      = absolute URL of the project's GitHub org / repo
+//   NEXT_PUBLIC_DISCORD_URL     = absolute URL of the project's Discord invite
 //
 // Anything left unset falls back to a sensible no-op (an empty string for the
 // email, `null` for social links so the chrome can hide the icon entirely).
@@ -29,3 +30,10 @@ export const INSTAGRAM_URL =
   process.env.NEXT_PUBLIC_INSTAGRAM_URL?.trim() || "https://instagram.com/connorhpbrn";
 export const GITHUB_URL =
   process.env.NEXT_PUBLIC_GITHUB_URL?.trim() || "https://github.com/connorhpbrn/creed";
+
+// Discord invite. No hardcoded fallback: until a permanent invite is set via
+// NEXT_PUBLIC_DISCORD_URL this stays null, and any surface that funnels into
+// Discord (the welcome pop-up finale, footer) hides its Discord CTA rather
+// than shipping a dead link.
+export const DISCORD_URL =
+  process.env.NEXT_PUBLIC_DISCORD_URL?.trim() || null;

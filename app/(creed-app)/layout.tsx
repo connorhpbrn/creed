@@ -4,7 +4,7 @@ import { AppShellLayout } from "@/components/creed/app-shell-layout";
 import { AuthedProviders } from "@/components/creed/authed-providers";
 import { hasPersistedCreed } from "@/lib/creed-backend";
 import { isSupabaseTableMissingError } from "@/lib/creed-backend-errors";
-import { hasActiveEntitlement } from "@/lib/stripe";
+import { getEntitlementWelcomeState, hasActiveEntitlement } from "@/lib/stripe";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -37,7 +37,9 @@ export default async function CreedAppLayout({ children }: { children: ReactNode
     // the app can render. Production deployments always have Supabase.
     return (
       <AuthedProviders>
-        <AppShellLayout>{children}</AppShellLayout>
+        <AppShellLayout showWelcome={false} welcomePaidAt={null}>
+          {children}
+        </AppShellLayout>
       </AuthedProviders>
     );
   }
@@ -71,9 +73,18 @@ export default async function CreedAppLayout({ children }: { children: ReactNode
     redirect("/onboarding");
   }
 
+  // One-time welcome pop-up. Fully fault-tolerant (see the helper): any read
+  // failure resolves to "don't show", so this never affects app access.
+  const { showWelcome, paidAt } = await getEntitlementWelcomeState(
+    supabase,
+    user.id
+  );
+
   return (
     <AuthedProviders>
-      <AppShellLayout>{children}</AppShellLayout>
+      <AppShellLayout showWelcome={showWelcome} welcomePaidAt={paidAt}>
+        {children}
+      </AppShellLayout>
     </AuthedProviders>
   );
 }

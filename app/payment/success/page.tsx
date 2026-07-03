@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ContinueButton } from "@/app/payment/success/continue-button";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { WelcomeVideoPreloader } from "@/components/creed/welcome-video-preloader";
 import {
   getStripeClient,
   upsertEntitlementFromSession,
@@ -146,6 +147,10 @@ function SuccessOk({
         Creed is unlocked on your account. Let&apos;s set things up.
       </p>
       <ContinueButton href={continueHref} autoAdvance={autoAdvance} />
+      {/* Warm the welcome-tour videos here (a paid user headed straight to the
+          app + tour) so no slide lands on an unloaded clip. The app shell
+          preloads too; this just buys extra lead time. */}
+      <WelcomeVideoPreloader />
     </>
   );
 }

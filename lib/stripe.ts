@@ -312,6 +312,75 @@ export async function getEntitlement(userId: string): Promise<CreedEntitlement |
 }
 
 /**
+ * Should the one-time welcome pop-up show for this entitlement? True when the
+ * user has never dismissed it, or dismissed it before their current `paid_at`
+ * (i.e. they cancelled and re-bought, so it counts as fresh onboarding).
+ */
+export function shouldShowWelcome(
+  paidAt: string | null,
+  welcomedAt: string | null
+): boolean {
+  if (!paidAt) return false;
+  if (!welcomedAt) return true;
+  const paid = Date.parse(paidAt);
+  const welcomed = Date.parse(welcomedAt);
+  if (Number.isNaN(paid) || Number.isNaN(welcomed)) return false;
+  return welcomed < paid;
+}
+
+export type WelcomeState = { showWelcome: boolean; paidAt: string | null };
+
+/**
+ * Welcome-pop-up state for the (creed-app) layout gate. Reads `paid_at` +
+ * `welcomed_at` via the caller's already-authed client (the "Read own
+ * entitlement" RLS policy). Deliberately independent of the access check and
+ * fully fault-tolerant: any error - including `welcomed_at` not existing yet
+ * (before its migration runs) - resolves to "don't show", so this can never
+ * affect whether a paid user gets into the app.
+ */
+export async function getEntitlementWelcomeState(
+  client: unknown,
+  userId: string
+): Promise<WelcomeState> {
+  const db = client as SupabaseLikeClient;
+  try {
+    const { data, error } = (await db
+      .from("creed_entitlements")
+      .select("paid_at, welcomed_at")
+      .eq("user_id", userId)
+      .maybeSingle()) as {
+      data: { paid_at?: string | null; welcomed_at?: string | null } | null;
+      error: { message: string } | null;
+    };
+    if (error || !data) return { showWelcome: false, paidAt: null };
+    const paidAt = data.paid_at ?? null;
+    return {
+      showWelcome: shouldShowWelcome(paidAt, data.welcomed_at ?? null),
+      paidAt,
+    };
+  } catch {
+    return { showWelcome: false, paidAt: null };
+  }
+}
+
+/**
+ * Mark the welcome pop-up as seen (dismissed) for a user. Writes via the
+ * service-role admin client, matching every other entitlement write - the
+ * table has no RLS update policy. Sets `welcomed_at` to now, which the show
+ * rule compares against `paid_at`.
+ */
+export async function markEntitlementWelcomed(userId: string): Promise<void> {
+  const admin = getSupabaseAdminClient() as unknown as SupabaseLikeClient;
+  const { error } = await admin
+    .from("creed_entitlements")
+    .update({ welcomed_at: new Date().toISOString() })
+    .eq("user_id", userId);
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/**
  * Idempotent upsert from a Stripe Checkout Session. Used by both the
  * `/api/stripe/webhook` (event-driven) and `/payment/success` (verify-
  * driven) paths - whichever lands first writes, the second is a no-op
@@ -440,6 +509,26 @@ export async function upsertEntitlementFromSession(
   const priceId = await resolvePriceId(plan, cadence);
 
   const admin = getSupabaseAdminClient() as unknown as SupabaseLikeClient;
+
+  // Only advance paid_at for a genuinely new purchase (a new checkout session).
+  // The success page and the checkout.session.completed webhook both run this
+  // upsert for the same purchase, and Stripe retries/replays webhooks - every
+  // replay carries the SAME session id, so it must NOT bump paid_at. Bumping it
+  // would re-trigger the one-time welcome tour (which shows when welcomed_at <
+  // paid_at) after the user already dismissed it. A different session id means a
+  // real re-purchase (cancel then re-buy, or upgrade), which should advance it.
+  // The DB default stamps paid_at on the initial INSERT; paid_at is consumed
+  // only by the welcome logic.
+  const { data: existing } = (await admin
+    .from("creed_entitlements")
+    .select("stripe_session_id")
+    .eq("user_id", userId)
+    .maybeSingle()) as {
+    data: { stripe_session_id?: string } | null;
+    error: { message: string } | null;
+  };
+  const isNewPurchase = !existing || existing.stripe_session_id !== session.id;
+
   const { data, error } = (await admin
     .from("creed_entitlements")
     .upsert(
@@ -459,6 +548,7 @@ export async function upsertEntitlementFromSession(
         current_period_end: currentPeriodEnd,
         cancel_at_period_end: cancelAtPeriodEnd,
         billing_interval: billingInterval,
+        ...(isNewPurchase ? { paid_at: now } : {}),
         updated_at: now,
       },
       { onConflict: "user_id" }

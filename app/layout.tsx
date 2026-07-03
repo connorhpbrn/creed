@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import { ThemeProvider } from "@/components/creed/theme-provider";
+import { WelcomeDevPreview } from "@/components/creed/welcome-dev-preview";
 import { getSiteUrl } from "@/lib/supabase/env";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
@@ -88,6 +89,7 @@ export default function RootLayout({
         <ThemeProvider>
           {children}
           <Toaster />
+          <WelcomeDevPreview />
         </ThemeProvider>
       </body>
     </html>
