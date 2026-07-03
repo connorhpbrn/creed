@@ -2688,6 +2688,14 @@ export function FileScreen({
     }
     return map;
   }, [documentComments]);
+  const proposalPendingCommentsByProposalId = useMemo(() => {
+    const map = new Map<string, DocumentComment[]>();
+    for (const comment of pendingComments) {
+      if (!comment.proposalId || comment.parentId) continue;
+      map.set(comment.proposalId, [...(map.get(comment.proposalId) ?? []), comment]);
+    }
+    return map;
+  }, [pendingComments]);
   const proposalCommentCountsByProposalId = useMemo(() => {
     const map = new Map<string, number>();
     for (const comment of [...documentComments, ...pendingComments]) {
@@ -4858,6 +4866,7 @@ export function FileScreen({
                   activeProposalId={activeDocumentDiffProposalId}
                   usersById={documentUsersById}
                   proposalCommentsById={proposalRootCommentsByProposalId}
+                  proposalPendingCommentsById={proposalPendingCommentsByProposalId}
                   proposalCommentCounts={proposalCommentCountsByProposalId}
                   mentionLabels={documentUsers.map((user) => user.label)}
                   commentingProposalId={diffCommentProposalId}
@@ -4866,6 +4875,8 @@ export function FileScreen({
                   onResolve={resolveDocumentDiffProposal}
                   onShowConflict={showDocumentConflict}
                   onComment={createDocumentCommentForProposal}
+                  onApprovePending={(commentId) => void approvePendingComment(commentId)}
+                  onRejectPending={(commentId) => void rejectPendingComment(commentId)}
                   onClose={() => setDocumentDiffSidebarOpen(false)}
                 />
               ) : null}
@@ -5778,6 +5789,7 @@ function DocumentDiffRail({
   activeProposalId,
   usersById,
   proposalCommentsById,
+  proposalPendingCommentsById,
   proposalCommentCounts,
   mentionLabels,
   commentingProposalId,
@@ -5786,6 +5798,8 @@ function DocumentDiffRail({
   onResolve,
   onShowConflict,
   onComment,
+  onApprovePending,
+  onRejectPending,
   onClose,
 }: {
   open: boolean;
@@ -5795,6 +5809,7 @@ function DocumentDiffRail({
   activeProposalId: string | null;
   usersById: Map<string, WorkspaceUser>;
   proposalCommentsById: Map<string, DocumentComment[]>;
+  proposalPendingCommentsById: Map<string, DocumentComment[]>;
   proposalCommentCounts: Map<string, number>;
   mentionLabels: string[];
   commentingProposalId: string | null;
@@ -5803,10 +5818,14 @@ function DocumentDiffRail({
   onResolve: (proposalId: string, action: "accept" | "reject") => Promise<void>;
   onShowConflict: (proposalId: string) => void;
   onComment: (proposal: DocumentProposal, body: string) => Promise<void>;
+  onApprovePending: (commentId: string) => void;
+  onRejectPending: (commentId: string) => void;
   onClose: () => void;
 }) {
   const [commentBody, setCommentBody] = useState("");
   const [commentingBusy, setCommentingBusy] = useState(false);
+  const [activeRailCommentId, setActiveRailCommentId] = useState<string | null>(null);
+  const railContentRef = useRef<HTMLDivElement | null>(null);
   const commentBoxRef = useRef<HTMLTextAreaElement | null>(null);
 
   // When a proposal's composer opens (from the sidebar Comment button or the
@@ -5888,6 +5907,54 @@ function DocumentDiffRail({
   const showLoading = loading && proposals.length === 0;
   const conflictChoiceProposalIds = useMemo(() => documentConflictChoiceIds(proposals), [proposals]);
   const conflictCount = conflictChoiceProposalIds.size;
+  const commentActivity = useMemo(() => {
+    const rows: Array<{
+      id: string;
+      proposal: DocumentProposal;
+      label: string;
+      comment: DocumentComment;
+      pending: boolean;
+    }> = [];
+    for (const proposal of proposals) {
+      const label = proposalDiffLabel(proposal);
+      for (const comment of proposalCommentsById.get(proposal.id) ?? []) {
+        rows.push({ id: comment.id, proposal, label, comment, pending: false });
+      }
+      for (const comment of proposalPendingCommentsById.get(proposal.id) ?? []) {
+        rows.push({ id: comment.id, proposal, label, comment, pending: true });
+      }
+    }
+    return rows.sort((left, right) => right.comment.createdAt.localeCompare(left.comment.createdAt));
+  }, [proposals, proposalCommentsById, proposalPendingCommentsById]);
+
+  const navigateToRailComment = useCallback(
+    (proposalId: string, commentId: string) => {
+      setActiveRailCommentId(commentId);
+      onNavigate(proposalId);
+      onCommentingProposalIdChange(null);
+      window.requestAnimationFrame(() => {
+        const cssEscape = window.CSS?.escape ?? ((value: string) => value);
+        const target =
+          railContentRef.current?.querySelector<HTMLElement>(
+            `[data-diff-rail-comment="${cssEscape(commentId)}"]`
+          ) ??
+          railContentRef.current?.querySelector<HTMLElement>(
+            `[data-diff-rail-card="${cssEscape(proposalId)}"]`
+          );
+        const viewport = target?.closest<HTMLElement>('[data-slot="scroll-area-viewport"]');
+        if (!target) return;
+        if (!viewport) {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+        const targetRect = target.getBoundingClientRect();
+        const viewRect = viewport.getBoundingClientRect();
+        const targetTop = viewport.scrollTop + (targetRect.top - viewRect.top) - 18;
+        viewport.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+      });
+    },
+    [onCommentingProposalIdChange, onNavigate]
+  );
 
   return (
     <DocumentSidebarShell
@@ -5914,7 +5981,7 @@ function DocumentDiffRail({
       }
     >
       <ScrollArea className="h-full">
-        <div className="space-y-1.5 px-3 py-3">
+        <div ref={railContentRef} className="space-y-1.5 px-3 py-3">
             {showLoading ? (
               Array.from({ length: 3 }).map((_, index) => (
                 <div
@@ -5937,6 +6004,56 @@ function DocumentDiffRail({
               ))
             ) : proposals.length ? (
               <>
+                {commentActivity.length > 0 ? (
+                  <div className="mb-2 rounded-[10px] border border-[var(--creed-border)] bg-[var(--creed-surface)] p-2.5">
+                    <div className="flex items-center justify-between gap-2 px-0.5">
+                      <span className="inline-flex min-w-0 items-center gap-1.5 text-[12px] font-medium text-[var(--creed-text-primary)]">
+                        <MessageSquare className="h-3.5 w-3.5 text-[var(--creed-text-secondary)]" />
+                        Comment activity
+                      </span>
+                      <span className="shrink-0 rounded-full bg-[var(--creed-surface-raised)] px-2 py-0.5 text-[10px] font-medium tabular-nums text-[var(--creed-text-secondary)]">
+                        {commentActivity.length}
+                      </span>
+                    </div>
+                    <div className="creed-scrollbar mt-2 max-h-56 space-y-1 overflow-y-auto pr-1">
+                      {commentActivity.map(({ id, proposal, label, comment, pending }) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => navigateToRailComment(proposal.id, comment.id)}
+                          className={cn(
+                            "block w-full rounded-lg border px-2.5 py-2 text-left transition-colors",
+                            activeRailCommentId === comment.id
+                              ? "border-[color-mix(in_srgb,var(--creed-accent)_55%,transparent)] bg-[color-mix(in_srgb,var(--creed-accent)_5%,var(--creed-surface))]"
+                              : "border-transparent hover:border-[var(--creed-border)] hover:bg-[var(--creed-surface-raised)]"
+                          )}
+                        >
+                          <span className="flex items-center justify-between gap-2 text-[11px] text-[var(--creed-text-tertiary)]">
+                            <span className="min-w-0 truncate font-medium text-[var(--creed-text-secondary)]">
+                              {comment.authorLabel}
+                            </span>
+                            <span className="shrink-0">{formatDocumentTimestamp(comment.createdAt)}</span>
+                          </span>
+                          <span className="mt-1 line-clamp-2 block text-[12px] leading-5 text-[var(--creed-text-primary)]">
+                            <MentionText text={comment.body} mentionLabels={mentionLabels} />
+                          </span>
+                          <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--creed-text-tertiary)]">
+                            {pending ? (
+                              <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--creed-accent)_10%,transparent)] px-1.5 py-0.5 font-medium text-[var(--creed-accent)]">
+                                Pending
+                              </span>
+                            ) : comment.status === "resolved" ? (
+                              <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--creed-success)_12%,transparent)] px-1.5 py-0.5 font-medium text-[var(--creed-success)]">
+                                Resolved
+                              </span>
+                            ) : null}
+                            <span className="min-w-0 truncate">{label}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 {conflictCount > 0 ? (
                   <div className="mb-2 rounded-[10px] border border-[color-mix(in_srgb,#f59e0b_42%,var(--creed-border))] bg-[color-mix(in_srgb,#f59e0b_10%,var(--creed-surface))] px-3 py-2 text-[12px] leading-5 text-[var(--creed-text-secondary)]">
                     <span className="font-medium text-[var(--creed-text-primary)]">
@@ -5955,6 +6072,7 @@ function DocumentDiffRail({
                 const commenting = commentingProposalId === proposal.id;
                 const person = resolveProposalPerson(proposal, usersById);
                 const proposalComments = proposalCommentsById.get(proposal.id) ?? [];
+                const proposalPendingComments = proposalPendingCommentsById.get(proposal.id) ?? [];
                 const commentCount = proposalCommentCounts.get(proposal.id) ?? 0;
 
                 return (
@@ -6067,7 +6185,12 @@ function DocumentDiffRail({
                         {proposalComments.map((comment) => (
                           <div
                             key={comment.id}
-                            className="text-left"
+                            data-diff-rail-comment={comment.id}
+                            className={cn(
+                              "rounded-lg px-2 py-1.5 text-left transition-colors",
+                              activeRailCommentId === comment.id &&
+                                "bg-[color-mix(in_srgb,var(--creed-accent)_8%,transparent)] ring-1 ring-[color-mix(in_srgb,var(--creed-accent)_24%,transparent)]"
+                            )}
                           >
                             <div className="flex items-center justify-between gap-2 text-[11px] text-[var(--creed-text-tertiary)]">
                               <span className="truncate font-medium text-[var(--creed-text-secondary)]">
@@ -6077,6 +6200,50 @@ function DocumentDiffRail({
                             </div>
                             <div className="mt-1 text-[12px] leading-5 text-[var(--creed-text-primary)]">
                               <MentionText text={comment.body} mentionLabels={mentionLabels} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {proposalPendingComments.length ? (
+                      <div className="mt-2 space-y-2 rounded-[10px] border border-dashed border-[color-mix(in_srgb,var(--creed-accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--creed-accent)_4%,transparent)] p-2">
+                        {proposalPendingComments.map((comment) => (
+                          <div
+                            key={comment.id}
+                            data-diff-rail-comment={comment.id}
+                            className={cn(
+                              "rounded-lg px-2 py-1.5 transition-colors",
+                              activeRailCommentId === comment.id &&
+                                "bg-[color-mix(in_srgb,var(--creed-accent)_8%,transparent)] ring-1 ring-[color-mix(in_srgb,var(--creed-accent)_24%,transparent)]"
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-2 text-[11px] text-[var(--creed-text-tertiary)]">
+                              <span className="truncate font-medium text-[var(--creed-text-secondary)]">
+                                {comment.proposedByAgentLabel || "Agent"} · pending
+                              </span>
+                              <span className="shrink-0">{formatDocumentTimestamp(comment.createdAt)}</span>
+                            </div>
+                            <div className="mt-1 text-[12px] leading-5 text-[var(--creed-text-primary)]">
+                              <MentionText text={comment.body} mentionLabels={mentionLabels} />
+                            </div>
+                            <div className="mt-2 flex items-center justify-end gap-1.5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 gap-1 rounded-md px-2 text-[11.5px] text-[var(--creed-text-secondary)] hover:text-[var(--creed-text-primary)]"
+                                onClick={() => onRejectPending(comment.id)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                                Reject
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="h-6 gap-1 rounded-md bg-[var(--creed-accent)] px-2 text-[11.5px] text-white shadow-none hover:bg-[var(--creed-accent-hover)]"
+                                onClick={() => onApprovePending(comment.id)}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                                Share
+                              </Button>
                             </div>
                           </div>
                         ))}
