@@ -799,8 +799,16 @@ function CommentsPanel({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 creed-scrollbar">
       {comments.length === 0 ? (
-        <div className="rounded-md border border-dashed border-[var(--creed-border)] px-3 py-8 text-center text-[13px] text-[var(--creed-text-secondary)]">
-          Highlight text in the document and use the comment button to start a thread.
+        <div className="flex flex-col items-center px-6 py-14 text-center">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--creed-surface-raised)]">
+            <MessageSquare className="h-5 w-5 text-[var(--creed-text-tertiary)]" />
+          </div>
+          <div className="mt-3 text-[13px] font-medium text-[var(--creed-text-primary)]">
+            No comments yet
+          </div>
+          <div className="mt-1 max-w-[240px] text-[12px] leading-5 text-[var(--creed-text-secondary)]">
+            Highlight any text in the document and click the comment button to add the first one.
+          </div>
         </div>
       ) : (
         <div className="space-y-5">
@@ -969,8 +977,16 @@ function ActivityPanel({ activity }: { activity: DocumentActivityEvent[] }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 creed-scrollbar">
       {activity.length === 0 ? (
-        <div className="rounded-md border border-dashed border-[var(--creed-border)] px-3 py-8 text-center text-[13px] text-[var(--creed-text-secondary)]">
-          No activity yet.
+        <div className="flex flex-col items-center px-6 py-14 text-center">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--creed-surface-raised)]">
+            <History className="h-5 w-5 text-[var(--creed-text-tertiary)]" />
+          </div>
+          <div className="mt-3 text-[13px] font-medium text-[var(--creed-text-primary)]">
+            No activity yet
+          </div>
+          <div className="mt-1 max-w-[240px] text-[12px] leading-5 text-[var(--creed-text-secondary)]">
+            Document changes and comments will appear here.
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
