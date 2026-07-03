@@ -414,6 +414,33 @@ export async function listDocumentComments(client: unknown, documentId: string) 
     .select(COMMENT_COLUMNS)
     .eq("document_id", documentId)
     .eq("proposal_status", "shared")
+    .is("proposal_id", null)
+    .order("created_at", { ascending: true })) as {
+    data: CommentRow[] | null;
+    error: { message: string } | null;
+  };
+
+  if (error) {
+    throw new Error(error.message || "Could not load comments.");
+  }
+
+  const rows = data ?? [];
+  const [users, mentions] = await Promise.all([
+    userMap(client),
+    mentionsByComment(client, rows.map((row) => row.id)),
+  ]);
+  return rows.map((row) => mapComment(row, users, mentions));
+}
+
+export async function listPublicDocumentComments(client: unknown, documentId: string) {
+  const db = client as SupabaseLikeClient;
+  const { data, error } = (await db
+    .from("creed_document_comments")
+    .select(COMMENT_COLUMNS)
+    .eq("document_id", documentId)
+    .eq("proposal_status", "shared")
+    .eq("status", "open")
+    .is("proposal_id", null)
     .order("created_at", { ascending: true })) as {
     data: CommentRow[] | null;
     error: { message: string } | null;
@@ -873,7 +900,7 @@ export async function updatePublicCommentAuthorLabel(
   return {
     ok: true,
     value: {
-      comments: await listDocumentComments(client, input.documentId),
+      comments: await listPublicDocumentComments(client, input.documentId),
     },
   };
 }

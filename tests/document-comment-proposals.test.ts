@@ -4,6 +4,7 @@ import {
   approveDocumentComment,
   createDocumentComment,
   listDocumentComments,
+  listPublicDocumentComments,
   listPendingCommentsForUser,
   rejectDocumentComment,
 } from "@/lib/document-collaboration";
@@ -72,6 +73,77 @@ describe("agent comment proposals", () => {
     const shared = await listDocumentComments(client, documentId);
     expect(shared).toHaveLength(1);
     expect(shared[0].body).toBe("shared one");
+  });
+
+  it("hides proposal comments from the authenticated document list", async () => {
+    const { client, documentId } = createFakeClientWithDocument();
+    client.seed("creed_document_proposals", [
+      { id: "proposal-stale", document_id: documentId, status: "accepted" },
+      { id: "proposal-live", document_id: documentId, status: "pending" },
+    ]);
+
+    await createDocumentComment(client, {
+      documentId,
+      body: "Resolved proposal review note.",
+      actorUserId: "user-1",
+      proposalId: "proposal-stale",
+      source: "creed",
+    });
+    await createDocumentComment(client, {
+      documentId,
+      body: "Live proposal review note.",
+      actorUserId: "user-1",
+      proposalId: "proposal-live",
+      source: "creed",
+    });
+    await createDocumentComment(client, {
+      documentId,
+      body: "Document note.",
+      actorUserId: "user-1",
+      source: "creed",
+    });
+
+    const shared = await listDocumentComments(client, documentId);
+    expect(shared.map((comment) => comment.body)).toEqual(["Document note."]);
+  });
+
+  it("only returns open document-level comments for public shares", async () => {
+    const { client, documentId } = createFakeClientWithDocument();
+    client.seed("creed_document_proposals", [
+      { id: "proposal-live", document_id: documentId, status: "pending" },
+    ]);
+
+    await createDocumentComment(client, {
+      documentId,
+      body: "Visible public note.",
+      referenceQuote: "Original body.",
+      source: "public",
+      publicAuthorLabel: "Reader",
+      publicAuthorClientId: "reader-1",
+    });
+    await createDocumentComment(client, {
+      documentId,
+      body: "Proposal review note.",
+      proposalId: "proposal-live",
+      actorUserId: "user-1",
+      source: "creed",
+    });
+    const resolved = await createDocumentComment(client, {
+      documentId,
+      body: "Resolved document note.",
+      source: "public",
+      publicAuthorLabel: "Reader",
+      publicAuthorClientId: "reader-1",
+    });
+    if (!resolved.ok) throw new Error("setup failed");
+    client.seed("creed_document_comments", [
+      ...client.rows("creed_document_comments").map((row) =>
+        row.id === resolved.value.comment.id ? { ...row, status: "resolved" } : row
+      ),
+    ]);
+
+    const publicComments = await listPublicDocumentComments(client, documentId);
+    expect(publicComments.map((comment) => comment.body)).toEqual(["Visible public note."]);
   });
 
   it("returns only the caller's own pending comments from listPendingCommentsForUser", async () => {

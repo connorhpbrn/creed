@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { PublicDocumentScreen } from "@/components/creed/public-document-screen";
 import {
   listDocumentActivity,
-  listDocumentComments,
+  listPublicDocumentComments,
   listWorkspaceUsers,
 } from "@/lib/document-collaboration";
 import { readPublicSharedDocument } from "@/lib/shared-documents";
@@ -82,7 +82,7 @@ export default async function PublicDocumentPage({
   }
 
   const [comments, activity, workspaceUsers] = await Promise.all([
-    listDocumentComments(admin, document.id),
+    listPublicDocumentComments(admin, document.id),
     listDocumentActivity(admin, document.id),
     listWorkspaceUsers(admin),
   ]);
