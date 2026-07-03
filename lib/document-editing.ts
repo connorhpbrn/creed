@@ -2,6 +2,7 @@ import "server-only";
 import {
   recordDocumentActivity,
   resolveOpenCommentsForProposal,
+  resolveOpenCommentsForProposals,
 } from "@/lib/document-collaboration";
 import {
   applyHunkChange,
@@ -12,6 +13,7 @@ import {
   type DocumentHunkStatus,
 } from "@/lib/document-hunk-diff";
 import { appendDocumentVersion, readDocumentVersion, type DocumentVersion } from "@/lib/document-versions";
+import { log } from "@/lib/observability";
 import {
   readSharedDocumentById,
   updateSharedDocumentContent,
@@ -96,6 +98,15 @@ type EditResult =
 type ProposalResult<T> =
   | { ok: true; value: T }
   | { ok: false; code: "invalid" | "not-found" | "conflict" | "forbidden"; error: string };
+
+type BulkProposalResult<T> =
+  | { ok: true; value: T }
+  | {
+      ok: false;
+      code: "invalid" | "not-found" | "conflict" | "forbidden";
+      error: string;
+      settledProposalIds?: string[];
+    };
 
 const PROPOSAL_COLUMNS = [
   "id",
@@ -268,6 +279,116 @@ async function applyDocumentContent(
   });
 
   return { ok: true, document: applied.value, version };
+}
+
+// After a direct edit moves the source of truth, re-evaluate every OTHER pending
+// proposal against the new content. Proposals are content-anchored (not fixed
+// offsets), so this never creates a new proposal - it updates or removes the
+// existing rows:
+//   - still anchors and produces a change  -> keep it, mark `clean`;
+//   - the edit already made the same change -> delete the now-redundant row;
+//   - the edit changed the anchored span    -> keep it, mark `conflict` for re-review.
+// Best-effort: the save already succeeded and versioned, so a failure here is
+// logged but not surfaced to the caller.
+async function reconcilePendingProposalsAfterEdit(
+  client: unknown,
+  input: {
+    documentId: string;
+    content: string;
+    actorUserId: string | null;
+    // The proposal being accepted (if any) is settled by its own flow; skip it.
+    excludeProposalId?: string | null;
+  }
+): Promise<void> {
+  const db = client as SupabaseLikeClient;
+
+  let pending: DocumentProposal[];
+  try {
+    pending = await listDocumentProposals(client, input.documentId, { status: "pending" });
+  } catch (error) {
+    log.warn(
+      "document.proposal.reconcile_list_failed",
+      { documentId: input.documentId },
+      error
+    );
+    return;
+  }
+
+  const deletedIds: string[] = [];
+  const conflictedIds: string[] = [];
+
+  for (const proposal of pending) {
+    if (input.excludeProposalId && proposal.id === input.excludeProposalId) {
+      continue;
+    }
+
+    const hunk: DocumentHunkChange = {
+      key: proposal.hunkKey,
+      index: proposal.hunkIndex,
+      status: proposal.hunkStatus,
+      before: proposal.hunkBefore,
+      after: proposal.hunkAfter,
+      beforeStart: proposal.hunkBeforeStart,
+      beforeEnd: proposal.hunkBeforeEnd,
+      afterStart: proposal.hunkAfterStart,
+      afterEnd: proposal.hunkAfterEnd,
+      prefix: proposal.hunkPrefix,
+      suffix: proposal.hunkSuffix,
+      classification: proposal.classification,
+      conflictStatus: proposal.conflictStatus,
+    };
+
+    const merged = applyHunkChange(input.content, hunk);
+
+    // Unanchorable against the new truth: flag for human re-review.
+    if (!merged.ok) {
+      if (proposal.conflictStatus !== "conflict") {
+        await db
+          .from("creed_document_proposals")
+          .update({ conflict_status: "conflict" })
+          .eq("id", proposal.id)
+          .eq("status", "pending");
+        conflictedIds.push(proposal.id);
+      }
+      continue;
+    }
+
+    // Applies but produces no change -> the edit already contains this change,
+    // so the proposal is redundant. Delete it outright.
+    if (merged.content === input.content) {
+      await db
+        .from("creed_document_proposals")
+        .delete()
+        .eq("id", proposal.id)
+        .eq("status", "pending");
+      deletedIds.push(proposal.id);
+      continue;
+    }
+
+    // Still applies cleanly (possibly re-anchored). Clear any stale conflict.
+    if (proposal.conflictStatus !== "clean") {
+      await db
+        .from("creed_document_proposals")
+        .update({ conflict_status: "clean" })
+        .eq("id", proposal.id)
+        .eq("status", "pending");
+    }
+  }
+
+  if (deletedIds.length === 0 && conflictedIds.length === 0) {
+    return;
+  }
+
+  await recordDocumentActivity(client, {
+    documentId: input.documentId,
+    actorUserId: input.actorUserId,
+    action: "document.proposals.reconciled",
+    summary: "Reconciled pending proposals after a direct edit",
+    metadata: {
+      deletedProposalIds: deletedIds,
+      conflictedProposalIds: conflictedIds,
+    },
+  });
 }
 
 // Split a whole-content submission into one proposal per changed hunk (all
@@ -460,6 +581,24 @@ export async function routeDocumentEdit(
   if (!applied.ok) {
     return applied;
   }
+
+  // The source of truth just moved. Re-anchor every other pending proposal
+  // against the new content: drop the ones this edit already satisfied and
+  // flag the ones it broke. Never creates a new proposal.
+  try {
+    await reconcilePendingProposalsAfterEdit(client, {
+      documentId: input.documentId,
+      content: applied.document.content,
+      actorUserId: input.author.userId ?? null,
+    });
+  } catch (error) {
+    log.warn(
+      "document.proposal.reconcile_failed",
+      { documentId: input.documentId },
+      error
+    );
+  }
+
   return { ok: true, outcome: "applied", document: applied.document, version: applied.version };
 }
 
@@ -649,6 +788,276 @@ export async function rejectDocumentProposal(
   });
 
   return { ok: true, value: rejectedProposal };
+}
+
+function uniqueProposalIds(proposalIds: string[]) {
+  return Array.from(new Set(proposalIds.map((id) => id.trim()).filter(Boolean)));
+}
+
+function proposalToHunk(proposal: DocumentProposal): DocumentHunkChange {
+  return {
+    key: proposal.hunkKey,
+    index: proposal.hunkIndex,
+    status: proposal.hunkStatus,
+    before: proposal.hunkBefore,
+    after: proposal.hunkAfter,
+    beforeStart: proposal.hunkBeforeStart,
+    beforeEnd: proposal.hunkBeforeEnd,
+    afterStart: proposal.hunkAfterStart,
+    afterEnd: proposal.hunkAfterEnd,
+    prefix: proposal.hunkPrefix,
+    suffix: proposal.hunkSuffix,
+    classification: proposal.classification,
+    conflictStatus: proposal.conflictStatus,
+  };
+}
+
+async function claimProposals(
+  client: unknown,
+  input: { documentId: string; proposalIds: string[] }
+): Promise<DocumentProposalRow[]> {
+  const ids = uniqueProposalIds(input.proposalIds);
+  if (ids.length === 0) return [];
+
+  const db = client as SupabaseLikeClient;
+  const { data } = (await db
+    .from("creed_document_proposals")
+    .update({ resolving: true })
+    .eq("document_id", input.documentId)
+    .in("id", ids)
+    .eq("status", "pending")
+    .eq("resolving", false)
+    .select(PROPOSAL_COLUMNS)) as {
+    data: DocumentProposalRow[] | null;
+    error: { message: string } | null;
+  };
+  return data ?? [];
+}
+
+async function releaseProposalClaims(client: unknown, proposalIds: string[]) {
+  const ids = uniqueProposalIds(proposalIds);
+  if (ids.length === 0) return;
+  const db = client as SupabaseLikeClient;
+  await db.from("creed_document_proposals").update({ resolving: false }).in("id", ids);
+}
+
+async function markProposalConflicts(client: unknown, proposalIds: string[]) {
+  const ids = uniqueProposalIds(proposalIds);
+  if (ids.length === 0) return;
+  const db = client as SupabaseLikeClient;
+  await db
+    .from("creed_document_proposals")
+    .update({ resolving: false, conflict_status: "conflict" })
+    .in("id", ids);
+}
+
+export async function acceptDocumentProposals(
+  client: unknown,
+  input: {
+    documentId: string;
+    proposalIds: string[];
+    actorUserId: string;
+  }
+): Promise<BulkProposalResult<{ document: SharedDocument; version: DocumentVersion; proposals: DocumentProposal[] }>> {
+  const ids = uniqueProposalIds(input.proposalIds);
+  if (ids.length === 0) {
+    return { ok: false, code: "invalid", error: "No proposals selected." };
+  }
+
+  const claimedRows = await claimProposals(client, {
+    documentId: input.documentId,
+    proposalIds: ids,
+  });
+  if (claimedRows.length !== ids.length) {
+    const claimedIds = claimedRows.map((row) => row.id);
+    await releaseProposalClaims(client, claimedIds);
+    return {
+      ok: false,
+      code: "conflict",
+      error: "One or more proposals are no longer pending.",
+      settledProposalIds: claimedIds,
+    };
+  }
+
+  const proposals = sortProposalsForReview(claimedRows.map(mapProposal));
+  const document = await readSharedDocumentById(client, input.documentId);
+  if (!document) {
+    await releaseProposalClaims(client, ids);
+    return { ok: false, code: "not-found", error: "Document not found.", settledProposalIds: ids };
+  }
+
+  let mergedContent = document.content;
+  const acceptedHunks: DocumentHunkChange[] = [];
+  const conflictedIds: string[] = [];
+
+  for (const proposal of proposals) {
+    const hunk = proposalToHunk(proposal);
+    const merged = applyHunkChange(mergedContent, hunk);
+    if (!merged.ok) {
+      conflictedIds.push(proposal.id);
+      continue;
+    }
+    mergedContent = merged.content;
+    acceptedHunks.push(hunk);
+  }
+
+  if (conflictedIds.length > 0) {
+    await markProposalConflicts(client, conflictedIds);
+    await releaseProposalClaims(client, ids.filter((id) => !conflictedIds.includes(id)));
+    return {
+      ok: false,
+      code: "conflict",
+      error: "One or more proposals no longer match the document. Re-review them before accepting.",
+      settledProposalIds: ids,
+    };
+  }
+
+  if (mergedContent === document.content) {
+    await releaseProposalClaims(client, ids);
+    return {
+      ok: false,
+      code: "invalid",
+      error: "Selected proposals do not change the document.",
+      settledProposalIds: ids,
+    };
+  }
+
+  const summary =
+    proposals.length === 1
+      ? proposals[0].summary || proposals[0].classification || "Accepted proposal"
+      : `Accepted ${proposals.length} proposals`;
+  const applied = await applyDocumentContent(client, {
+    documentId: input.documentId,
+    content: mergedContent,
+    expectedRevision: document.revision,
+    actorType: proposals[0]?.actorType ?? "human",
+    author: {
+      userId: proposals[0]?.authorUserId ?? null,
+      agentLabel: proposals[0]?.authorAgentLabel ?? null,
+    },
+    summary,
+    sourceProposalId: proposals.length === 1 ? proposals[0]?.id ?? null : null,
+    changeHunks: acceptedHunks,
+  });
+
+  if (!applied.ok) {
+    await releaseProposalClaims(client, ids);
+    return { ...applied, settledProposalIds: ids };
+  }
+
+  const now = new Date().toISOString();
+  const db = client as SupabaseLikeClient;
+  await db
+    .from("creed_document_proposals")
+    .update({
+      status: "accepted",
+      resolving: false,
+      conflict_status: "resolved",
+      resolved_at: now,
+      resolved_by: input.actorUserId,
+    })
+    .in("id", ids);
+
+  await resolveOpenCommentsForProposals(client, {
+    proposalIds: ids,
+    actorUserId: input.actorUserId,
+  });
+
+  await reconcilePendingProposalsAfterEdit(client, {
+    documentId: input.documentId,
+    content: applied.document.content,
+    actorUserId: input.actorUserId,
+  });
+
+  await recordDocumentActivity(client, {
+    documentId: input.documentId,
+    actorUserId: input.actorUserId,
+    action: "document.proposals.accepted",
+    summary: proposals.length === 1 ? "Accepted a proposal" : `Accepted ${proposals.length} proposals`,
+    metadata: {
+      proposalIds: ids,
+      revision: applied.version.revision,
+      versionId: applied.version.id,
+      hunkCount: acceptedHunks.length,
+    },
+  });
+
+  return {
+    ok: true,
+    value: { document: applied.document, version: applied.version, proposals },
+  };
+}
+
+export async function rejectDocumentProposals(
+  client: unknown,
+  input: { documentId: string; proposalIds: string[]; actorUserId: string }
+): Promise<BulkProposalResult<{ proposals: DocumentProposal[] }>> {
+  const ids = uniqueProposalIds(input.proposalIds);
+  if (ids.length === 0) {
+    return { ok: false, code: "invalid", error: "No proposals selected." };
+  }
+
+  const claimedRows = await claimProposals(client, {
+    documentId: input.documentId,
+    proposalIds: ids,
+  });
+  if (claimedRows.length !== ids.length) {
+    const claimedIds = claimedRows.map((row) => row.id);
+    await releaseProposalClaims(client, claimedIds);
+    return {
+      ok: false,
+      code: "conflict",
+      error: "One or more proposals are no longer pending.",
+      settledProposalIds: claimedIds,
+    };
+  }
+
+  const proposals = sortProposalsForReview(claimedRows.map(mapProposal));
+  const now = new Date().toISOString();
+  const db = client as SupabaseLikeClient;
+  const { data, error } = (await db
+    .from("creed_document_proposals")
+    .update({
+      status: "rejected",
+      resolving: false,
+      conflict_status: "resolved",
+      resolved_at: now,
+      resolved_by: input.actorUserId,
+    })
+    .eq("document_id", input.documentId)
+    .in("id", ids)
+    .select(PROPOSAL_COLUMNS)) as {
+    data: DocumentProposalRow[] | null;
+    error: { message: string } | null;
+  };
+
+  if (error || !data) {
+    await releaseProposalClaims(client, ids);
+    return {
+      ok: false,
+      code: "invalid",
+      error: error?.message || "Could not reject proposals.",
+      settledProposalIds: ids,
+    };
+  }
+
+  await resolveOpenCommentsForProposals(client, {
+    proposalIds: ids,
+    actorUserId: input.actorUserId,
+  });
+
+  await recordDocumentActivity(client, {
+    documentId: input.documentId,
+    actorUserId: input.actorUserId,
+    action: "document.proposals.rejected",
+    summary: proposals.length === 1 ? "Rejected a proposal" : `Rejected ${proposals.length} proposals`,
+    metadata: {
+      proposalIds: ids,
+      hunkCount: proposals.length,
+    },
+  });
+
+  return { ok: true, value: { proposals: sortProposalsForReview(data.map(mapProposal)) } };
 }
 
 // Revert re-applies an old version's content through the policy-gated route, so

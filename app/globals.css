@@ -413,6 +413,96 @@
   margin-top: 1rem;
 }
 
+/* Notion-style block drag handle (see components/creed/extensions/
+   block-drag-handle.ts). Lives on document.body with fixed positioning so it
+   isn't clipped by the editor's scroll container or affected by transforms.
+   Visibility is driven purely by the `display` toggle so it can never get stuck
+   invisible behind an unfinished opacity animation. */
+.creed-drag-handle {
+  position: fixed;
+  z-index: 45;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 24px;
+  padding: 0;
+  border-radius: 5px;
+  color: var(--creed-text-tertiary);
+  background: transparent;
+  cursor: grab;
+  transition:
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.creed-drag-handle:hover {
+  color: var(--creed-text-primary);
+  background: var(--creed-surface-raised);
+}
+
+.creed-drag-handle:active,
+.creed-drag-handle.is-dragging {
+  cursor: grabbing;
+}
+
+.creed-drag-handle svg {
+  pointer-events: none;
+}
+
+/* Whole-block selection highlight. Applied to a single block clicked via the
+   drag handle (NodeSelection -> .ProseMirror-selectednode) and to every block
+   inside a gutter-drag range (.creed-block-selected, used in both the editor
+   and the read-only diff). A flat accent wash with no outline - Notion-style -
+   so several selected blocks read as one clean band rather than a row of
+   bordered boxes. The side box-shadows extend the wash a little past the text
+   edges so it feels like a block, not a text run. */
+.ProseMirror .ProseMirror-selectednode,
+.creed-block-selected {
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--creed-accent) 20%, transparent);
+  box-shadow:
+    -6px 0 0 0 color-mix(in srgb, var(--creed-accent) 20%, transparent),
+    6px 0 0 0 color-mix(in srgb, var(--creed-accent) 20%, transparent);
+}
+
+/* While a gutter block-selection is active, suppress the native text-selection
+   highlight so only the clean per-block wash shows (no double highlight, no
+   patchy gaps between lines). */
+.ProseMirror.creed-block-selecting ::selection {
+  background: transparent;
+}
+.ProseMirror.creed-block-selecting ::-moz-selection {
+  background: transparent;
+}
+
+/* Clean, uniform text-selection highlight in the editor and diff. A single
+   flat accent wash (instead of the browser default) means selecting across the
+   coloured diff add/remove chips reads as one continuous band with no patchy
+   gaps around the chips. */
+.ProseMirror ::selection,
+.creed-diff-block ::selection,
+.creed-rendered-markdown ::selection {
+  background: color-mix(in srgb, var(--creed-accent) 18%, transparent);
+}
+.ProseMirror ::-moz-selection,
+.creed-diff-block ::-moz-selection,
+.creed-rendered-markdown ::-moz-selection {
+  background: color-mix(in srgb, var(--creed-accent) 18%, transparent);
+}
+
+.creed-diff-add::selection,
+.creed-diff-remove::selection {
+  background: color-mix(in srgb, var(--creed-accent) 14%, transparent);
+}
+
+.creed-diff-add::-moz-selection,
+.creed-diff-remove::-moz-selection {
+  background: color-mix(in srgb, var(--creed-accent) 14%, transparent);
+}
+
 .ProseMirror h1,
 .ProseMirror h2,
 .ProseMirror h3 {
@@ -1518,20 +1608,51 @@
   word-wrap: break-word;
 }
 
+/* Inline diff hunk rendered inside a flowing review paragraph. Keeps the
+   changed span on the same line as its surrounding text (no stacked block). */
+.creed-diff-inline {
+  white-space: normal;
+}
+
 .creed-diff-add {
   background: rgba(22, 163, 74, 0.12);
   color: #15803d;
-  padding: 1px 2px;
   border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .creed-diff-remove {
-  background: rgba(220, 38, 38, 0.10);
+  background: rgba(220, 38, 38, 0.1);
   color: #b91c1c;
   text-decoration: line-through;
   text-decoration-color: rgba(185, 28, 28, 0.5);
-  padding: 1px 2px;
   border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Where a removed span and an added span touch, square only the shared
+   inner edge so the two chips read as one continuous swap. Outer corners
+   stay rounded. Handles both orderings (remove→add and add→remove). */
+.creed-diff-remove:has(+ .creed-diff-add) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.creed-diff-remove + .creed-diff-add {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.creed-diff-add:has(+ .creed-diff-remove) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.creed-diff-add + .creed-diff-remove {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 /* Dark-canvas diff tones: lower the surface opacity so the highlighted
@@ -1548,30 +1669,90 @@
   text-decoration-color: rgba(248, 113, 113, 0.5);
 }
 
+/* Hovered / selected diff: solid bright green (add) and bright red (remove)
+   with white text so the span the user is pointing at reads as unmistakably
+   "selected". White text is kept in both light and dark mode because the
+   backgrounds are fully saturated in both. */
 [data-document-diff-proposal-id]:hover .creed-diff-add,
 [data-document-diff-proposal-id][data-active="true"] .creed-diff-add {
-  background: rgba(22, 163, 74, 0.28);
-  color: #166534;
+  background: #16a34a;
+  color: #ffffff;
 }
 
 [data-document-diff-proposal-id]:hover .creed-diff-remove,
 [data-document-diff-proposal-id][data-active="true"] .creed-diff-remove {
-  background: rgba(220, 38, 38, 0.24);
-  color: #991b1b;
-  text-decoration-color: rgba(153, 27, 27, 0.72);
+  background: #dc2626;
+  color: #ffffff;
+  text-decoration-color: rgba(255, 255, 255, 0.8);
 }
 
 .dark [data-document-diff-proposal-id]:hover .creed-diff-add,
 .dark [data-document-diff-proposal-id][data-active="true"] .creed-diff-add {
-  background: rgba(34, 197, 94, 0.24);
-  color: #86efac;
+  background: #22c55e;
+  color: #ffffff;
 }
 
 .dark [data-document-diff-proposal-id]:hover .creed-diff-remove,
 .dark [data-document-diff-proposal-id][data-active="true"] .creed-diff-remove {
-  background: rgba(248, 113, 113, 0.24);
-  color: #fecaca;
-  text-decoration-color: rgba(254, 202, 202, 0.75);
+  background: #ef4444;
+  color: #ffffff;
+  text-decoration-color: rgba(255, 255, 255, 0.8);
+}
+
+/* Conflict diff tokens read amber/yellow instead of green/red so a hunk that
+   collided with a concurrent edit stays visually distinct. The block itself is
+   never washed - the amber tokens carry the whole signal. Base is a soft amber
+   tint; hover / active go solid amber (like the clean tokens do) so the
+   selected conflict reads unmistakably. */
+[data-document-diff-proposal-id][data-conflict="true"] .creed-diff-add,
+[data-document-diff-proposal-id][data-conflict="true"] .creed-diff-remove {
+  background: rgba(245, 158, 11, 0.18);
+  color: #b45309;
+}
+
+[data-document-diff-proposal-id][data-conflict="true"] .creed-diff-remove {
+  text-decoration-color: rgba(180, 83, 9, 0.55);
+}
+
+[data-document-diff-proposal-id][data-conflict="true"]:hover .creed-diff-add,
+[data-document-diff-proposal-id][data-conflict="true"][data-active="true"] .creed-diff-add,
+[data-document-diff-proposal-id][data-conflict="true"]:hover .creed-diff-remove,
+[data-document-diff-proposal-id][data-conflict="true"][data-active="true"] .creed-diff-remove {
+  background: #f59e0b;
+  color: #ffffff;
+  text-decoration-color: rgba(255, 255, 255, 0.85);
+}
+
+.dark [data-document-diff-proposal-id][data-conflict="true"] .creed-diff-add,
+.dark [data-document-diff-proposal-id][data-conflict="true"] .creed-diff-remove {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fbbf24;
+}
+
+.dark [data-document-diff-proposal-id][data-conflict="true"] .creed-diff-remove {
+  text-decoration-color: rgba(251, 191, 36, 0.55);
+}
+
+.dark [data-document-diff-proposal-id][data-conflict="true"]:hover .creed-diff-add,
+.dark [data-document-diff-proposal-id][data-conflict="true"][data-active="true"] .creed-diff-add,
+.dark [data-document-diff-proposal-id][data-conflict="true"]:hover .creed-diff-remove,
+.dark [data-document-diff-proposal-id][data-conflict="true"][data-active="true"] .creed-diff-remove {
+  background: #f59e0b;
+  color: #1c1c1a;
+  text-decoration-color: rgba(28, 28, 26, 0.75);
+}
+
+/* Commented diffs keep their normal add/remove colour, with a persistent
+   yellow underline on both sides of the hunk so the thread is visible even
+   before the toolbar appears. */
+[data-document-diff-proposal-id][data-has-comments="true"] .creed-diff-add,
+[data-document-diff-proposal-id][data-has-comments="true"] .creed-diff-remove {
+  box-shadow: inset 0 -2px 0 rgba(234, 179, 8, 0.95);
+}
+
+.dark [data-document-diff-proposal-id][data-has-comments="true"] .creed-diff-add,
+.dark [data-document-diff-proposal-id][data-has-comments="true"] .creed-diff-remove {
+  box-shadow: inset 0 -2px 0 rgba(250, 204, 21, 0.95);
 }
 
 /* View Transition API hooks for the circular theme reveal (see

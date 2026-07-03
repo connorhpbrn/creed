@@ -25,6 +25,8 @@ Agents working through MCP must:
   `folderId`/`path`); use `creed_get_folder` (by id or slug) to inspect one
   folder plus the child folders and documents it directly contains;
 - read current comments before changing a document when review context matters;
+- read hunk-level proposal diffs with `creed_list_document_proposals` when a
+  task involves proposals, conflicts, or review history;
 - update document content with `expectedRevision` and re-read on conflicts;
 - use document metadata tools for status/type/stage/lifecycle/priority/size;
 - expect that document content edits are governed by the workspace Agent edit
@@ -37,6 +39,12 @@ Agents working through MCP must:
   as private pending proposals that the user reviews and approves before anyone
   else sees them, and once approved they appear as the user's own comment (never
   labelled as an agent);
+- add comments/replies to either document content or a proposal diff; pass
+  `proposalId` when the comment belongs to a specific diff/proposal. Agents may
+  read proposals created by the current user or by others, but must not edit or
+  delete other people's proposals;
+- edit, delete, resolve, or reopen only comments/replies authored by the OAuth
+  user whose token the agent is using; do not modify other people's comments;
 - mention a user only when their attention is actually needed (a mention in a
   pending comment only notifies once the user approves it).
 - make targeted edits only: read the latest document, preserve unchanged
@@ -94,7 +102,9 @@ clearest shape for the content:
 Each non-touching content change becomes its own proposal hunk. Consecutive word
 changes inside the same range stay one proposal. Accepted proposal families are
 shown grouped in version history; expanding a family reveals the individual
-hunks and selecting one shows only that diff.
+hunks and selecting one shows only that diff. Proposal titles should be short
+descriptive sentence fragments, usually under 72 characters, rather than vague
+labels like "Header update" or paragraph-length summaries.
 
 Tables and mermaid blocks parse in `lib/rich-text.ts` (`markdownToRichHtml`) and
 serialize back through `lib/creed-data.ts` (`richHtmlToMarkdown`); the editor

@@ -36,9 +36,17 @@ export function htmlToText(value: string) {
     .replace(/<\s*\/(p|h\d|li|ul|ol|blockquote|pre)\s*>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
+    // Numeric entities first (e.g. `&#39;` apostrophe, `&#x27;`), then the
+    // remaining named ones. `markdownToRichHtml` escapes apostrophes/quotes as
+    // `&#39;` / `&quot;`, so the diff would otherwise print the raw entity.
+    .replace(/&#(\d+);/g, (_, dec: string) => String.fromCodePoint(Number(dec)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
+    // `&amp;` last so a literal `&amp;#39;` is not double-decoded into `'`.
+    .replace(/&amp;/g, "&")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -55,14 +63,21 @@ export function DiffBadge({
 }: {
   tone: "added" | "removed";
   count: number;
-  size?: "xs" | "sm" | "md";
+  size?: "xs" | "sm" | "card" | "md";
 }) {
   const symbol = tone === "added" ? "+" : "−";
   // `!important` so the dropdown-menu primitive's `**:text-accent-foreground`
   // focus rule doesn't bleach the +N / −N numbers when the row is hovered.
   const colour =
     tone === "added" ? "!text-[var(--creed-success)]" : "!text-[var(--creed-danger)]";
-  const sizeClass = size === "xs" ? "text-[10px]" : size === "md" ? "text-sm" : "text-[11px]";
+  const sizeClass =
+    size === "xs"
+      ? "text-[10px]"
+      : size === "card"
+        ? "text-[12px]"
+        : size === "md"
+          ? "text-sm"
+          : "text-[11px]";
   return (
     <span
       className={cn(

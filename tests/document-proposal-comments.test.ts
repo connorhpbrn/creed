@@ -8,6 +8,7 @@ import {
   createDocumentComment,
   listCommentsForProposal,
   resolveOpenCommentsForProposal,
+  setDocumentCommentStatus,
 } from "@/lib/document-collaboration";
 import type { EditPolicyValue } from "@/lib/workspace-settings";
 import { createFakeClientWithDocument, FakeSupabaseClient } from "./helpers/fake-supabase";
@@ -50,6 +51,69 @@ describe("comments on proposals", () => {
     const thread = await listCommentsForProposal(client, documentId, proposal.id);
     expect(thread).toHaveLength(1);
     expect(thread[0].body).toBe("Can you clarify this section?");
+  });
+
+  it("keeps replies anchored to their proposal thread", async () => {
+    const { client, documentId } = createFakeClientWithDocument();
+    setPolicy(client, "propose");
+    const proposal = await proposeOne(client, documentId);
+
+    const root = await createDocumentComment(client, {
+      documentId,
+      body: "Can you clarify this section?",
+      actorUserId: "reviewer-1",
+      proposalId: proposal.id,
+      source: "creed",
+    });
+    if (!root.ok) throw new Error("setup failed");
+
+    const reply = await createDocumentComment(client, {
+      documentId,
+      body: "Yes, I will tighten the wording.",
+      actorUserId: "author-A",
+      parentId: root.value.comment.id,
+      source: "creed",
+    });
+
+    expect(reply.ok).toBe(true);
+    if (reply.ok) expect(reply.value.comment.proposalId).toBe(proposal.id);
+
+    const thread = await listCommentsForProposal(client, documentId, proposal.id);
+    expect(thread.map((comment) => comment.body)).toEqual([
+      "Can you clarify this section?",
+      "Yes, I will tighten the wording.",
+    ]);
+  });
+
+  it("only lets the comment author resolve or reopen a proposal comment", async () => {
+    const { client, documentId } = createFakeClientWithDocument();
+    setPolicy(client, "propose");
+    const proposal = await proposeOne(client, documentId);
+
+    const created = await createDocumentComment(client, {
+      documentId,
+      body: "Please double-check this.",
+      actorUserId: "reviewer-1",
+      proposalId: proposal.id,
+      source: "creed",
+    });
+    if (!created.ok) throw new Error("setup failed");
+
+    const forbidden = await setDocumentCommentStatus(client, {
+      commentId: created.value.comment.id,
+      status: "resolved",
+      actorUserId: "author-A",
+    });
+    expect(forbidden.ok).toBe(false);
+    if (!forbidden.ok) expect(forbidden.code).toBe("forbidden");
+
+    const allowed = await setDocumentCommentStatus(client, {
+      commentId: created.value.comment.id,
+      status: "resolved",
+      actorUserId: "reviewer-1",
+    });
+    expect(allowed.ok).toBe(true);
+    if (allowed.ok) expect(allowed.value.status).toBe("resolved");
   });
 
   it("auto-resolves open proposal comments when the proposal is accepted", async () => {

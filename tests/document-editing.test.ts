@@ -6,12 +6,15 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/document-collaboration", () => ({
   recordDocumentActivity: vi.fn(async () => {}),
   resolveOpenCommentsForProposal: vi.fn(async () => 0),
+  resolveOpenCommentsForProposals: vi.fn(async () => 0),
 }));
 
 import {
   acceptDocumentProposal,
+  acceptDocumentProposals,
   listDocumentProposals,
   rejectDocumentProposal,
+  rejectDocumentProposals,
   revertDocumentToVersion,
   routeDocumentEdit,
 } from "@/lib/document-editing";
@@ -453,6 +456,39 @@ describe("Hunk proposals (families + independent accept)", () => {
     expect(client.rows(DOCS)[0].content).toBe(BOTH);
     expect(client.rows(DOCS)[0].revision).toBe(3);
     expect(client.count(VERSIONS)).toBe(2);
+  });
+
+  it("bulk accepts selected hunks in one document revision and one version", async () => {
+    const { client, documentId, proposals } = await proposeBoth();
+
+    const accepted = await acceptDocumentProposals(client, {
+      documentId,
+      proposalIds: proposals.map((proposal) => proposal.id),
+      actorUserId: "u-B",
+    });
+
+    expect(accepted.ok).toBe(true);
+    expect(client.rows(DOCS)[0].content).toBe(BOTH);
+    expect(client.rows(DOCS)[0].revision).toBe(2);
+    expect(client.count(VERSIONS)).toBe(1);
+    expect(client.rows(VERSIONS)[0].change_hunks).toHaveLength(2);
+    expect(client.rows(PROPOSALS).map((row) => row.status)).toEqual(["accepted", "accepted"]);
+  });
+
+  it("bulk rejects selected hunks without changing the document or version history", async () => {
+    const { client, documentId, proposals } = await proposeBoth();
+
+    const rejected = await rejectDocumentProposals(client, {
+      documentId,
+      proposalIds: proposals.map((proposal) => proposal.id),
+      actorUserId: "u-B",
+    });
+
+    expect(rejected.ok).toBe(true);
+    expect(client.rows(DOCS)[0].content).toBe(MULTI);
+    expect(client.rows(DOCS)[0].revision).toBe(1);
+    expect(client.count(VERSIONS)).toBe(0);
+    expect(client.rows(PROPOSALS).map((row) => row.status)).toEqual(["rejected", "rejected"]);
   });
 
   it("rejecting one hunk leaves its sibling acceptable", async () => {

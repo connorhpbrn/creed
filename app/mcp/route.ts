@@ -35,13 +35,16 @@ import {
   readSharedDocumentFolder,
 } from "@/lib/shared-documents";
 import { policyForActor } from "@/lib/workspace-settings";
-import { routeDocumentEdit } from "@/lib/document-editing";
+import { listDocumentProposals, routeDocumentEdit } from "@/lib/document-editing";
 import {
   createDocumentComment,
+  deleteDocumentComment,
+  listCommentsForProposal,
   listDocumentActivity,
   listDocumentComments,
   recordDocumentActivity,
   setDocumentCommentStatus,
+  updateDocumentComment,
 } from "@/lib/document-collaboration";
 
 export const runtime = "nodejs";
@@ -74,8 +77,10 @@ const MCP_INSTRUCTIONS = [
   "Shared documents live only in Supabase (there is no GitHub sync). Read the current document, comments, and revision before editing; write content, metadata, comments, and replies through the MCP tools.",
   "Make document edits surgically: preserve unchanged Markdown exactly, do not re-upload or reformat a whole document for a small change, and do not call a mutation tool when your intended content has no visible change from the latest read.",
   "Document content edits are governed by the workspace agent edit policy: your change may be applied directly, recorded as a pending proposal for a member to approve, or rejected. Check the tool result `outcome` and do not assume your edit landed. Use expectedRevision for content edits and re-read on conflicts.",
-  "When describing a proposed document change, use a short label, not a sentence: 2 to 5 words, under 44 characters, such as `Clarify refund window` or `Add launch caveat`.",
-  "Comments you add to a document (creed_create_document_comment / creed_reply_to_document_comment) are recorded as private pending proposals that only the user sees; they notify no one and are invisible to other members until the user approves them, at which point they become the user's own comment. The tool result reports outcome 'proposed'. Use comments to leave review feedback the user can approve and share, e.g. when asked to audit a document.",
+  "When describing a proposed document change, use a short descriptive title, not a vague label and not a paragraph: aim for a sentence fragment under 72 characters, such as `Executive Summary: revises royalty timing`.",
+  "Use creed_list_document_proposals to read proposal diffs. You may read proposals created by the user and by others, and you may add comments/replies to either document content or a specific proposal diff by passing proposalId to the comment tools. MCP agents cannot edit or delete other people's proposals.",
+  "Comments you add to a document or proposal diff (creed_create_document_comment / creed_reply_to_document_comment) are recorded as private pending proposals that only the user sees; they notify no one and are invisible to other members until the user approves them, at which point they become the user's own comment. The tool result reports outcome 'proposed'. Use comments to leave review feedback the user can approve and share, e.g. when asked to audit a document.",
+  "You may use creed_update_document_comment, creed_delete_document_comment, and creed_set_document_comment_status only on comments/replies authored by the OAuth user whose token you are using. Do not try to edit, delete, resolve, or reopen other people's comments.",
   "Document content is block Markdown with a rich component set that renders in the editor: `#`/`##`/`###` headings, paragraphs, bullet and numbered lists, `>` callouts, `---` dividers, inline `#tags`, fenced code blocks, GFM pipe tables (`| Col A | Col B |` with a `| --- | --- |` delimiter row), and ```mermaid diagrams (flowcharts, sequence, ER, journey). The document title is metadata; do not repeat it as an H1 in the body unless the user explicitly asks. Headings drive outline/navigation visually; they do not create separate section records and do not use `<!-- creed:depth -->` markers. A document may start at H2; the sidebar treats the highest heading level present as the root and indents deeper headings from there. Add content by editing the document Markdown at the right location. Choose the clearest shape for the content: a table for comparing items across consistent attributes, and a ```mermaid flowchart (or sequence/ER/journey) diagram when a branching process, sequence, data model, or journey reads better as a picture than nested bullets.",
   "Documents can reference other documents or folders. Write `[[doc:SLUG]]` for an inline chip that links to a document, `[[folder:SLUG]]` to link a folder, and prefix with `!` (`![[doc:SLUG]]`) on its own line for a full-width card showing the target's title, description, and property pills. Use the slug from creed_list_documents / creed_read_document. Prefer references over pasting a document's contents so links stay live.",
   "External web links can render in three shapes so a URL reads as more than raw text: `[mention](https://url)` is an inline favicon+title chip; `[bookmark](https://url)` on its own line is a card with the page title, description and favicon; `[embed](https://url)` on its own line is a full-width live preview (sandboxed iframe). A plain hyperlink is still ordinary Markdown (`[label](https://url)`). Use mention inline in prose, bookmark to feature a source, and embed when the page itself should be viewable inline.",
@@ -208,6 +213,23 @@ const tools = [
     },
   },
   {
+    name: "creed_list_document_proposals",
+    description:
+      "List hunk-level proposals for a shared document, including proposals created by the current user and by other workspace members or agents. Use this before commenting on a proposal diff. This is read-only: MCP agents cannot edit or delete another person's proposals.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentId: { type: "string" },
+        status: {
+          type: "string",
+          enum: ["pending", "accepted", "rejected", "all"],
+          description: "Defaults to pending.",
+        },
+      },
+      required: ["documentId"],
+    },
+  },
+  {
     name: "creed_update_document_metadata",
     description:
       "Update shared document properties in Supabase: title, description, type, status, stage, lifecycle, priority, and size. Use this for dashboard/card fields and drag-style status moves. Subject to the workspace agent edit policy: blocked when agent editing is turned off, otherwise applied directly (property changes are not versioned or turned into proposals).",
@@ -252,11 +274,16 @@ const tools = [
   },
   {
     name: "creed_list_document_comments",
-    description: "List comments and replies for a shared document. Use before editing when discussion may affect the change.",
+    description:
+      "List comments and replies for a shared document, or for one proposal diff when proposalId is supplied. Use before editing or commenting when discussion may affect the change.",
     inputSchema: {
       type: "object",
       properties: {
         documentId: { type: "string" },
+        proposalId: {
+          type: "string",
+          description: "Optional proposal id. When supplied, returns the comment thread for that proposal diff.",
+        },
       },
       required: ["documentId"],
     },
@@ -272,6 +299,10 @@ const tools = [
         body: { type: "string" },
         referenceId: { type: "string" },
         referenceQuote: { type: "string", description: "Optional text quote the app should highlight in the preview." },
+        proposalId: {
+          type: "string",
+          description: "Optional proposal id. Supply this to comment on a specific proposal diff.",
+        },
         mentionedUserIds: { type: "array", items: { type: "string" } },
       },
       required: ["documentId", "body"],
@@ -287,14 +318,44 @@ const tools = [
         documentId: { type: "string" },
         parentCommentId: { type: "string" },
         body: { type: "string" },
+        proposalId: {
+          type: "string",
+          description: "Optional proposal id. Replies inherit the parent comment's proposal anchor when present.",
+        },
         mentionedUserIds: { type: "array", items: { type: "string" } },
       },
       required: ["documentId", "parentCommentId", "body"],
     },
   },
   {
+    name: "creed_update_document_comment",
+    description:
+      "Edit the body of a document or proposal comment/reply that was authored by the OAuth user whose token you are using. You cannot edit other people's comments or replies.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        commentId: { type: "string" },
+        body: { type: "string" },
+      },
+      required: ["commentId", "body"],
+    },
+  },
+  {
+    name: "creed_delete_document_comment",
+    description:
+      "Delete a document or proposal comment/reply authored by the OAuth user whose token you are using. You cannot delete other people's comments or replies.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        commentId: { type: "string" },
+      },
+      required: ["commentId"],
+    },
+  },
+  {
     name: "creed_set_document_comment_status",
-    description: "Resolve or reopen a shared document comment.",
+    description:
+      "Resolve or reopen a document or proposal comment authored by the OAuth user whose token you are using. You cannot resolve or reopen other people's comments through MCP.",
     inputSchema: {
       type: "object",
       properties: {
@@ -589,6 +650,21 @@ async function handleToolCall(
     return jsonToolResult({ ok: true, outcome: "applied", document: result.document });
   }
 
+  if (name === "creed_list_document_proposals") {
+    const documentId = stringArg(args, "documentId");
+    const rawStatus = stringArg(args, "status");
+    const status =
+      rawStatus === "accepted" ||
+      rawStatus === "rejected" ||
+      rawStatus === "all" ||
+      rawStatus === "pending"
+        ? rawStatus
+        : "pending";
+    const admin = getSupabaseAdminClient();
+    const proposals = await listDocumentProposals(admin as never, documentId, { status });
+    return jsonToolResult({ proposals });
+  }
+
   if (name === "creed_update_document_metadata") {
     const documentId = stringArg(args, "documentId");
     const expectedRevision =
@@ -660,8 +736,11 @@ async function handleToolCall(
 
   if (name === "creed_list_document_comments") {
     const documentId = stringArg(args, "documentId");
+    const proposalId = stringArg(args, "proposalId");
     const admin = getSupabaseAdminClient();
-    const comments = await listDocumentComments(admin as never, documentId);
+    const comments = proposalId
+      ? await listCommentsForProposal(admin as never, documentId, proposalId)
+      : await listDocumentComments(admin as never, documentId);
     return jsonToolResult({ comments });
   }
 
@@ -670,6 +749,7 @@ async function handleToolCall(
     const body = stringArg(args, "body");
     const referenceId = stringArg(args, "referenceId");
     const referenceQuote = stringArg(args, "referenceQuote");
+    const proposalId = stringArg(args, "proposalId");
     const mentionedUserIds = stringArrayArg(args, "mentionedUserIds");
     const admin = getSupabaseAdminClient();
     const result = await createDocumentComment(admin as never, {
@@ -677,6 +757,7 @@ async function handleToolCall(
       body,
       referenceId: referenceId || null,
       referenceQuote: referenceQuote || null,
+      proposalId: proposalId || null,
       mentionedUserIds,
       actorUserId: userId,
       source: "mcp",
@@ -701,12 +782,14 @@ async function handleToolCall(
     const documentId = stringArg(args, "documentId");
     const parentCommentId = stringArg(args, "parentCommentId");
     const body = stringArg(args, "body");
+    const proposalId = stringArg(args, "proposalId");
     const mentionedUserIds = stringArrayArg(args, "mentionedUserIds");
     const admin = getSupabaseAdminClient();
     const result = await createDocumentComment(admin as never, {
       documentId,
       body,
       parentId: parentCommentId,
+      proposalId: proposalId || null,
       mentionedUserIds,
       actorUserId: userId,
       source: "mcp",
@@ -723,6 +806,34 @@ async function handleToolCall(
       message:
         "Recorded as a pending reply for the user to review. It becomes their reply once they approve it.",
     });
+  }
+
+  if (name === "creed_update_document_comment") {
+    const commentId = stringArg(args, "commentId");
+    const body = stringArg(args, "body");
+    const admin = getSupabaseAdminClient();
+    const result = await updateDocumentComment(admin as never, {
+      commentId,
+      body,
+      actorUserId: userId,
+    });
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    return jsonToolResult({ ok: true, comment: result.value });
+  }
+
+  if (name === "creed_delete_document_comment") {
+    const commentId = stringArg(args, "commentId");
+    const admin = getSupabaseAdminClient();
+    const result = await deleteDocumentComment(admin as never, {
+      commentId,
+      actorUserId: userId,
+    });
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    return jsonToolResult({ ok: true, deleted: result.value });
   }
 
   if (name === "creed_set_document_comment_status") {

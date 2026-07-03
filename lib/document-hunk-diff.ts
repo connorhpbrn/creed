@@ -40,21 +40,45 @@ export type HunkApplyResult =
   | { ok: false; code: "conflict"; error: string };
 
 const CONTEXT_CHARS = 80;
-const LABEL_CHARS = 44;
+const LABEL_CHARS = 72;
+const SUBJECT_WORDS = 5;
+const STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "can",
+  "for",
+  "from",
+  "has",
+  "have",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "our",
+  "that",
+  "the",
+  "their",
+  "then",
+  "this",
+  "to",
+  "with",
+  "while",
+  "will",
+]);
 
 function truncateLabel(text: string) {
   if (text.length <= LABEL_CHARS) return text;
   return `${text.slice(0, LABEL_CHARS - 1).trimEnd()}...`;
-}
-
-function truncateHeadingForLabel(heading: string, suffix: string) {
-  const cleanHeading = heading.replace(/\s+/g, " ").trim();
-  const suffixText = ` ${suffix}`;
-  const maxHeadingLength = Math.max(8, LABEL_CHARS - suffixText.length);
-  if (cleanHeading.length <= maxHeadingLength) {
-    return `${cleanHeading}${suffixText}`;
-  }
-  return `${cleanHeading.slice(0, maxHeadingLength - 1).trimEnd()}...${suffixText}`;
 }
 
 function nearestHeading(content: string, offset: number) {
@@ -69,27 +93,65 @@ function nearestHeading(content: string, offset: number) {
   return null;
 }
 
-function labelSuffix(status: DocumentHunkStatus) {
-  if (status === "added") return "add";
-  if (status === "removed") return "remove";
-  return "update";
+function headingInSlice(markdown: string) {
+  for (const line of markdown.split("\n")) {
+    const match = /^(#{1,3})\s+(.+?)\s*$/.exec(line.trim());
+    if (!match) continue;
+    const heading = markdownToReviewText(match[2] ?? "").replace(/\s+/g, " ").trim();
+    if (heading) return heading;
+  }
+  return "";
+}
+
+function reviewWords(markdown: string, heading = "") {
+  const withoutHeading = heading
+    ? markdownToReviewText(markdown).replace(heading, " ")
+    : markdownToReviewText(markdown);
+  const words = withoutHeading
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/[^A-Za-z0-9'/-]+/g, " ")
+    .split(/\s+/)
+    .map((word) => word.replace(/^[-/']+|[-/']+$/g, ""))
+    .filter((word) => {
+      if (word.length < 3) return false;
+      return !STOP_WORDS.has(word.toLowerCase());
+    });
+  return words.slice(0, SUBJECT_WORDS).join(" ");
+}
+
+function labelParts(hunk: Pick<DocumentHunkChange, "status" | "before" | "after">) {
+  const source = hunk.status === "removed" ? hunk.before : hunk.after;
+  const heading = headingInSlice(source);
+  const subject = reviewWords(source, heading) || heading || "wording";
+
+  if (heading) {
+    if (hunk.status === "added") {
+      return { action: "adds", subject: `${heading} section`, ownsContext: true };
+    }
+    if (hunk.status === "removed") {
+      return { action: "removes", subject: `${heading} section`, ownsContext: true };
+    }
+    if (/^\s*#{1,3}\s+/m.test(hunk.before) && /^\s*#{1,3}\s+/m.test(hunk.after)) {
+      return { action: "renames", subject: `heading to ${heading}`, ownsContext: true };
+    }
+  }
+
+  if (hunk.status === "added") {
+    return { action: "adds", subject, ownsContext: false };
+  }
+  if (hunk.status === "removed") {
+    return { action: "removes", subject, ownsContext: false };
+  }
+  return { action: "revises", subject, ownsContext: false };
 }
 
 function classifyHunk(
   hunk: Pick<DocumentHunkChange, "status" | "before" | "after">,
   headingContext: string | null
 ) {
-  if (headingContext) {
-    return truncateLabel(truncateHeadingForLabel(headingContext, labelSuffix(hunk.status)));
-  }
-
-  if (hunk.status === "added") {
-    return "Document add";
-  }
-  if (hunk.status === "removed") {
-    return "Document remove";
-  }
-  return "Document update";
+  const { action, subject, ownsContext } = labelParts(hunk);
+  const context = headingContext && !ownsContext ? `${headingContext}: ` : "";
+  return truncateLabel(`${context}${action} ${subject}`.replace(/\s+/g, " ").trim());
 }
 
 function hunkStatus(before: string, after: string): DocumentHunkStatus {

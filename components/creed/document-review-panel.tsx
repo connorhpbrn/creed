@@ -4,18 +4,12 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { toast } from "sonner";
 import { diffWords } from "diff";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronDown, GitDiff, History, LoaderCircle, RotateCcw, X } from "@/components/ui/phosphor-icons";
+import { Check, ChevronDown, GitDiff, History, RotateCcw, X } from "@/components/ui/phosphor-icons";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { DiffBadge, summarizeDiff } from "@/components/creed/inline-proposal-diff";
-import {
-  diffMarkdownSections,
-  markdownToReviewText,
-  sectionChangeLabel,
-  type SectionChange,
-  type SectionChangeStatus,
-} from "@/lib/document-section-diff";
+import { markdownToReviewText } from "@/lib/document-section-diff";
 import type { WorkspaceUser } from "@/lib/document-collaboration";
 import type { SharedDocument } from "@/lib/shared-documents";
 import { markdownToRichHtml } from "@/lib/rich-text";
@@ -33,7 +27,6 @@ import { cn } from "@/lib/utils";
 
 type ActorType = "human" | "agent";
 
-type SectionStatus = "added" | "removed" | "modified" | "unchanged";
 type HunkStatus = "added" | "removed" | "modified";
 type HunkConflictStatus = "clean" | "conflict" | "resolved";
 
@@ -618,7 +611,7 @@ function RenderedProposalBody({
 }: {
   before: string;
   after: string;
-  status: SectionStatus;
+  status: HunkStatus;
 }) {
   if (status === "added") {
     return (
@@ -641,108 +634,6 @@ function RenderedProposalBody({
       <DiffText before={before} after={after} />
     </div>
   );
-}
-
-const STATUS_DOT: Record<SectionChangeStatus, string> = {
-  added: "bg-[var(--creed-success)]",
-  removed: "bg-[var(--creed-danger)]",
-  modified: "bg-[var(--creed-accent)]",
-  unchanged: "bg-[var(--creed-text-tertiary)]",
-};
-
-// One section row within a whole-document (version-history) grouped diff.
-function SectionChangeRow({
-  change,
-  open,
-  onToggle,
-}: {
-  change: SectionChange;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const parts = useMemo(() => mdDiffParts(change.before, change.after), [change.before, change.after]);
-  const stats = useMemo(() => summarizeDiff(parts), [parts]);
-  const label = sectionChangeLabel(change);
-
-  return (
-    <div className="rounded-[10px] border border-[var(--creed-border)] bg-[var(--creed-surface)]">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
-      >
-        <ChevronDown
-          className={cn(
-            "h-3 w-3 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-200",
-            open ? "rotate-0" : "-rotate-90"
-          )}
-        />
-        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", STATUS_DOT[change.status])} />
-        <span className="truncate text-[13px] text-[var(--creed-text-primary)]">{label}</span>
-        <span className="ml-auto inline-flex shrink-0 items-center gap-1.5">
-          <DiffBadge tone="added" count={stats.added} />
-          <DiffBadge tone="removed" count={stats.removed} />
-        </span>
-      </button>
-      <AnimatePresence initial={false}>
-        {open ? (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-[var(--creed-border)]" />
-            <div className="creed-diff-block creed-scrollbar max-h-[240px] overflow-y-auto px-3.5 py-2.5 text-[13px] leading-6">
-              <DiffChunks parts={parts} />
-            </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-// Groups a whole-content diff by Markdown headings for larger version-history
-// entries.
-function SectionGroupedDiff({ before, after }: { before: string; after: string }) {
-  const changes = useMemo(() => diffMarkdownSections(before, after), [before, after]);
-  const changed = useMemo(() => changes.filter((change) => change.status !== "unchanged"), [changes]);
-  const [openKey, setOpenKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    setOpenKey(changed.length === 1 ? changed[0].key : null);
-  }, [changed]);
-
-  if (changed.length === 0) {
-    return <DiffText before={before} after={after} />;
-  }
-
-  if (changed.length === 1) {
-    return <DiffText before={changed[0].before} after={changed[0].after} />;
-  }
-
-  return (
-    <div className="space-y-1.5">
-      {changed.map((change) => (
-        <SectionChangeRow
-          key={change.key}
-          change={change}
-          open={openKey === change.key}
-          onToggle={() => setOpenKey((current) => (current === change.key ? null : change.key))}
-        />
-      ))}
-    </div>
-  );
-}
-
-function versionImpactLabel(before: string, after: string) {
-  const changed = diffMarkdownSections(before, after).filter((change) => change.status !== "unchanged");
-  if (changed.length === 0) return "No visible change";
-  if (changed.length === 1) return "1 change";
-  return `${changed.length} changes`;
 }
 
 function versionHunkImpactLabel(hunks: VersionChangeHunk[]) {
@@ -853,6 +744,7 @@ export function DocumentReviewPanel({
   diffOpen = false,
   onDiffOpenChange,
   onPendingProposalsChange,
+  onPendingProposalsLoadingChange,
 }: {
   documentId: string;
   revision: number;
@@ -865,15 +757,14 @@ export function DocumentReviewPanel({
   diffOpen?: boolean;
   onDiffOpenChange?: (open: boolean) => void;
   onPendingProposalsChange?: (proposals: DocumentProposal[]) => void;
+  onPendingProposalsLoadingChange?: (loading: boolean) => void;
 }) {
   const [proposals, setProposals] = useState<DocumentProposal[]>([]);
+  const [proposalsLoaded, setProposalsLoaded] = useState(false);
   const [acceptedProposals, setAcceptedProposals] = useState<DocumentProposal[]>([]);
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
-  const [versionContents, setVersionContents] = useState<Record<string, string>>({});
-  const [loadingVersion, setLoadingVersion] = useState<string | null>(null);
-  const [versionContentErrors, setVersionContentErrors] = useState<Record<string, string>>({});
   const [busyProposal, setBusyProposal] = useState<string | null>(null);
   const [revertingVersion, setRevertingVersion] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -904,10 +795,18 @@ export function DocumentReviewPanel({
 
   useEffect(() => {
     onPendingProposalsChange?.(proposals);
-    if (proposals.length === 0 && diffOpen) {
+    if (proposalsLoaded && proposals.length === 0 && diffOpen) {
       onDiffOpenChange?.(false);
     }
-  }, [diffOpen, onDiffOpenChange, onPendingProposalsChange, proposals]);
+  }, [diffOpen, onDiffOpenChange, onPendingProposalsChange, proposals, proposalsLoaded]);
+
+  useEffect(() => {
+    onPendingProposalsLoadingChange?.(!proposalsLoaded);
+  }, [onPendingProposalsLoadingChange, proposalsLoaded]);
+
+  useEffect(() => {
+    setProposalsLoaded(false);
+  }, [documentId]);
 
   const resolvePerson = useCallback(
     (authorUserId: string | null, agentLabel: string | null): Person => {
@@ -932,6 +831,8 @@ export function DocumentReviewPanel({
       }
     } catch {
       // Non-fatal: leave the last known list in place.
+    } finally {
+      setProposalsLoaded(true);
     }
   }, [documentId]);
 
@@ -1033,63 +934,13 @@ export function DocumentReviewPanel({
     };
   }, [documentId, refreshAcceptedProposals, refreshProposals, refreshVersions]);
 
-  const loadVersionContent = useCallback(
-    async (versionId: string) => {
-      if (Object.prototype.hasOwnProperty.call(versionContents, versionId)) return;
-      setLoadingVersion(versionId);
-      setVersionContentErrors((current) => {
-        const next = { ...current };
-        delete next[versionId];
-        return next;
-      });
-      try {
-        const response = await fetch(
-          `/api/app/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}`,
-          { cache: "no-store" }
-        );
-        const payload = (await response.json()) as { version?: DocumentVersion; error?: string };
-        if (!response.ok || !payload.version) {
-          throw new Error(payload.error || "Could not load this version.");
-        }
-        setVersionContents((current) => ({
-          ...current,
-          [versionId]: payload.version?.content ?? "",
-        }));
-      } catch (error) {
-        setVersionContentErrors((current) => ({
-          ...current,
-          [versionId]: error instanceof Error ? error.message : "Could not load this version.",
-        }));
-      } finally {
-        setLoadingVersion((current) => (current === versionId ? null : current));
-      }
-    },
-    [documentId, versionContents]
-  );
-
-  const loadVersionPair = useCallback(
-    async (versionId: string) => {
-      const index = versions.findIndex((version) => version.id === versionId);
-      if (index === -1) return;
-      const previousId = versions[index + 1]?.id;
-      await Promise.all([
-        loadVersionContent(versionId),
-        previousId ? loadVersionContent(previousId) : Promise.resolve(),
-      ]);
-    },
-    [loadVersionContent, versions]
-  );
-
   const toggleVersion = useCallback(
     (versionId: string) => {
       setExpandedVersion((current) => {
-        const next = current === versionId ? null : versionId;
-        const target = next ? versions.find((version) => version.id === next) : null;
-        if (next && !target?.changeHunks?.length) void loadVersionPair(next);
-        return next;
+        return current === versionId ? null : versionId;
       });
     },
-    [loadVersionPair, versions]
+    []
   );
 
   // When an activity item asks to focus a version, open history, expand that
@@ -1100,35 +951,43 @@ export function DocumentReviewPanel({
     if (!target) return;
     setHistoryOpen(true);
     setExpandedVersion(focusVersionId);
-    if (!target.changeHunks?.length) void loadVersionPair(focusVersionId);
     const timer = window.setTimeout(() => {
       const selector = `[data-version-row="${(window.CSS?.escape ?? ((v: string) => v))(focusVersionId)}"]`;
       rootRef.current?.querySelector(selector)?.scrollIntoView({ behavior: "smooth", block: "center" });
       onFocusVersionHandled?.();
     }, 340);
     return () => window.clearTimeout(timer);
-  }, [focusVersionId, loadVersionPair, versions, onFocusVersionHandled]);
+  }, [focusVersionId, versions, onFocusVersionHandled]);
 
-  const resolveProposal = useCallback(
-    async (id: string, action: "accept" | "reject") => {
-      setBusyProposal(id);
+  const resolveProposals = useCallback(
+    async (ids: string[], action: "accept" | "reject") => {
+      const proposalIds = Array.from(new Set(ids.filter(Boolean)));
+      if (proposalIds.length === 0) return;
+      setBusyProposal("__bulk__");
       try {
-        const init: RequestInit = { method: "POST" };
         const response = await fetch(
-          `/api/app/documents/${encodeURIComponent(documentId)}/proposals/${encodeURIComponent(id)}/${action}`,
-          init
+          `/api/app/documents/${encodeURIComponent(documentId)}/proposals/bulk`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, proposalIds }),
+          }
         );
         const payload = (await response.json()) as EditOutcomeResponse;
         if (!response.ok) {
-          throw new Error(payload.error || `Could not ${action} the proposal.`);
+          throw new Error(payload.error || `Could not ${action} the proposals.`);
         }
         if (action === "accept" && payload.document) {
           onDocumentUpdated(payload.document);
         }
-        toast.success(action === "accept" ? "Proposal accepted" : "Proposal rejected");
+        toast.success(
+          action === "accept"
+            ? proposalIds.length === 1 ? "Proposal accepted" : "Proposals accepted"
+            : proposalIds.length === 1 ? "Proposal rejected" : "Proposals rejected"
+        );
         await Promise.all([refreshProposals(), refreshAcceptedProposals(), refreshVersions()]);
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : `Could not ${action} the proposal.`);
+        toast.error(error instanceof Error ? error.message : `Could not ${action} the proposals.`);
       } finally {
         setBusyProposal(null);
       }
@@ -1179,7 +1038,7 @@ export function DocumentReviewPanel({
           diffOpen={diffOpen}
           busyProposal={busyProposal}
           onDiffOpenChange={onDiffOpenChange}
-          onResolve={resolveProposal}
+          onResolveMany={resolveProposals}
         />
       ) : null}
 
@@ -1189,9 +1048,6 @@ export function DocumentReviewPanel({
           acceptedProposals={acceptedProposals}
           historyOpen={historyOpen}
           expandedVersion={expandedVersion}
-          versionContents={versionContents}
-          loadingVersion={loadingVersion}
-          versionContentErrors={versionContentErrors}
           revertingVersion={revertingVersion}
           resolvePerson={resolvePerson}
           onToggleHistory={() => setHistoryOpen((open) => !open)}
@@ -1221,25 +1077,38 @@ function buildVersionHistoryItems(
   const acceptedById = new Map(acceptedProposals.map((proposal) => [proposal.id, proposal]));
   const familyMap = new Map<string, ProposalHistoryFamily>();
 
-  for (const version of versions) {
-    if (!version.sourceProposalId) continue;
-    const proposal = acceptedById.get(version.sourceProposalId);
-    if (!proposal) continue;
+  const proposalsForVersion = (version: DocumentVersion) => {
+    const byId = version.sourceProposalId ? acceptedById.get(version.sourceProposalId) : null;
+    const hunkKeys = new Set((version.changeHunks ?? []).map((hunk) => hunk.key).filter(Boolean));
+    const matches = acceptedProposals.filter((proposal) => hunkKeys.has(proposal.hunkKey));
+    const all = byId ? [byId, ...matches] : matches;
+    return Array.from(new Map(all.map((proposal) => [proposal.id, proposal])).values());
+  };
 
-    const family =
-      familyMap.get(proposal.familyId) ??
-      ({
-        id: proposal.familyId,
-        proposals: [],
-        versions: [],
-        latestVersion: version,
-      } satisfies ProposalHistoryFamily);
-    family.proposals.push(proposal);
-    family.versions.push(version);
-    if (version.revision > family.latestVersion.revision) {
-      family.latestVersion = version;
+  for (const version of versions) {
+    const versionProposals = proposalsForVersion(version);
+    if (versionProposals.length === 0) continue;
+
+    for (const proposal of versionProposals) {
+      const family =
+        familyMap.get(proposal.familyId) ??
+        ({
+          id: proposal.familyId,
+          proposals: [],
+          versions: [],
+          latestVersion: version,
+        } satisfies ProposalHistoryFamily);
+      if (!family.proposals.some((item) => item.id === proposal.id)) {
+        family.proposals.push(proposal);
+      }
+      if (!family.versions.some((item) => item.id === version.id)) {
+        family.versions.push(version);
+      }
+      if (version.revision > family.latestVersion.revision) {
+        family.latestVersion = version;
+      }
+      familyMap.set(proposal.familyId, family);
     }
-    familyMap.set(proposal.familyId, family);
   }
 
   for (const family of familyMap.values()) {
@@ -1250,16 +1119,18 @@ function buildVersionHistoryItems(
   const emittedFamilies = new Set<string>();
   const items: VersionHistoryItem[] = [];
   versions.forEach((version, versionIndex) => {
-    const proposal = version.sourceProposalId ? acceptedById.get(version.sourceProposalId) : null;
-    if (!proposal) {
+    const versionProposals = proposalsForVersion(version);
+    if (versionProposals.length === 0) {
       items.push({ type: "version", version, versionIndex });
       return;
     }
-    if (emittedFamilies.has(proposal.familyId)) return;
-    const family = familyMap.get(proposal.familyId);
-    if (!family) return;
-    emittedFamilies.add(proposal.familyId);
-    items.push({ type: "family", family });
+    for (const proposal of versionProposals) {
+      if (emittedFamilies.has(proposal.familyId)) continue;
+      const family = familyMap.get(proposal.familyId);
+      if (!family) continue;
+      emittedFamilies.add(proposal.familyId);
+      items.push({ type: "family", family });
+    }
   });
 
   return items;
@@ -1270,9 +1141,6 @@ function DocumentVersionHistoryPill({
   acceptedProposals,
   historyOpen,
   expandedVersion,
-  versionContents,
-  loadingVersion,
-  versionContentErrors,
   revertingVersion,
   resolvePerson,
   onToggleHistory,
@@ -1283,9 +1151,6 @@ function DocumentVersionHistoryPill({
   acceptedProposals: DocumentProposal[];
   historyOpen: boolean;
   expandedVersion: string | null;
-  versionContents: Record<string, string>;
-  loadingVersion: string | null;
-  versionContentErrors: Record<string, string>;
   revertingVersion: string | null;
   resolvePerson: (authorUserId: string | null, agentLabel: string | null) => Person;
   onToggleHistory: () => void;
@@ -1375,25 +1240,13 @@ function DocumentVersionHistoryPill({
                   );
                 }
 
-                const previousVersion = versions[item.versionIndex + 1];
                 return (
                   <VersionRow
                     key={item.version.id}
                     version={item.version}
-                    content={versionContents[item.version.id]}
-                    previousContent={previousVersion ? versionContents[previousVersion.id] : ""}
-                    hasPreviousVersion={Boolean(previousVersion)}
-                    loadError={
-                      versionContentErrors[item.version.id] ||
-                      (previousVersion ? versionContentErrors[previousVersion.id] : undefined)
-                    }
                     person={resolvePerson(item.version.authorUserId, item.version.authorAgentLabel)}
                     isCurrent={item.versionIndex === 0}
                     expanded={expandedVersion === item.version.id}
-                    loading={
-                      loadingVersion === item.version.id ||
-                      (previousVersion ? loadingVersion === previousVersion.id : false)
-                    }
                     reverting={revertingVersion === item.version.id}
                     onToggle={() => onToggleVersion(item.version.id)}
                     onRevert={() => onRevert(item.version.id)}
@@ -1415,13 +1268,13 @@ function DocumentReviewPill({
   diffOpen,
   busyProposal,
   onDiffOpenChange,
-  onResolve,
+  onResolveMany,
 }: {
   proposals: DocumentProposal[];
   diffOpen: boolean;
   busyProposal: string | null;
   onDiffOpenChange?: (open: boolean) => void;
-  onResolve: (id: string, action: "accept" | "reject") => Promise<void>;
+  onResolveMany: (ids: string[], action: "accept" | "reject") => Promise<void>;
 }) {
   const totals = useMemo(() => {
     let added = 0;
@@ -1434,14 +1287,10 @@ function DocumentReviewPill({
     return { added, removed };
   }, [proposals]);
 
-  const anyBusy = proposals.some((proposal) => busyProposal === proposal.id);
+  const anyBusy = Boolean(busyProposal);
 
   async function resolveAll(action: "accept" | "reject") {
-    // Sequentially, so each hunk applies against the revision the previous
-    // acceptance produced.
-    for (const proposal of proposals) {
-      await onResolve(proposal.id, action);
-    }
+    await onResolveMany(proposals.map((proposal) => proposal.id), action);
   }
 
   return (
@@ -1465,8 +1314,10 @@ function DocumentReviewPill({
             disabled={!onDiffOpenChange}
             className={cn(
               "inline-flex h-7 w-7 items-center justify-center rounded-md text-sm font-medium transition-colors disabled:opacity-50",
+              // Active state tints only the glyph blue - no filled background -
+              // so the toggle reads as a coloured icon rather than a button chip.
               diffOpen
-                ? "bg-[#dbeafe] text-[#2563eb] hover:bg-[#bfdbfe] dark:bg-[#1e3a8a]/45 dark:text-[#93c5fd] dark:hover:bg-[#1e40af]/55"
+                ? "text-[#2563eb] hover:bg-[var(--creed-surface-raised)] dark:text-[#93c5fd]"
                 : "text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
             )}
           >
@@ -1650,52 +1501,30 @@ function ProposalFamilyRow({
 
 function VersionRow({
   version,
-  content,
-  previousContent,
-  hasPreviousVersion,
-  loadError,
   person,
   isCurrent,
   expanded,
-  loading,
   reverting,
   onToggle,
   onRevert,
 }: {
   version: DocumentVersion;
-  content?: string;
-  previousContent?: string;
-  hasPreviousVersion: boolean;
-  loadError?: string;
   person: Person;
   isCurrent: boolean;
   expanded: boolean;
-  loading: boolean;
   reverting: boolean;
   onToggle: () => void;
   onRevert: () => void;
 }) {
   const storedHunks = useMemo(() => version.changeHunks ?? [], [version.changeHunks]);
   const hasStoredHunks = storedHunks.length > 0;
-  const hasContent = typeof content === "string" && (!hasPreviousVersion || typeof previousContent === "string");
-  const before = previousContent ?? "";
-  const after = content ?? "";
-  const parts = useMemo(
-    () => (!hasStoredHunks && hasContent ? mdDiffParts(before, after) : []),
-    [after, before, hasContent, hasStoredHunks]
-  );
   const stats = useMemo(
-    () => (hasStoredHunks ? summarizeVersionHunks(storedHunks) : summarizeDiff(parts)),
-    [hasStoredHunks, parts, storedHunks]
+    () => (hasStoredHunks ? summarizeVersionHunks(storedHunks) : { added: 0, removed: 0 }),
+    [hasStoredHunks, storedHunks]
   );
   const impactLabel = useMemo(
-    () =>
-      hasStoredHunks
-        ? versionHunkImpactLabel(storedHunks)
-        : hasContent
-          ? versionImpactLabel(before, after)
-          : `Revision ${version.revision}`,
-    [after, before, hasContent, hasStoredHunks, storedHunks, version.revision]
+    () => (hasStoredHunks ? versionHunkImpactLabel(storedHunks) : `Revision ${version.revision}`),
+    [hasStoredHunks, storedHunks, version.revision]
   );
 
   return (
@@ -1724,7 +1553,7 @@ function VersionRow({
             · {relativeTime(version.createdAt)}
           </span>
           <span className="ml-auto inline-flex shrink-0 items-center gap-1.5">
-            {hasStoredHunks || hasContent ? (
+            {hasStoredHunks ? (
               <>
                 <DiffBadge tone="added" count={stats.added} size="md" />
                 <DiffBadge tone="removed" count={stats.removed} size="md" />
@@ -1760,18 +1589,11 @@ function VersionRow({
           >
             <div className="border-t border-[var(--creed-border)]" />
             <div className="px-3 py-3">
-              {loadError ? (
-                <div className="rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface-raised)] px-3 py-2 text-[13px] text-[#b91c1c] dark:text-[#f87171]">
-                  {loadError}
-                </div>
-              ) : hasStoredHunks ? (
+              {hasStoredHunks ? (
                 <VersionHunkDiffList hunks={storedHunks} />
-              ) : hasContent ? (
-                <SectionGroupedDiff before={before} after={after} />
               ) : (
-                <div className="inline-flex items-center gap-2 rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface-raised)] px-3 py-2 text-[13px] text-[var(--creed-text-secondary)]">
-                  <LoaderCircle className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-                  Loading version
+                <div className="rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface-raised)] px-3 py-2 text-[13px] text-[var(--creed-text-secondary)]">
+                  No saved diff for this version
                 </div>
               )}
             </div>

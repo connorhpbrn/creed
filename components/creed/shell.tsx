@@ -79,10 +79,10 @@ function ShellNavLink({
       href={item.href}
       className={cn(
         // Sizing kept identical to the section nav buttons below this row so
-        // the two stacks read as one continuous list. On mobile each button is
-        // a centred square (h-8 w-8) so the selected-state background reads as
-        // a square, not a slight rectangle; lg restores the full-width row.
-        "flex h-8 w-8 mx-auto items-center justify-center rounded-[10px] text-[14px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] lg:h-auto lg:w-auto lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
+        // the two stacks read as one continuous list. On mobile each button
+        // spans the full collapsed-column width (h-8 w-full) with the icon
+        // centred; lg restores the full-width labelled row.
+        "flex h-8 w-full items-center justify-center rounded-[10px] text-[14px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] lg:h-auto lg:w-auto lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
         active &&
           "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)] hover:bg-[var(--creed-surface-raised)]"
       )}

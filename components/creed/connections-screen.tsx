@@ -8,6 +8,7 @@ import { Copy } from "@/components/ui/phosphor-icons";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
 import { AnimatedIconButton } from "@/components/creed/animated-icon-action";
 import { ConnectionCard, resolveConnectionStatus } from "@/components/creed/connection-card";
+import { McpAgentsSection } from "@/components/creed/mcp-agents-section";
 import { McpHealthDashboard } from "@/components/creed/mcp-health-dashboard";
 import { useCreed } from "@/components/creed/creed-provider";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,10 @@ export function ConnectionsScreen() {
           <h1 className="font-heading text-[1.75rem] font-medium tracking-[-0.03em] text-[var(--creed-text-primary)]">
             Connections
           </h1>
+        </div>
+
+        <div className="mt-8">
+          <McpAgentsSection />
         </div>
 
         <div className="mt-8">

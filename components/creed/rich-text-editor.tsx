@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/phosphor-icons";
 import { InlineTagMark } from "@/components/creed/extensions/inline-tag";
 import { MermaidBlock } from "@/components/creed/extensions/mermaid-block";
+import { BlockDragHandle } from "@/components/creed/extensions/block-drag-handle";
 import {
   DocReferenceCard,
   DocReferenceInline,
@@ -209,6 +210,11 @@ type RichTextEditorProps = {
   // Shared documents are block documents and can use H1 blocks. Legacy profile
   // sections keep H2/H3 only because their section title already owns H2.
   allowHeading1?: boolean;
+  // Enables the Notion-style block drag handle + gutter block selection. Only
+  // turned on for the shared-document block editor; legacy profile section
+  // editors keep it off so the handle's gutter interactions don't clash with
+  // the section-card controls that live in that gutter.
+  enableBlockHandle?: boolean;
 };
 
 // Convert a CSS color value (hex or CSS variable reference) into an
@@ -302,6 +308,7 @@ export function RichTextEditor({
   onSelectComment,
   enableReferences = false,
   allowHeading1 = false,
+  enableBlockHandle = false,
 }: RichTextEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Track the most recent HTML we emitted so the content-sync effect can
@@ -921,6 +928,9 @@ export function RichTextEditor({
       }),
       CommentHighlight,
       ...(readOnlyCommentsEnabled ? [ReadOnlySelectionGuard] : []),
+      // Notion-style block drag handle - self-guards on editor.editable so it
+      // stays inert in read-only/locked views. Scoped to the document editor.
+      ...(enableBlockHandle ? [BlockDragHandle] : []),
       slashCommandExtension,
       ...referenceExtensions,
     ],

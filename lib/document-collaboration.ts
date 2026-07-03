@@ -540,6 +540,42 @@ export async function resolveOpenCommentsForProposal(
   return (data ?? []).length;
 }
 
+export async function resolveOpenCommentsForProposals(
+  client: unknown,
+  input: { proposalIds: string[]; actorUserId?: string | null }
+): Promise<number> {
+  const proposalIds = Array.from(new Set(input.proposalIds.filter(Boolean)));
+  if (proposalIds.length === 0) {
+    return 0;
+  }
+
+  const now = nowIso();
+  const db = client as SupabaseLikeClient;
+  const { data, error } = (await db
+    .from("creed_document_comments")
+    .update({
+      status: "resolved",
+      resolved_at: now,
+      resolved_by: input.actorUserId ?? null,
+      updated_by: input.actorUserId ?? null,
+      updated_at: now,
+    })
+    .in("proposal_id", proposalIds)
+    .eq("proposal_status", "shared")
+    .eq("status", "open")
+    .select("id")) as {
+    data: { id: string }[] | null;
+    error: { message: string } | null;
+  };
+
+  if (error) {
+    log.warn("resolve_proposal_comments_failed", { proposalIds }, error);
+    return 0;
+  }
+
+  return (data ?? []).length;
+}
+
 export async function recordDocumentActivity(
   client: unknown,
   input: {
@@ -630,15 +666,21 @@ export async function createDocumentComment(
   }
 
   let effectiveParentId = input.parentId ?? null;
+  let effectiveProposalId = trimToNull(input.proposalId);
   if (input.parentId) {
     const db = client as SupabaseLikeClient;
     const { data, error } = (await db
       .from("creed_document_comments")
-      .select("id, document_id, parent_id")
+      .select("id, document_id, parent_id, proposal_id")
       .eq("id", input.parentId)
       .eq("document_id", input.documentId)
       .maybeSingle()) as {
-      data: { id: string; document_id: string; parent_id: string | null } | null;
+      data: {
+        id: string;
+        document_id: string;
+        parent_id: string | null;
+        proposal_id: string | null;
+      } | null;
       error: { message: string } | null;
     };
     if (error) {
@@ -650,6 +692,22 @@ export async function createDocumentComment(
     // One level of threading only: replying to a reply attaches to the reply's
     // root comment so threads never nest deeper than parent -> reply.
     effectiveParentId = data.parent_id ?? data.id;
+    if (data.proposal_id) {
+      if (effectiveProposalId && effectiveProposalId !== data.proposal_id) {
+        return {
+          ok: false,
+          code: "invalid",
+          error: "Reply proposalId must match the parent comment's proposal.",
+        };
+      }
+      effectiveProposalId = data.proposal_id;
+    } else if (effectiveProposalId) {
+      return {
+        ok: false,
+        code: "invalid",
+        error: "Replies inherit the parent comment context and cannot move to a proposal.",
+      };
+    }
   }
 
   const { userIds: mentionedUserIds, users } = await mentionUserIds(
@@ -667,7 +725,7 @@ export async function createDocumentComment(
       parent_id: effectiveParentId,
       reference_id: trimToNull(input.referenceId),
       reference_quote: trimToNull(input.referenceQuote),
-      proposal_id: trimToNull(input.proposalId),
+      proposal_id: effectiveProposalId,
       body,
       status: "open",
       proposal_status: input.proposalStatus === "pending" ? "pending" : "shared",
@@ -1066,6 +1124,7 @@ export async function setDocumentCommentStatus(
       updated_at: now,
     })
     .eq("id", input.commentId)
+    .eq("created_by", input.actorUserId ?? "")
     .select(COMMENT_COLUMNS)
     .maybeSingle()) as {
     data: CommentRow | null;
@@ -1076,7 +1135,7 @@ export async function setDocumentCommentStatus(
     return { ok: false, code: "invalid", error: error.message };
   }
   if (!data) {
-    return { ok: false, code: "not-found", error: "Comment not found." };
+    return { ok: false, code: "forbidden", error: "You can only update your own comments." };
   }
 
   await recordDocumentActivity(client, {
