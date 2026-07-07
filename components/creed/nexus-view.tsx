@@ -245,6 +245,7 @@ export function NexusView({
   const [size, setSize] = useState<CanvasSize>({ width: 0, height: 0 });
   const [tooltip, setTooltip] = useState<TooltipState>(null);
   const [dragging, setDragging] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const simNodesRef = useRef<Map<string, SimNode>>(new Map());
   const edgesRef = useRef<NexusGraphEdge[]>([]);
   const transformRef = useRef<ViewTransform>({ x: 0, y: 0, k: 1 });
@@ -311,6 +312,9 @@ export function NexusView({
     needsFitRef.current = true;
     animationAlphaRef.current = 1;
     hoveredNodeRef.current = null;
+    setSelectedNodeId((current) =>
+      current && next.has(current) ? current : null,
+    );
     setTooltip(null);
   }, [graph, graphKey]);
 
@@ -465,6 +469,7 @@ export function NexusView({
 
       const node = findNodeAt(point);
       if (node) {
+        setSelectedNodeId(node.id);
         const world = screenToWorld(point, transformRef.current);
         gestureRef.current = {
           mode: "drag-node",
@@ -488,6 +493,7 @@ export function NexusView({
         start: point,
         transform: { ...transformRef.current },
       };
+      setSelectedNodeId(null);
       updateTooltipForNode(null);
       setDragging(true);
     },
@@ -761,22 +767,36 @@ export function NexusView({
         if (!source || !target) {
           continue;
         }
+        const selectedNode = selectedNodeId ? byId.get(selectedNodeId) : null;
+        const selectedEdge =
+          Boolean(selectedNodeId) &&
+          (edge.sourceId === selectedNodeId ||
+            edge.targetId === selectedNodeId);
         ctx.beginPath();
         ctx.moveTo(source.x, source.y);
         ctx.lineTo(target.x, target.y);
-        ctx.strokeStyle = "rgba(148, 148, 148, 0.28)";
+        ctx.lineWidth = selectedEdge
+          ? Math.max(1.75, 2.4 / transform.k)
+          : Math.max(0.75, 1 / transform.k);
+        ctx.strokeStyle =
+          selectedEdge && selectedNode
+            ? resolveCanvasColor(selectedNode.color)
+            : "rgba(148, 148, 148, 0.28)";
+        ctx.globalAlpha = selectedNodeId && !selectedEdge ? 0.42 : 1;
         ctx.stroke();
       }
+      ctx.globalAlpha = 1;
 
       for (const node of nodes) {
         const hovered = hoveredNodeRef.current === node.id;
+        const selected = selectedNodeId === node.id;
 
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
         ctx.fillStyle = resolveCanvasColor(node.color);
         ctx.fill();
 
-        if (hovered) {
+        if (hovered || selected) {
           ctx.lineWidth = Math.max(1, 1.5 / transform.k);
           ctx.strokeStyle = "rgba(255,255,255,0.78)";
           ctx.stroke();
@@ -790,7 +810,7 @@ export function NexusView({
 
     frameId = window.requestAnimationFrame(draw);
     return () => window.cancelAnimationFrame(frameId);
-  }, [fitToGraph, graphKey, size]);
+  }, [fitToGraph, graphKey, selectedNodeId, size]);
 
   return (
     <div
