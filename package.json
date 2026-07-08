@@ -9,7 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@vercel/kv": "^3.0.0",
+    "@upstash/redis": "^1.38.0",
+    "@vercel/blob": "^2.6.1",
     "motion": "^12.38.0",
     "next": "16.2.2",
     "react": "19.2.4",

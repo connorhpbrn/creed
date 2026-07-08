@@ -5,15 +5,20 @@ import { pushSnapshot } from "@/lib/store";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Cron/pinger calls this every ~5 min. Gated by STATUS_PROBE_SECRET when set
-// (the secret is unset in local dev, so it's open there for convenience).
+// Cron/pinger calls this every ~5 min. Vercel Cron sends CRON_SECRET as the
+// bearer token; STATUS_PROBE_SECRET is kept for manual pingers/back-compat.
 function authorized(req: Request): boolean {
-  const secret = process.env.STATUS_PROBE_SECRET;
-  if (!secret) return true; // dev / unconfigured
+  const secrets = [
+    process.env.CRON_SECRET,
+    process.env.STATUS_PROBE_SECRET,
+  ].filter(Boolean);
+
+  if (secrets.length === 0) return true; // dev / unconfigured
+
   const header =
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
     req.headers.get("x-probe-secret");
-  return header === secret;
+  return Boolean(header && secrets.includes(header));
 }
 
 async function handle(req: Request) {
