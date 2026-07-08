@@ -337,6 +337,7 @@ export function ReviewPill({
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
+                            aria-label="Edit proposal"
                             onClick={() => {
                               cancelClose();
                               setOpen(false);
@@ -344,30 +345,33 @@ export function ReviewPill({
                             }}
                             className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
                           >
-                            <Pencil className="h-3.5 w-3.5" />
-                            Edit
+                            <Pencil className="h-3.5 w-3.5 sm:hidden" />
+                            <span className="hidden sm:inline">Edit</span>
                           </button>
                           <button
                             type="button"
+                            aria-label="Delete proposal"
                             onClick={() => onDeleteOne(item.proposal.id)}
                             className="inline-flex h-7 items-center gap-1 rounded-md bg-[#DC2626] px-2.5 text-sm font-medium text-white transition-colors hover:bg-[#B91C1C]"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Delete
+                            <Trash2 className="h-3.5 w-3.5 sm:hidden" />
+                            <span className="hidden sm:inline">Delete</span>
                           </button>
                         </div>
                       ) : item.canReview ? (
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
+                            aria-label="Reject proposal"
                             onClick={() => onRejectOne(item.proposal.id)}
                             className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
                           >
-                            <X className="h-3.5 w-3.5" />
-                            Reject
+                            <X className="h-3.5 w-3.5 sm:hidden" />
+                            <span className="hidden sm:inline">Reject</span>
                           </button>
                           <button
                             type="button"
+                            aria-label="Accept proposal"
                             onClick={() => onAcceptOne(item.proposal.id)}
                             className={cn(
                               "inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-sm font-medium text-white transition-colors",
@@ -381,8 +385,8 @@ export function ReviewPill({
                                   : "bg-[#2563eb] hover:bg-[#1d4ed8]",
                             )}
                           >
-                            <Check className="h-3.5 w-3.5" />
-                            Accept
+                            <Check className="h-3.5 w-3.5 sm:hidden" />
+                            <span className="hidden sm:inline">Accept</span>
                           </button>
                         </div>
                       ) : null}
@@ -405,7 +409,7 @@ export function ReviewPill({
             aria-label="Reject all"
             className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-3.5 w-3.5 sm:hidden" />
             <span className="hidden sm:inline">Reject all</span>
           </button>
           <button
@@ -414,7 +418,7 @@ export function ReviewPill({
             aria-label="Accept all"
             className="inline-flex h-7 items-center gap-1 rounded-md bg-[#2563eb] px-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8]"
           >
-            <Check className="h-3.5 w-3.5" />
+            <Check className="h-3.5 w-3.5 sm:hidden" />
             <span className="hidden sm:inline">Accept all</span>
           </button>
         </>
@@ -537,6 +541,7 @@ function ReviewPillItem({
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
+                    aria-label="Edit proposal"
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -544,11 +549,12 @@ function ReviewPillItem({
                     }}
                     className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-black/[0.06] hover:text-[var(--creed-text-primary)] dark:hover:bg-white/[0.08]"
                   >
-                    <Pencil className="h-3.5 w-3.5" />
-                    Edit
+                    <Pencil className="h-3.5 w-3.5 sm:hidden" />
+                    <span className="hidden sm:inline">Edit</span>
                   </button>
                   <button
                     type="button"
+                    aria-label="Delete proposal"
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -556,14 +562,15 @@ function ReviewPillItem({
                     }}
                     className="inline-flex h-7 items-center gap-1 rounded-md bg-[#DC2626] px-2.5 text-sm font-medium text-white transition-colors hover:bg-[#B91C1C]"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Delete
+                    <Trash2 className="h-3.5 w-3.5 sm:hidden" />
+                    <span className="hidden sm:inline">Delete</span>
                   </button>
                 </div>
               ) : item.canReview ? (
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
+                    aria-label="Reject proposal"
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -571,11 +578,12 @@ function ReviewPillItem({
                     }}
                     className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-black/[0.06] hover:text-[var(--creed-text-primary)] dark:hover:bg-white/[0.08]"
                   >
-                    <X className="h-3.5 w-3.5" />
-                    Reject
+                    <X className="h-3.5 w-3.5 sm:hidden" />
+                    <span className="hidden sm:inline">Reject</span>
                   </button>
                   <button
                     type="button"
+                    aria-label="Accept proposal"
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
@@ -590,8 +598,8 @@ function ReviewPillItem({
                           : "bg-[#2563eb] hover:bg-[#1d4ed8]",
                     )}
                   >
-                    <Check className="h-3.5 w-3.5" />
-                    Accept
+                    <Check className="h-3.5 w-3.5 sm:hidden" />
+                    <span className="hidden sm:inline">Accept</span>
                   </button>
                 </div>
               ) : null}

@@ -1217,12 +1217,13 @@ export const collaborationRules: HiddenInstructionContract = {
 };
 
 // Convert the editor's HTML content back to portable markdown for the agent
-// read payload. The section heading itself is `## Name`, so any h2/h3 inside
-// the section content is shifted down one level (h2 → h3, h3 → h4) to keep a
-// clean markdown hierarchy without colliding levels.
+// read payload. The section heading itself is `## Name`, so any h2/h3/h4
+// inside the section content is shifted down one level (h2 → h3, h3 → h4,
+// h4 → h5) to keep a clean markdown hierarchy without colliding levels.
 //
 //   <h2>...</h2>                                → ### ...
 //   <h3>...</h3>                                → #### ...
+//   <h4>...</h4>                                → ##### ...
 //   <ul><li>...</li></ul>                       → - ...
 //   <ol><li>...</li></ol>                       → 1. ...
 //   <blockquote class="creed-callout">...</...> → > ...   (rendered as callout)
@@ -1292,6 +1293,10 @@ export function sectionToMarkdown(section: CreedSection) {
   text = text.replace(
     /<h3[^>]*>([\s\S]*?)<\/h3>/g,
     (_match, body: string) => `\n#### ${stripTags(body).trim()}\n`,
+  );
+  text = text.replace(
+    /<h4[^>]*>([\s\S]*?)<\/h4>/g,
+    (_match, body: string) => `\n##### ${stripTags(body).trim()}\n`,
   );
 
   // Horizontal rule.

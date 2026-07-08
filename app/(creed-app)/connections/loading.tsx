@@ -22,8 +22,8 @@ function Card({ className, children }: { className?: string; children?: ReactNod
 
 export default function ConnectionsLoading() {
   return (
-    <div className="h-full overflow-hidden bg-[var(--creed-surface)]" aria-hidden="true">
-      <div className="mx-auto max-w-6xl px-4 py-8 md:px-12 md:py-10">
+    <div className="h-full overflow-y-auto bg-[var(--creed-surface)] creed-scrollbar" aria-hidden="true">
+      <div className="mx-auto max-w-[960px] px-4 py-8 md:px-12 md:py-10">
         <div className="animate-pulse">
           {/* Heading */}
           <Block className="h-7 w-48" />
@@ -32,8 +32,7 @@ export default function ConnectionsLoading() {
           <div className="mt-8">
             <Block className="h-4 w-28" />
             <div className="mt-2 space-y-2.5">
-              <Block className="h-3.5 w-full max-w-2xl" />
-              <Block className="h-3.5 w-2/3 max-w-md" />
+              <Block className="h-3.5 w-full max-w-[34rem]" />
             </div>
           </div>
 
@@ -49,7 +48,7 @@ export default function ConnectionsLoading() {
                 </div>
               </div>
             </div>
-            <Block className="mt-4 h-[34px] w-64 max-w-full rounded-[10px]" />
+            <Block className="mt-4 h-[34px] w-[min(100%,26rem)] rounded-[10px]" />
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <Block className="h-9 w-[116px] rounded-md" />
               <Block className="h-9 w-44 rounded-md" />
@@ -61,7 +60,7 @@ export default function ConnectionsLoading() {
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <Block className="h-4 w-28" />
-                <Block className="mt-2.5 h-3.5 w-72 max-w-full" />
+                <Block className="mt-2.5 h-3.5 w-full max-w-[22rem]" />
               </div>
               <div className="flex items-center gap-3 md:gap-4">
                 <Block className="h-8 w-32 rounded-md" />

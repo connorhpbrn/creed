@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { sectionToMarkdown } from "../lib/creed-data.ts";
 import { parseCreedMarkdown } from "../lib/creed-markdown.ts";
+import { markdownToRichHtml } from "../lib/rich-text.ts";
 import type { CreedSection } from "../lib/creed-data.ts";
 
 // Round-trip the push → pull pipeline. Each test pushes a section through
@@ -61,6 +62,17 @@ test("paragraph + heading + bullets round-trip preserves structure", () => {
 test("h2 round-trip ends up as h2 again (not h3)", () => {
   const result = roundtripContent("<h2>Subtitle</h2><p>body</p>");
   assert.ok(result.includes("<h2>Subtitle</h2>"), `expected h2 to round-trip, got: ${result}`);
+});
+
+test("h4 markdown proposals become h4 instead of literal hashes", () => {
+  const result = markdownToRichHtml("#### What I Believe\n\nBody.");
+  assert.ok(result.includes("<h4>What I Believe</h4>"), `expected h4, got: ${result}`);
+  assert.ok(!result.includes("####"), `literal hashes leaked into output: ${result}`);
+});
+
+test("h4 round-trip ends up as h4 again", () => {
+  const result = roundtripContent("<h4>Small Subtitle</h4><p>body</p>");
+  assert.ok(result.includes("<h4>Small Subtitle</h4>"), `expected h4 to round-trip, got: ${result}`);
 });
 
 test("blockquote round-trip preserves callout", () => {

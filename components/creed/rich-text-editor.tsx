@@ -29,6 +29,7 @@ import {
   Code2,
   Heading2,
   Heading3,
+  Heading4,
   Italic,
   Link2,
   List,
@@ -320,6 +321,7 @@ export function RichTextEditor({
     useState<SelectionToolbarState | null>(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
+  const [modifierLinkMode, setModifierLinkMode] = useState(false);
   const editorThemeStyle = useMemo(
     () =>
       ({
@@ -386,6 +388,19 @@ export function RichTextEditor({
             .focus()
             .deleteRange(range)
             .setHeading({ level: 3 })
+            .run(),
+      },
+      {
+        title: "Heading 4",
+        description: "Minor heading",
+        icon: Heading4,
+        keywords: ["heading", "minor", "h4"],
+        run: (editor, range) =>
+          editor
+            .chain()
+            .focus()
+            .deleteRange(range)
+            .setHeading({ level: 4 })
             .run(),
       },
       {
@@ -855,7 +870,7 @@ export function RichTextEditor({
     extensions: [
       StarterKit.configure({
         heading: {
-          levels: [2, 3],
+          levels: [2, 3, 4],
         },
         bulletList: {
           HTMLAttributes: {
@@ -907,6 +922,30 @@ export function RichTextEditor({
           density === "continuation"
             ? "continuation-editor min-h-[56px] pb-0 text-[var(--creed-text-primary)]"
             : "min-h-[56px] pb-2 text-[var(--creed-text-primary)]",
+      },
+      handleClick: (_view, _pos, event) => {
+        if (!(event.metaKey || event.ctrlKey)) {
+          return false;
+        }
+
+        const target =
+          event.target instanceof Element
+            ? event.target
+            : event.target instanceof Text
+              ? event.target.parentElement
+              : null;
+        if (!target) {
+          return false;
+        }
+
+        const link = target.closest<HTMLAnchorElement>("a[href]");
+        if (!link) {
+          return false;
+        }
+
+        event.preventDefault();
+        window.open(link.href, "_blank", "noopener,noreferrer");
+        return true;
       },
       handleKeyDown: (view, event) => {
         if (event.key !== "Backspace") {
@@ -1043,6 +1082,35 @@ export function RichTextEditor({
   useEffect(() => {
     if (!editor || readOnly) return;
 
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.metaKey || event.ctrlKey) {
+        setModifierLinkMode(true);
+      }
+    }
+
+    function onKeyUp(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey)) {
+        setModifierLinkMode(false);
+      }
+    }
+
+    function onBlur() {
+      setModifierLinkMode(false);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [editor, readOnly]);
+
+  useEffect(() => {
+    if (!editor || readOnly) return;
+
     function onPointerUp(event: PointerEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
@@ -1085,20 +1153,11 @@ export function RichTextEditor({
     const VIEWPORT_WIDTH = window.innerWidth;
     const VIEWPORT_HEIGHT = window.innerHeight;
 
-    // Prefer the actual DOM selection rect - it's the union of every line's
-    // visual rect, so multi-line selections position correctly. Fall back to
-    // ProseMirror coordsAtPos when there's no live DOM selection (rare, but
-    // can happen during programmatic chains).
+    // Use ProseMirror's selection coordinates as the source of truth. Browser
+    // DOM Range rectangles can include odd line boxes inside list items, which
+    // makes the toolbar jump far away from the highlighted text.
     let rect: DOMRect | null = null;
-    const domSelection = window.getSelection();
-    if (domSelection && domSelection.rangeCount > 0) {
-      const domRect = domSelection.getRangeAt(0).getBoundingClientRect();
-      if (domRect.width > 0 || domRect.height > 0) {
-        rect = domRect;
-      }
-    }
-
-    if (!rect) {
+    try {
       const start = currentEditor.view.coordsAtPos(selection.from);
       const end = currentEditor.view.coordsAtPos(selection.to);
       const left = Math.min(start.left, end.left);
@@ -1106,7 +1165,16 @@ export function RichTextEditor({
       const top = Math.min(start.top, end.top);
       const bottom = Math.max(start.bottom, end.bottom);
       rect = new DOMRect(left, top, right - left, bottom - top);
+    } catch {
+      const domSelection = window.getSelection();
+      if (domSelection && domSelection.rangeCount > 0) {
+        const domRects = Array.from(domSelection.getRangeAt(0).getClientRects())
+          .filter((item) => item.width > 0 || item.height > 0);
+        rect = domRects[0] ?? null;
+      }
     }
+
+    if (!rect) return;
 
     // Centre horizontally on the selection's bounding rect, then clamp so the
     // toolbar never crosses the viewport edge - the rendered element uses a
@@ -1244,109 +1312,141 @@ export function RichTextEditor({
   }, [content, editor, readOnly]);
 
   return (
-    <div ref={containerRef} className="relative" style={editorThemeStyle}>
-      <AnimatePresence>
-        {editor && selectionToolbar && !readOnly ? (
-          <motion.div
-            initial={{
-              opacity: 0,
-              y: selectionToolbar.placeBelow ? -4 : 4,
-              scale: 0.98,
-            }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{
-              opacity: 0,
-              y: selectionToolbar.placeBelow ? -4 : 4,
-              scale: 0.98,
-            }}
-            transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
-            className={cn(
-              "fixed z-50 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1 text-[var(--creed-text-primary)] shadow-[0_6px_20px_rgba(28,28,26,0.10)]",
-              selectionToolbar.placeBelow
-                ? "translate-y-0"
-                : "-translate-y-full",
-            )}
-            style={{ left: selectionToolbar.x, top: selectionToolbar.y }}
-            onMouseDown={(event) => {
-              // Prevent the editor from blurring when a toolbar button is
-              // clicked - keeps the selection alive so the command applies.
-              event.preventDefault();
-            }}
-          >
-            <ToolbarButton
-              active={editor.isActive("heading", { level: 2 })}
-              disabled={editor.isActive("code") || editor.isActive("codeBlock")}
-              onClick={() =>
-                editor.chain().focus().toggleHeading({ level: 2 }).run()
-              }
-              label="Heading 2"
-            >
-              <Heading2 className="h-3.5 w-3.5" />
-            </ToolbarButton>
-            <ToolbarButton
-              active={editor.isActive("heading", { level: 3 })}
-              disabled={editor.isActive("code") || editor.isActive("codeBlock")}
-              onClick={() =>
-                editor.chain().focus().toggleHeading({ level: 3 }).run()
-              }
-              label="Heading 3"
-            >
-              <Heading3 className="h-3.5 w-3.5" />
-            </ToolbarButton>
-            <ToolbarDivider />
-            <ToolbarButton
-              active={editor.isActive("bold")}
-              disabled={
-                editor.isActive("code") ||
-                !editor.can().chain().focus().toggleBold().run()
-              }
-              onClick={() => editor.chain().focus().toggleBold().run()}
-              label="Bold"
-            >
-              <Bold className="h-3.5 w-3.5" />
-            </ToolbarButton>
-            <ToolbarButton
-              active={editor.isActive("italic")}
-              disabled={
-                editor.isActive("code") ||
-                !editor.can().chain().focus().toggleItalic().run()
-              }
-              onClick={() => editor.chain().focus().toggleItalic().run()}
-              label="Italic"
-            >
-              <Italic className="h-3.5 w-3.5" />
-            </ToolbarButton>
-            <ToolbarButton
-              active={editor.isActive("strike")}
-              disabled={
-                editor.isActive("code") ||
-                !editor.can().chain().focus().toggleStrike().run()
-              }
-              onClick={() => editor.chain().focus().toggleStrike().run()}
-              label="Strikethrough"
-            >
-              <Strikethrough className="h-3.5 w-3.5" />
-            </ToolbarButton>
-            <ToolbarButton
-              active={editor.isActive("code")}
-              disabled={!editor.can().chain().focus().toggleCode().run()}
-              onClick={() => editor.chain().focus().toggleCode().run()}
-              label="Inline code"
-            >
-              <Code2 className="h-3.5 w-3.5" />
-            </ToolbarButton>
-            <ToolbarDivider />
-            <ToolbarButton
-              active={editor.isActive("link")}
-              disabled={editor.isActive("code") || editor.isActive("codeBlock")}
-              onClick={toggleLink}
-              label="Link"
-            >
-              <Link2 className="h-3.5 w-3.5" />
-            </ToolbarButton>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+    <div
+      ref={containerRef}
+      className="relative"
+      data-modifier-link-mode={modifierLinkMode ? "true" : undefined}
+      style={editorThemeStyle}
+    >
+      {typeof document !== "undefined"
+        ? createPortal(
+            <AnimatePresence>
+              {editor && selectionToolbar && !readOnly ? (
+                <motion.div
+                  initial={{
+                    opacity: 0,
+                    y: selectionToolbar.placeBelow ? -4 : 4,
+                    scale: 0.98,
+                  }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{
+                    opacity: 0,
+                    y: selectionToolbar.placeBelow ? -4 : 4,
+                    scale: 0.98,
+                  }}
+                  transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
+                  className={cn(
+                    "fixed z-50 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1 text-[var(--creed-text-primary)] shadow-[0_6px_20px_rgba(28,28,26,0.10)]",
+                    selectionToolbar.placeBelow
+                      ? "translate-y-0"
+                      : "-translate-y-full",
+                  )}
+                  style={{
+                    ...editorThemeStyle,
+                    left: selectionToolbar.x,
+                    top: selectionToolbar.y,
+                  }}
+                  onMouseDown={(event) => {
+                    // Prevent the editor from blurring when a toolbar button is
+                    // clicked - keeps the selection alive so the command applies.
+                    event.preventDefault();
+                  }}
+                >
+                  <ToolbarButton
+                    active={editor.isActive("heading", { level: 2 })}
+                    disabled={
+                      editor.isActive("code") || editor.isActive("codeBlock")
+                    }
+                    onClick={() =>
+                      editor.chain().focus().toggleHeading({ level: 2 }).run()
+                    }
+                    label="Heading 2"
+                  >
+                    <Heading2 className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton
+                    active={editor.isActive("heading", { level: 3 })}
+                    disabled={
+                      editor.isActive("code") || editor.isActive("codeBlock")
+                    }
+                    onClick={() =>
+                      editor.chain().focus().toggleHeading({ level: 3 }).run()
+                    }
+                    label="Heading 3"
+                  >
+                    <Heading3 className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton
+                    active={editor.isActive("heading", { level: 4 })}
+                    disabled={
+                      editor.isActive("code") || editor.isActive("codeBlock")
+                    }
+                    onClick={() =>
+                      editor.chain().focus().toggleHeading({ level: 4 }).run()
+                    }
+                    label="Heading 4"
+                  >
+                    <Heading4 className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                  <ToolbarDivider />
+                  <ToolbarButton
+                    active={editor.isActive("bold")}
+                    disabled={
+                      editor.isActive("code") ||
+                      !editor.can().chain().focus().toggleBold().run()
+                    }
+                    onClick={() => editor.chain().focus().toggleBold().run()}
+                    label="Bold"
+                  >
+                    <Bold className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton
+                    active={editor.isActive("italic")}
+                    disabled={
+                      editor.isActive("code") ||
+                      !editor.can().chain().focus().toggleItalic().run()
+                    }
+                    onClick={() => editor.chain().focus().toggleItalic().run()}
+                    label="Italic"
+                  >
+                    <Italic className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton
+                    active={editor.isActive("strike")}
+                    disabled={
+                      editor.isActive("code") ||
+                      !editor.can().chain().focus().toggleStrike().run()
+                    }
+                    onClick={() => editor.chain().focus().toggleStrike().run()}
+                    label="Strikethrough"
+                  >
+                    <Strikethrough className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton
+                    active={editor.isActive("code")}
+                    disabled={!editor.can().chain().focus().toggleCode().run()}
+                    onClick={() => editor.chain().focus().toggleCode().run()}
+                    label="Inline code"
+                  >
+                    <Code2 className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                  <ToolbarDivider />
+                  <ToolbarButton
+                    active={editor.isActive("link")}
+                    disabled={
+                      editor.isActive("code") || editor.isActive("codeBlock")
+                    }
+                    onClick={toggleLink}
+                    label="Link"
+                  >
+                    <Link2 className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>,
+            document.body,
+          )
+        : null}
 
       <EditorContent editor={editor} />
 

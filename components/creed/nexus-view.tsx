@@ -84,6 +84,7 @@ const MIN_ZOOM = 0.34;
 const BASE_MAX_ZOOM = 2.8;
 const NODE_BASE_RADIUS = 7;
 const EDGE_LENGTH = 145;
+const NODE_SELECTION_STROKE = "var(--accent-color-mono)";
 const EMPTY_SCORES = new Map<string, number>();
 
 function clamp(value: number, min: number, max: number) {
@@ -798,7 +799,7 @@ export function NexusView({
 
         if (hovered || selected) {
           ctx.lineWidth = Math.max(1, 1.5 / transform.k);
-          ctx.strokeStyle = "rgba(255,255,255,0.78)";
+          ctx.strokeStyle = resolveCanvasColor(NODE_SELECTION_STROKE);
           ctx.stroke();
         }
       }

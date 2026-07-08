@@ -126,16 +126,16 @@ function parseSectionBody(
 
   // Pull is the inverse of push, and it must be lossless. `sectionToMarkdown`
   // (the push side) shifts heading levels DOWN by one (`<h2>` → `### Title`,
-  // `<h3>` → `#### Title`) so the section's own `## Name` stays at the top
-  // of the hierarchy. We undo that shift here before delegating to
-  // `markdownToRichHtml`, so:
+  // `<h3>` → `#### Title`, `<h4>` → `##### Title`) so the section's own
+  // `## Name` stays at the top of the hierarchy. We undo that shift here
+  // before delegating to `markdownToRichHtml`, so:
   //   `### Subtitle` → `## Subtitle` → <h2> (matches the editor's h2)
   //   `#### Subtitle` → `### Subtitle` → <h3>
-  // Without this un-shift, h2 sub-headings come back as h3 and h3
-  // sub-headings get dropped entirely (markdownToRichHtml doesn't handle
-  // `####` so it falls through to a paragraph).
+  //   `##### Subtitle` → `#### Subtitle` → <h4>
+  // Without this un-shift, section-local headings come back one level lower
+  // than the editor stored them.
   const unshifted = normalizedBody.replace(
-    /^(#{3,5})\s+(.*)$/gm,
+    /^(#{3,6})\s+(.*)$/gm,
     (_match, hashes: string, rest: string) =>
       `${"#".repeat(hashes.length - 1)} ${rest}`
   );

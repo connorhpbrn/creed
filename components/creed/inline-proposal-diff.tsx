@@ -233,8 +233,8 @@ export function InlineProposalDiff({
               className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
               aria-label="Edit proposal"
             >
-              <Pencil className="h-3.5 w-3.5" />
-              Edit
+              <Pencil className="h-3.5 w-3.5 sm:hidden" />
+              <span className="hidden sm:inline">Edit</span>
             </button>
             <button
               type="button"
@@ -242,8 +242,8 @@ export function InlineProposalDiff({
               className="inline-flex h-7 items-center gap-1 rounded-md bg-[#DC2626] px-2.5 text-sm font-medium text-white transition-colors hover:bg-[#B91C1C]"
               aria-label="Delete proposal"
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete
+              <Trash2 className="h-3.5 w-3.5 sm:hidden" />
+              <span className="hidden sm:inline">Delete</span>
             </button>
           </div>
         ) : canReview ? (
@@ -254,8 +254,8 @@ export function InlineProposalDiff({
               className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
               aria-label="Reject proposal"
             >
-              <X className="h-3.5 w-3.5" />
-              Reject
+              <X className="h-3.5 w-3.5 sm:hidden" />
+              <span className="hidden sm:inline">Reject</span>
             </button>
             <button
               type="button"
@@ -263,8 +263,8 @@ export function InlineProposalDiff({
               className="inline-flex h-7 items-center gap-1 rounded-md bg-[#2563eb] px-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1d4ed8]"
               aria-label="Accept proposal"
             >
-              <Check className="h-3.5 w-3.5" />
-              Accept
+              <Check className="h-3.5 w-3.5 sm:hidden" />
+              <span className="hidden sm:inline">Accept</span>
             </button>
           </div>
         ) : (
@@ -383,21 +383,23 @@ export function InlineNewSectionProposal({
             <button
               type="button"
               onClick={onReject}
+              aria-label="Reject proposal"
               // Weaker green tint by default, full green on hover. Hover
               // background is a soft green wash so the reject affordance
               // stays inside the proposal's colour family.
               className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[#10b981]/65 transition-colors hover:bg-[#10b981]/10 hover:text-[#10b981] dark:text-[#4ade80]/65 dark:hover:bg-[#22c55e]/15 dark:hover:text-[#4ade80]"
             >
-              <X className="h-3.5 w-3.5" />
-              Reject
+              <X className="h-3.5 w-3.5 sm:hidden" />
+              <span className="hidden sm:inline">Reject</span>
             </button>
             <button
               type="button"
               onClick={onAccept}
+              aria-label="Accept proposal"
               className="inline-flex h-7 items-center gap-1 rounded-md bg-[#16A34A] px-2.5 text-sm font-medium text-white transition-colors hover:bg-[#15803d]"
             >
-              <Check className="h-3.5 w-3.5" />
-              Accept
+              <Check className="h-3.5 w-3.5 sm:hidden" />
+              <span className="hidden sm:inline">Accept</span>
             </button>
           </div>
         ) : (
@@ -536,6 +538,7 @@ export function InlineMetaProposal({
             <button
               type="button"
               onClick={onReject}
+              aria-label="Reject proposal"
               className={cn(
                 "inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium transition-colors",
                 // Delete reject: weaker red default → full red on hover,
@@ -546,12 +549,13 @@ export function InlineMetaProposal({
                   : "text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
               )}
             >
-              <X className="h-3.5 w-3.5" />
-              Reject
+              <X className="h-3.5 w-3.5 sm:hidden" />
+              <span className="hidden sm:inline">Reject</span>
             </button>
             <button
               type="button"
               onClick={onAccept}
+              aria-label="Accept proposal"
               className={cn(
                 "inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-sm font-medium text-white transition-colors",
                 isDelete
@@ -559,8 +563,8 @@ export function InlineMetaProposal({
                   : "bg-[#2563eb] hover:bg-[#1d4ed8]",
               )}
             >
-              <Check className="h-3.5 w-3.5" />
-              Accept
+              <Check className="h-3.5 w-3.5 sm:hidden" />
+              <span className="hidden sm:inline">Accept</span>
             </button>
           </div>
         ) : (
