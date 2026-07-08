@@ -32,7 +32,7 @@ export const INSTAGRAM_URL =
 export const GITHUB_URL =
   process.env.NEXT_PUBLIC_GITHUB_URL?.trim() || "https://github.com/connorhpbrn/creed";
 export const HPBRN_URL =
-  process.env.NEXT_PUBLIC_HPBRN_URL?.trim() || "https://hpbrn.com";
+  process.env.NEXT_PUBLIC_HPBRN_URL?.trim() || "https://hpbrn.cc";
 
 // Discord invite. No hardcoded fallback: until a permanent invite is set via
 // NEXT_PUBLIC_DISCORD_URL, surfaces that need the actual invite can hide their

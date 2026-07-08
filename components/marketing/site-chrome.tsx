@@ -795,8 +795,18 @@ export function MarketingFooter() {
       </div>
 
       <div className="mx-auto mt-6 flex max-w-7xl flex-col gap-4 border-t border-[var(--creed-border)] py-6 md:flex-row md:items-center md:justify-between">
-        <div className="t-meta text-[var(--creed-text-tertiary)]">
-          © 2026 Creed
+        <div className="t-meta flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--creed-text-tertiary)]">
+          <span>© 2026 Creed</span>
+          <span aria-hidden="true">·</span>
+          <span>Buy</span>
+          <Link
+            href={HPBRN_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-[#2563EB] transition-colors hover:text-[#1D4ED8] dark:text-[#60A5FA] dark:hover:text-[#93C5FD]"
+          >
+            hpbrn
+          </Link>
         </div>
         {/* Social icons: left-to-right order is hpbrn, Discord, GitHub,
             Instagram, X. Icons are local SVG masks so colour stays inherited. */}
