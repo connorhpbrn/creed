@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Creed design tokens — ported verbatim from the main app's globals.css.
+   Light/dark switches on prefers-color-scheme (the marketing app uses a class
+   provider; a public status page has no toggle, so we follow the OS).
+--------------------------------------------------------------------------- */
+:root {
+  --status-bg: #f9f9f8;
+  --status-surface: #ffffff;
+  --status-surface-raised: #f3f3f1;
+  --status-border: #e6e6e2;
+  --status-text-primary: #1f1f1a;
+  --status-text-secondary: #636360;
+  --status-text-tertiary: #9a9a96;
+
+  /* Status hues = Creed's numeric stat colours. */
+  --status-ok: #16a34a;
+  --status-degraded: #d97706;
+  --status-down: #dc2626;
+  --status-empty: #e6e6e2;
+
+  /* On the green banner, primary text reads near-black for contrast. */
+  --status-on-ok: #08240f;
+  --status-on-degraded: #2a1804;
+  --status-on-down: #2a0808;
+
+  --status-radius-card: 1rem; /* 16px — Creed --radius-xl */
+  --status-radius-bar: 1px;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --status-bg: #0e0e0d;
+    --status-surface: #161615;
+    --status-surface-raised: #1f1f1d;
+    --status-border: #262624;
+    --status-text-primary: #e7e7e2;
+    --status-text-secondary: #9c9c95;
+    --status-text-tertiary: #6b6b65;
+
+    --status-ok: #4ade80;
+    --status-degraded: #fbbf24;
+    --status-down: #f87171;
+    --status-empty: #262624;
+
+    --status-on-ok: #04140a;
+    --status-on-degraded: #1c1203;
+    --status-on-down: #1c0606;
+
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--status-bg);
+  color: var(--status-text-primary);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "kern" 1;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Card surface. Light mode: hairline ring for definition. Dark mode: no ring —
+   the surface lifts purely via background contrast (#161615 on #0e0e0d). */
+.card-surface {
+  background: var(--status-surface);
+  box-shadow: 0 0 0 1px var(--status-border);
+}
+
+@media (prefers-color-scheme: dark) {
+  .card-surface {
+    box-shadow: none;
+  }
+}
