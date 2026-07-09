@@ -19,19 +19,12 @@ function StatusDot({ state }: { state: DayState }) {
           ? "var(--status-empty)"
           : "var(--status-ok)";
 
-  // Dark glyph on the bright status fill — consistent with the banner and
-  // legible on Creed's lighter green/amber than a white tick would be.
-  const fg =
-    state === "down"
-      ? "var(--status-on-down)"
-      : state === "degraded"
-        ? "var(--status-on-degraded)"
-        : "var(--status-on-ok)";
-
+  // Glyph follows the theme (white in light mode, near-black in dark mode) so
+  // it reads the same way the banner chip does.
   return (
     <span
       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px]"
-      style={{ backgroundColor: color, color: fg }}
+      style={{ backgroundColor: color, color: "var(--status-glyph-ink)" }}
     >
       {state === "down" || state === "degraded" ? (
         <AlertIcon className="h-4 w-4" />

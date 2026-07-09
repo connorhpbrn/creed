@@ -2,8 +2,10 @@
 
 /* ---------------------------------------------------------------------------
    Creed design tokens — ported verbatim from the main app's globals.css.
-   Light/dark switches on prefers-color-scheme (the marketing app uses a class
-   provider; a public status page has no toggle, so we follow the OS).
+   Light is the default. Dark applies either when the OS prefers it (and the
+   user hasn't overridden) or when the theme provider sets an explicit `.dark`
+   class. A `.light` class forces light even on a dark OS. See
+   components/theme-provider.tsx (press M to toggle).
 --------------------------------------------------------------------------- */
 :root {
   --status-bg: #f9f9f8;
@@ -20,10 +22,10 @@
   --status-down: #dc2626;
   --status-empty: #e6e6e2;
 
-  /* On the green banner, primary text reads near-black for contrast. */
-  --status-on-ok: #08240f;
-  --status-on-degraded: #2a1804;
-  --status-on-down: #2a0808;
+  /* The chip behind a status glyph (and the banner label). Follows the theme:
+     light in light mode, dark in dark mode — so it never clashes with the
+     surrounding surface. */
+  --status-glyph-ink: #ffffff;
 
   --status-radius-card: 1rem; /* 16px — Creed --radius-xl */
   --status-radius-bar: 1px;
@@ -31,8 +33,30 @@
   color-scheme: light;
 }
 
+/* Dark tokens. Applied both to an explicit `.dark` class (manual override) and,
+   via the media query below, to the OS-dark default when no class is set. */
+:root.dark {
+  --status-bg: #0e0e0d;
+  --status-surface: #161615;
+  --status-surface-raised: #1f1f1d;
+  --status-border: #262624;
+  --status-text-primary: #e7e7e2;
+  --status-text-secondary: #9c9c95;
+  --status-text-tertiary: #6b6b65;
+
+  --status-ok: #4ade80;
+  --status-degraded: #fbbf24;
+  --status-down: #f87171;
+  --status-empty: #262624;
+
+  --status-glyph-ink: #0e0e0d;
+
+  color-scheme: dark;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  /* Follow the OS only until the user makes an explicit choice (.dark/.light). */
+  :root:not(.light):not(.dark) {
     --status-bg: #0e0e0d;
     --status-surface: #161615;
     --status-surface-raised: #1f1f1d;
@@ -46,9 +70,7 @@
     --status-down: #f87171;
     --status-empty: #262624;
 
-    --status-on-ok: #04140a;
-    --status-on-degraded: #1c1203;
-    --status-on-down: #1c0606;
+    --status-glyph-ink: #0e0e0d;
 
     color-scheme: dark;
   }
@@ -78,15 +100,24 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Card surface. Light mode: hairline ring for definition. Dark mode: no ring —
-   the surface lifts purely via background contrast (#161615 on #0e0e0d). */
+/* Card surface. No ring in either mode — the surface lifts purely via
+   background contrast against the page (light: #fff on #f9f9f8; dark:
+   #161615 on #0e0e0d). */
 .card-surface {
   background: var(--status-surface);
-  box-shadow: 0 0 0 1px var(--status-border);
 }
 
-@media (prefers-color-scheme: dark) {
-  .card-surface {
-    box-shadow: none;
-  }
+/* View Transition API hooks for the circular theme reveal (see
+   components/theme-provider.tsx). The default cross-fade is killed so only the
+   new layer animates; the JS animation drives the clip-path. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 0;
+}
+::view-transition-new(root) {
+  z-index: 1;
 }
