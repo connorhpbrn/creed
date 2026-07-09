@@ -725,6 +725,8 @@ export type AgentIconKind =
   | "chatgpt"
   | "cursor"
   | "replit"
+  | "factory"
+  | "manus"
   | "devin"
   | "whirl"
   | "grok"
@@ -733,6 +735,8 @@ export type AgentIconKind =
   | "openclaw"
   | "hermes"
   | "mcp"
+  | "cli"
+  | "all"
   | "custom";
 
 export type McpClient = {
@@ -2362,7 +2366,7 @@ export const initialCreedState: CreedState = {
       description:
         "Add Creed as a connector so ChatGPT starts from your context.",
       connectHint:
-        "In ChatGPT, open Settings > Apps & Connectors, turn on Developer mode, then Create a connector with the URL. (Plus, Pro, or Business.)",
+        "In ChatGPT, open Settings > Apps & Connectors, turn on Developer mode, then Create a connector with the URL.",
     },
     {
       id: "claude",
@@ -2380,8 +2384,7 @@ export const initialCreedState: CreedState = {
       status: "not-connected",
       description: "Add Creed as a remote MCP server for agentic coding runs.",
       connectHint:
-        "Run the command, then codex mcp login creed to authorize in the browser.",
-      command: "codex mcp add creed --url https://creed.md/mcp",
+        "Run codex mcp add creed with the URL above, then codex mcp login creed to authorize in the browser.",
     },
     {
       id: "claudecode",
@@ -2391,8 +2394,7 @@ export const initialCreedState: CreedState = {
       description:
         "Connect Creed so every Claude Code session starts with your context.",
       connectHint:
-        "Run the command, then /mcp in Claude Code to authorize in the browser.",
-      command: "claude mcp add -t http creed https://creed.md/mcp",
+        "Run claude mcp add creed with the URL above, then /mcp to authorize in the browser.",
     },
     {
       id: "openclaw",
@@ -2409,6 +2411,15 @@ export const initialCreedState: CreedState = {
       icon: "hermes",
       status: "not-connected",
       description: "Add Creed to Hermes as a remote MCP server.",
+      connectHint:
+        "Add a custom MCP server pointing at the URL above, then authorize Creed in the browser window your client opens.",
+    },
+    {
+      id: "manus",
+      name: "Manus",
+      icon: "manus",
+      status: "not-connected",
+      description: "Add Creed to Manus as a remote MCP server.",
       connectHint:
         "Add a custom MCP server pointing at the URL above, then authorize Creed in the browser window your client opens.",
     },
@@ -2446,7 +2457,16 @@ export const initialCreedState: CreedState = {
       status: "not-connected",
       description: "Add Creed to Devin from the MCP Marketplace.",
       connectHint:
-        "In Devin, open Settings > MCP Marketplace, add your own MCP with Transport HTTP and the URL above, set Authentication to OAuth, then authorize.",
+        "In Devin, open Settings > MCP Marketplace, add your own MCP with the URL above and OAuth, then authorize.",
+    },
+    {
+      id: "factory",
+      name: "Factory",
+      icon: "factory",
+      status: "not-connected",
+      description: "Add Creed to Factory's droid as a remote MCP server.",
+      connectHint:
+        "In droid, run /mcp, add a remote server with the URL above, then authorize in the browser.",
     },
     {
       id: "v0",

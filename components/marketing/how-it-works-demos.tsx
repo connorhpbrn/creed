@@ -133,8 +133,8 @@ export function CreateDemo() {
 // ----- step 2: connect (all-agents mashup) ---------------------------------
 
 const ALL_AGENTS_MASK = {
-  WebkitMaskImage: "url(/assets/agents/allagents.svg)",
-  maskImage: "url(/assets/agents/allagents.svg)",
+  WebkitMaskImage: "url(/assets/agents/all.svg)",
+  maskImage: "url(/assets/agents/all.svg)",
   WebkitMaskRepeat: "no-repeat",
   maskRepeat: "no-repeat",
   WebkitMaskPosition: "center",

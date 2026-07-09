@@ -1352,7 +1352,8 @@ export function DocsPageView() {
                     {agentCardsBySection[section.id].map((card) => (
                       <div
                         key={card.name}
-                        className="rounded-[20px] bg-[var(--creed-surface)] p-5"
+                        id={`agent-${card.glyph}`}
+                        className="scroll-mt-28 rounded-[20px] bg-[var(--creed-surface)] p-5"
                       >
                         <div className="flex items-center gap-3">
                           <IntegrationGlyph

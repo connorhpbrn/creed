@@ -3,7 +3,9 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 
-const allAgentsIcon = "/assets/agents/allagents.svg";
+const allAgentsIcon = "/assets/agents/all.svg";
+const mcpIcon = "/assets/agents/mcp.svg";
+const cliIcon = "/assets/agents/cli.svg";
 const brandmark = "/assets/brand/brandmark.svg";
 const chatgptIcon = "/assets/agents/chatgpt.svg";
 const claudeIcon = "/assets/agents/claude.svg";
@@ -16,6 +18,8 @@ const replitIcon = "/assets/agents/replit.svg";
 const whirlIcon = "/assets/agents/whirl.svg";
 const grokIcon = "/assets/agents/grok.svg";
 const hermesIcon = "/assets/agents/hermes.svg";
+const factoryIcon = "/assets/agents/factory.svg";
+const manusIcon = "/assets/agents/manus.svg";
 const logo = "/assets/brand/logo.svg";
 const openClawIcon = "/assets/agents/openclaw.svg";
 const openCodeIcon = "/assets/agents/opencode.svg";
@@ -104,7 +108,11 @@ type GlyphKind =
   | "opencode"
   | "openclaw"
   | "hermes"
+  | "factory"
+  | "manus"
   | "mcp"
+  | "cli"
+  | "all"
   | "custom";
 
 const MONOCHROME_AGENTS = new Set<GlyphKind>([
@@ -114,8 +122,12 @@ const MONOCHROME_AGENTS = new Set<GlyphKind>([
   "grok",
   "v0",
   "opencode",
+  "factory",
+  "manus",
   "custom",
   "mcp",
+  "cli",
+  "all",
 ]);
 
 const glyphBrandAssets = {
@@ -132,7 +144,11 @@ const glyphBrandAssets = {
   opencode: { src: openCodeIcon, imageClassName: "scale-[0.9]" },
   openclaw: { src: openClawIcon, imageClassName: "scale-[0.9]" },
   hermes: { src: hermesIcon, imageClassName: "scale-[0.9]" },
-  mcp: { src: allAgentsIcon, imageClassName: "scale-[0.9]" },
+  factory: { src: factoryIcon, imageClassName: "scale-[0.9]" },
+  manus: { src: manusIcon, imageClassName: "scale-[0.9]" },
+  mcp: { src: mcpIcon, imageClassName: "scale-[0.9]" },
+  cli: { src: cliIcon, imageClassName: "scale-[0.9]" },
+  all: { src: allAgentsIcon, imageClassName: "scale-[0.9]" },
   custom: { src: customAgentIcon, imageClassName: "scale-[0.9]" },
 } as const;
 
