@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { AnimatedPageTitle } from "@/components/marketing/animated-page-title";
 import {
   MarketingFooter,
   MarketingHeroBanner,
@@ -54,9 +55,7 @@ export default function ChangelogPage() {
 
         <main className="mx-auto max-w-3xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
           <header className="border-b border-[var(--creed-border)] pb-8">
-            <h1 className="text-[32px] font-medium tracking-[-0.02em] text-[var(--creed-text-primary)] md:text-[40px]">
-              Changelog
-            </h1>
+            <AnimatedPageTitle text="Changelog" />
             <p className="mt-4 max-w-2xl text-[18px] leading-8 text-[var(--creed-text-secondary)]">
               What&apos;s new in Creed, newest first.
             </p>

@@ -90,6 +90,5 @@ export const tabAutocomplete: Article = {
       label: "Stop repeating yourself to AI",
       href: "/learn/stop-repeating-yourself-to-ai",
     },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

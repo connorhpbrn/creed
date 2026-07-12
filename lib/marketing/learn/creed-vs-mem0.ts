@@ -94,6 +94,5 @@ export const creedVsMem0: Article = {
     { label: "Memory MCP servers compared", href: "/learn/memory-mcp-servers-compared" },
     { label: "What is a personal context file", href: "/learn/what-is-a-personal-context-file" },
     { label: "Browser extension vs MCP context", href: "/learn/browser-extension-vs-mcp-context" },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

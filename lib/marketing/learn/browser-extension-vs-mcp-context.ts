@@ -98,6 +98,5 @@ export const browserExtensionVsMcpContext: Article = {
     { label: "Sync AI memory across tools", href: "/learn/sync-ai-memory-across-tools" },
     { label: "Memory MCP servers compared", href: "/learn/memory-mcp-servers-compared" },
     { label: "What is a personal context file", href: "/learn/what-is-a-personal-context-file" },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

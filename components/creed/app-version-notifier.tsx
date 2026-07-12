@@ -43,8 +43,7 @@ export function AppVersionNotifier({
           },
         },
         classNames: {
-          toast:
-            "!bg-[#EFF6FF] !pr-24 !text-[#1D4ED8] !border-[#BFDBFE] dark:!bg-[#0B1F4A] dark:!text-[#93C5FD] dark:!border-[#1E3A8A]",
+          toast: "!pr-24",
           actionButton:
             "!absolute !top-1/2 !right-10 !left-auto !-translate-y-1/2 !transform-none !h-7 !rounded-[8px] !bg-transparent !border-0 !px-2 !text-[12px] !font-medium !text-current !opacity-70 hover:!opacity-100 hover:!bg-current/[0.10] !transition-all",
         },

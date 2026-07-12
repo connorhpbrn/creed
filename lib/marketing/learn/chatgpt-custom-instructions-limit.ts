@@ -99,6 +99,5 @@ export const chatgptCustomInstructionsLimit: Article = {
       href: "/learn/why-chatgpt-forgets-you",
     },
     { label: "The about-me.md file", href: "/learn/about-me-md" },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

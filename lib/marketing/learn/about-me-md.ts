@@ -113,6 +113,5 @@ export const aboutMeMd: Article = {
     { label: "What is a personal context file?", href: "/learn/what-is-a-personal-context-file" },
     { label: "Personal context file template", href: "/learn/personal-context-file-template" },
     { label: "Stop repeating yourself to AI", href: "/learn/stop-repeating-yourself-to-ai" },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

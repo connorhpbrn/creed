@@ -32,7 +32,7 @@ export function RoadmapPageView({ columns }: { columns: RoadmapColumn[] }) {
         <div className="mx-auto max-w-2xl text-center">
           <AnimatedPageTitle
             text="Roadmap"
-            className="t-section justify-center text-[var(--creed-text-primary)]"
+            className="justify-center"
           />
           <p className="t-lede mx-auto mt-5 max-w-xl text-[var(--creed-text-tertiary)]">
             A live view of what we&apos;re building, straight from our task

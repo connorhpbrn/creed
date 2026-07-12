@@ -109,7 +109,7 @@ export function faqPageSchema(items: FaqItem[]) {
 }
 
 // A WebPage node for a content page, optionally with breadcrumbs. Used by the
-// /context explainer so the page reads as a defined entity tied to the
+// marketing explainer pages so each reads as a defined entity tied to the
 // site, not an orphan. Pass `dateModified` (ISO date) to signal freshness,
 // which answer engines weight for time-sensitive queries; it must match the
 // visible "Last updated" line on the page so the two never disagree.

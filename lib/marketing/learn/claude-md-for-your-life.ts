@@ -121,6 +121,5 @@ export const claudeMdForYourLife: Article = {
     { label: "A personal CLAUDE.md template", href: "/learn/personal-claude-md-template" },
     { label: "What is a personal context file?", href: "/learn/what-is-a-personal-context-file" },
     { label: "Connect Creed to Claude Code", href: "/learn/connect-creed-to-claude-code" },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

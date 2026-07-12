@@ -1060,10 +1060,7 @@ export function DocsPageView() {
 
       <main className="mx-auto max-w-6xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
         <div className="border-b border-[var(--creed-border)] pb-8">
-          <AnimatedPageTitle
-            text="Docs"
-            className="t-section text-[var(--creed-text-primary)]"
-          />
+          <AnimatedPageTitle text="Docs" />
           <p className="mt-5 max-w-5xl text-[17px] leading-8 text-[var(--creed-text-secondary)] md:text-[18px]">
             What Creed is, what goes in it, how to connect your agents, how they
             read and improve it, and the full tool and API reference.

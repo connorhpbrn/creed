@@ -97,6 +97,5 @@ export const creedVsChatgptMemory: Article = {
     { label: "Claude memory vs a portable context file", href: "/learn/creed-vs-claude-memory" },
     { label: "Why ChatGPT forgets you", href: "/learn/why-chatgpt-forgets-you" },
     { label: "What is a personal context file", href: "/learn/what-is-a-personal-context-file" },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

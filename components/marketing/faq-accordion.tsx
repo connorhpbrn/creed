@@ -1,7 +1,7 @@
 "use client";
 
 // Shared FAQ accordion for the public site: the landing "Questions" section and
-// the /context explainer's "Common questions" both render through this so the
+// the /learn articles' FAQ sections both render through this so the
 // two stay visually identical. One item open at a time, the first open by
 // default. The answer text stays in the DOM even when collapsed (a grid-rows
 // collapse, not an unmount), so search and answer engines can still read every

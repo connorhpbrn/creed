@@ -130,6 +130,5 @@ export const personalContextFileTemplate: Article = {
     { label: "What is a personal context file?", href: "/learn/what-is-a-personal-context-file" },
     { label: "CLAUDE.md for your life", href: "/learn/claude-md-for-your-life" },
     { label: "about-me.md: give every AI the same introduction", href: "/learn/about-me-md" },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

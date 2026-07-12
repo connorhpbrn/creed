@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { AnimatedPageTitle } from "@/components/marketing/animated-page-title";
 import {
   MarketingFooter,
   MarketingHeroBanner,
@@ -11,6 +12,10 @@ import type { Article, ArticleBlock } from "@/lib/marketing/learn/types";
 // initial HTML: the lead answer, headings, tables, code, FAQ, and related
 // links. No client component wraps the content, so answer engines and no-JS
 // crawlers read the whole page.
+
+// Every article's Related list ends with the same product CTA. It lives here,
+// not in each article's data, so retargeting it is a one-line change.
+const PRODUCT_CTA = { label: "See how Creed works", href: "/home" };
 
 function Block({ block }: { block: ArticleBlock }) {
   switch (block.type) {
@@ -132,9 +137,7 @@ export function LearnArticle({ article }: { article: Article }) {
 
       <main className="mx-auto max-w-3xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
         <article>
-          <h1 className="text-[32px] font-medium leading-[1.15] tracking-[-0.02em] text-[var(--creed-text-primary)] md:text-[40px]">
-            {article.title}
-          </h1>
+          <AnimatedPageTitle text={article.title} />
 
           <div className="mt-6 border-l-2 border-[var(--creed-accent,#2563EB)] pl-5">
             {leadParagraphs.map((para, i) => (
@@ -169,7 +172,7 @@ export function LearnArticle({ article }: { article: Article }) {
               Related
             </h2>
             <ul className="mt-4 space-y-2.5">
-              {article.related.map((link) => (
+              {[...article.related, PRODUCT_CTA].map((link) => (
                 <li key={link.href}>
                   <Link
                     href={link.href}

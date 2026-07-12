@@ -55,10 +55,7 @@ export function StackPageView() {
 
       <main className="mx-auto max-w-4xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
         <div className="border-b border-[var(--creed-border)] pb-8">
-          <AnimatedPageTitle
-            text="Stack"
-            className="t-section text-[var(--creed-text-primary)]"
-          />
+          <AnimatedPageTitle text="Stack" />
           <p className="mt-5 max-w-2xl text-[18px] leading-8 text-[var(--creed-text-secondary)]">
             The technology Creed uses to run, store, and process your data.
           </p>

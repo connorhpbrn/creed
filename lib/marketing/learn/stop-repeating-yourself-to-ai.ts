@@ -111,6 +111,5 @@ export const stopRepeatingYourselfToAi: Article = {
       label: "What is a personal context file",
       href: "/learn/what-is-a-personal-context-file",
     },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

@@ -117,6 +117,5 @@ export const syncAiMemoryAcrossTools: Article = {
       label: "Browser extension vs MCP context",
       href: "/learn/browser-extension-vs-mcp-context",
     },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

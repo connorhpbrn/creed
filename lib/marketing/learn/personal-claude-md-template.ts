@@ -91,6 +91,5 @@ export const personalClaudeMdTemplate: Article = {
     { label: "CLAUDE.md for your life", href: "/learn/claude-md-for-your-life" },
     { label: "Personal context file template", href: "/learn/personal-context-file-template" },
     { label: "Connect Creed to Claude Code", href: "/learn/connect-creed-to-claude-code" },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

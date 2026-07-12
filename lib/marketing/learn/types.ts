@@ -43,8 +43,8 @@ export type Article = {
   lead: string;
   body: ArticleBlock[];
   faq: FaqItem[];
-  // 3-5 related links: other /learn slugs (as "/learn/<slug>") and one product
-  // page (/context, /pricing, /company, or /docs).
+  // 3-5 related links: other /learn slugs (as "/learn/<slug>"). The trailing
+  // product CTA is appended by the article renderer, not stored per article.
   related: RelatedLink[];
 };
 

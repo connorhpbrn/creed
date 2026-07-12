@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { AnimatedPageTitle } from "@/components/marketing/animated-page-title";
 import {
   MarketingFooter,
   MarketingHeroBanner,
@@ -60,9 +61,10 @@ export function CompanyPageView() {
 
       <main className="mx-auto max-w-4xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
         <header className="border-b border-[var(--creed-border)] pb-10">
-          <h1 className="max-w-3xl text-[34px] font-medium leading-[1.12] tracking-[-0.02em] text-[var(--creed-text-primary)] md:text-[46px]">
-            One shared context file your whole team&apos;s agents read
-          </h1>
+          <AnimatedPageTitle
+            text="One shared context file your whole team's agents read"
+            className="max-w-3xl"
+          />
           <p className="mt-5 max-w-2xl text-[18px] leading-8 text-[var(--creed-text-secondary)]">
             The Company plan adds one shared Company Creed on top of your
             personal one. Every member&apos;s agents read the same company

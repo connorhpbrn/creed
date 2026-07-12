@@ -118,6 +118,5 @@ export const shareContextBetweenChatgptAndClaude: Article = {
       label: "Connect Creed to Claude Code",
       href: "/learn/connect-creed-to-claude-code",
     },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

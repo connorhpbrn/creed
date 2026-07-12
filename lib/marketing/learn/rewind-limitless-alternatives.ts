@@ -107,6 +107,5 @@ export const rewindLimitlessAlternatives: Article = {
     { label: "What is a personal context file", href: "/learn/what-is-a-personal-context-file" },
     { label: "Stop repeating yourself to AI", href: "/learn/stop-repeating-yourself-to-ai" },
     { label: "Memory MCP servers compared", href: "/learn/memory-mcp-servers-compared" },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

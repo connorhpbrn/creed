@@ -12,7 +12,6 @@ import { learnArticles } from "@/lib/marketing/learn";
 // both points crawlers at a redirect and splits ranking signals.
 const PUBLIC_PATHS = [
   { path: "/home", changeFrequency: "weekly" as const, priority: 1.0 },
-  { path: "/context", changeFrequency: "monthly" as const, priority: 0.8 },
   { path: "/examples", changeFrequency: "monthly" as const, priority: 0.8 },
   { path: "/pricing", changeFrequency: "monthly" as const, priority: 0.9 },
   { path: "/company", changeFrequency: "monthly" as const, priority: 0.8 },

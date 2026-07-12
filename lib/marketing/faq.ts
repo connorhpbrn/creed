@@ -107,7 +107,7 @@ export const companyFaqItems: FaqItem[] = [
   },
 ];
 
-// FAQ for the /context explainer. Phrased as direct, standalone answers
+// FAQ about personal context files (surfaced in llms-full.txt). Phrased as direct, standalone answers
 // so answer engines can quote a single item without surrounding context.
 export const contextFileFaqItems: FaqItem[] = [
   {

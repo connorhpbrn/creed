@@ -49,7 +49,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { label: "Docs", href: "/docs" },
       { label: "Learn", href: "/learn" },
-      { label: "Context", href: "/context" },
+      { label: "Bench", href: "/bench" },
       { label: "Changelog", href: "/changelog" },
     ],
   },
@@ -170,7 +170,7 @@ export function MarketingHeader({
           className={cn(
             "pointer-events-none absolute inset-0 rounded-2xl transition-opacity duration-300 ease-out",
             isScrolled
-              ? "bg-[color:var(--creed-surface)]/80 opacity-100 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.22)] backdrop-blur-md"
+              ? "bg-[color:var(--creed-surface)]/95 opacity-100 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.22)] backdrop-blur-sm"
               : "opacity-0",
           )}
         />
@@ -267,7 +267,7 @@ export function MarketingHeader({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute right-4 top-[4.65rem] flex flex-col items-end gap-2 text-white"
+              className="absolute right-4 top-[4.65rem] flex flex-col items-end gap-2 text-[var(--creed-text-primary)]"
             >
               {navGroups.map((group, gIndex) => (
                 <motion.div
@@ -704,10 +704,10 @@ function MobileNavRow({
           <motion.div
             key="items"
             initial={{ opacity: 0, width: 0 }}
-            animate={{ opacity: 1, width: "min(68vw, 24rem)" }}
+            animate={{ opacity: 1, width: "auto" }}
             exit={{ opacity: 0, width: 0 }}
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="flex items-center gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain bg-black/[0.04] px-7 py-3 backdrop-blur-[12px] [scrollbar-width:none] [touch-action:pan-x] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
+            className="flex max-w-[min(68vw,24rem)] items-center gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain bg-black/[0.04] px-7 py-3 backdrop-blur-[12px] [scrollbar-width:none] [touch-action:pan-x] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
             style={{
               WebkitBackdropFilter: "blur(12px)",
               // A flat, evenly-feathered panel rather than a radial "wheel":
@@ -738,7 +738,7 @@ function MobileNavRow({
                 <Link
                   href={item.href}
                   onClick={onNavigate}
-                  className="block whitespace-nowrap px-2.5 py-1 text-[14px] font-medium text-white transition-colors duration-200 hover:text-white/55"
+                  className="block whitespace-nowrap px-2.5 py-1 text-[14px] font-medium transition-opacity duration-200 hover:opacity-55"
                 >
                   {item.label}
                 </Link>
@@ -752,7 +752,7 @@ function MobileNavRow({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex h-9 shrink-0 items-center gap-1.5 px-3.5 text-[14px] font-medium text-white transition-colors duration-200 hover:text-white/55"
+        className="flex h-9 shrink-0 items-center gap-1.5 px-3.5 text-[14px] font-medium transition-opacity duration-200 hover:opacity-55"
       >
         {label}
         <ChevronLeft

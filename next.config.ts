@@ -87,6 +87,17 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "lh3.googleusercontent.com" },
     ],
   },
+  async redirects() {
+    return [
+      {
+        // The /context explainer was folded into the learn library; keep the
+        // old URL's search equity pointed at its replacement.
+        source: "/context",
+        destination: "/learn/what-is-a-personal-context-file",
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {

@@ -106,6 +106,5 @@ export const creedVsClaudeMemory: Article = {
     { label: "ChatGPT memory vs a personal context file", href: "/learn/creed-vs-chatgpt-memory" },
     { label: "Connect Creed to Claude Code", href: "/learn/connect-creed-to-claude-code" },
     { label: "What is a personal context file", href: "/learn/what-is-a-personal-context-file" },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

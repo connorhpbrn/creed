@@ -146,7 +146,7 @@ const brandLogoMap: Record<
 
 export function BelowHeroSections({ configured }: { configured: boolean }) {
   return (
-    <main className="bg-[var(--creed-background)] pb-12">
+    <main className="bg-[var(--creed-background)]">
       <WhyUseItSection />
       <HowCreedWorksSection />
       <GovernedCollaborationSection />

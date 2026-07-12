@@ -1,7 +1,7 @@
 "use client";
 
 // Public /examples page. The "what it looks like" companion to /docs and
-// /context: short, concrete moments where one shared file changes the answer,
+// the learn library: short, concrete moments where one shared file changes the answer,
 // grouped by the kind of work and life they fit (professional lanes first,
 // everyday and health last). Reuses the /docs sidebar: collapsible group
 // dropdowns with short sub-item labels, scrollspy, and a one-open-at-a-time
@@ -600,10 +600,7 @@ export function ExamplesPageView() {
 
       <main className="mx-auto max-w-6xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
         <div className="border-b border-[var(--creed-border)] pb-8">
-          <AnimatedPageTitle
-            text="Examples"
-            className="t-section text-[var(--creed-text-primary)]"
-          />
+          <AnimatedPageTitle text="Examples" />
           <p className="mt-5 max-w-3xl text-[17px] leading-8 text-[var(--creed-text-secondary)] md:text-[18px]">
             What changes when every AI you use reads the same file before it
             answers. You write your Creed once, each agent reads it before it

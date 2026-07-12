@@ -119,6 +119,5 @@ export const whyChatgptForgetsYou: Article = {
       label: "Creed vs ChatGPT memory",
       href: "/learn/creed-vs-chatgpt-memory",
     },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

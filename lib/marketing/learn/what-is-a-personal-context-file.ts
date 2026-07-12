@@ -7,7 +7,7 @@ export const whatIsAPersonalContextFile: Article = {
     "A personal context file is one structured profile that every AI reads before it answers you. Here is what goes in it, how it works, and why it beats retyping who you are.",
   cluster: "category",
   datePublished: "2026-07-07",
-  dateModified: "2026-07-07",
+  dateModified: "2026-07-12",
   lead:
     "A personal context file is a single, structured profile that describes who you are and how you want AI to work with you, written once and read by every AI tool you connect. Instead of re-explaining your job, your goals, and your preferences at the start of every chat, you keep them in one file that ChatGPT, Claude, Cursor, and other agents read before they answer.\n\nIt is plain text you own, usually Markdown, organized into short sections like identity, goals, work, preferences, and constraints. A good one is specific and current, not a diary. The point is not to store everything about you; it is to keep the handful of facts that actually change how an AI should respond, in a form any tool can read. Creed is a personal context file that connects to your agents over MCP, so the same profile follows you across every tool, and your agents can propose updates as they learn more about you.",
   body: [
@@ -38,7 +38,7 @@ export const whatIsAPersonalContextFile: Article = {
     },
     {
       type: "p",
-      text: "The rule that keeps it useful: specific over complete. A short profile that changes how AI replies beats a long one that reads like a resume. If a line would not change an answer, it does not belong in the file.",
+      text: "The rule that keeps it useful: specific over complete. A short profile that changes how AI replies beats a long one that reads like a resume. A good context file names real tools, real people, and real defaults, and can be read end to end in under a minute. If a line would not change an answer, it does not belong in the file.",
     },
     { type: "h2", text: "How it stays current" },
     {
@@ -57,6 +57,15 @@ export const whatIsAPersonalContextFile: Article = {
         ["Export or delete", "Limited", "Anytime, no lock-in"],
         ["Kept current by", "Opaque heuristics", "Agent proposals you approve"],
       ],
+    },
+    { type: "h2", text: "Portable, and yours" },
+    {
+      type: "p",
+      text: "A context file only pays off if it travels. Creed connects to agents like Claude Code, Codex, Cursor, and ChatGPT over MCP, and integrates with GitHub for version control, with Notion and Obsidian on the way. The same profile follows you into every tool instead of living inside one app's memory.",
+    },
+    {
+      type: "p",
+      text: "Ownership is just as literal: the file is plain Markdown you control. You bring your own AI key, your tokens stay yours, and deleting your account wipes everything. There is no lock-in.",
     },
     { type: "h2", text: "Who it is for" },
     {
@@ -85,6 +94,16 @@ export const whatIsAPersonalContextFile: Article = {
         "Keep the handful of durable facts that change how AI should respond: your identity, current goals, how you work, your preferences, and any hard constraints. Leave out session chatter and anything only true today. Specific beats complete.",
     },
     {
+      question: "Which tools does a personal context file work with?",
+      answer:
+        "Creed connects to agents like Claude Code, Codex, Cursor, and ChatGPT over MCP, and integrates with GitHub for version control. Support for Notion and Obsidian is on the way.",
+    },
+    {
+      question: "Do I own my personal context file?",
+      answer:
+        "Yes. Creed is plain Markdown that you control. You bring your own AI key, your tokens stay yours, and deleting your account wipes everything. There is no lock-in.",
+    },
+    {
       question: "Do I need to be a developer to use one?",
       answer:
         "No. The structure is the same for everyone; only the examples differ. Anyone who uses AI regularly benefits from a profile every tool reads before it answers.",
@@ -94,6 +113,5 @@ export const whatIsAPersonalContextFile: Article = {
     { label: "Personal context file template", href: "/learn/personal-context-file-template" },
     { label: "Why ChatGPT forgets you", href: "/learn/why-chatgpt-forgets-you" },
     { label: "Share context between ChatGPT and Claude", href: "/learn/share-context-between-chatgpt-and-claude" },
-    { label: "See how Creed works", href: "/context" },
   ],
 };

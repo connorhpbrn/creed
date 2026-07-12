@@ -15,7 +15,7 @@
 // Fallback contact address surfaced in legal pages, footer, and the
 // feedback menu when NEXT_PUBLIC_CONTACT_EMAIL isn't set. Forks can
 // override via the env var.
-const fallbackContactEmail = "connorchepburn@gmail.com";
+const fallbackContactEmail = "connor@hpbrn.com";
 
 export const CONTACT_EMAIL =
   process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || fallbackContactEmail;
