@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, ChevronDown, X } from "lucide-react";
 import { useCreed } from "@/components/creed/creed-provider";
 import {
   GETTING_STARTED_STEPS,
@@ -15,8 +15,9 @@ import { cn } from "@/lib/utils";
 // (--creed-surface) with a plain border. The chevron sits where a toast's
 // close button sits and expands the five steps; each checks itself off the
 // first time the user does the thing (see markGettingStartedStep call
-// sites). Once all five are done the card shows a brief all-set moment and
-// never renders again.
+// sites). Once all five are done the card turns into a toast-like
+// confirmation (the chevron becomes an X) that auto-dismisses on the toast
+// timer, or the X closes it early; either way it never renders again.
 //
 // The card publishes its rendered height as --getting-started-offset on the
 // root element; the shared <Toaster> offsets by it, so toasts always stack
@@ -24,7 +25,9 @@ import { cn } from "@/lib/utils";
 
 const COLLAPSE_PREF_KEY = "creed:getting-started-collapsed";
 const OFFSET_VAR = "--getting-started-offset";
-const COMPLETION_LINGER_MS = 2_800;
+// Matches the Toaster's duration={4000} so the completed card behaves like
+// any other toast: auto-dismisses after four seconds unless closed sooner.
+const COMPLETION_DISMISS_MS = 4_000;
 
 function ProgressRing({ done, total }: { done: number; total: number }) {
   const radius = 7;
@@ -64,12 +67,14 @@ export function GettingStartedCardView({
   expanded,
   onToggleExpanded,
   allDone = false,
+  onDismiss,
   onStepClick,
 }: {
   steps: Partial<Record<GettingStartedStepKey, boolean>>;
   expanded: boolean;
   onToggleExpanded: () => void;
   allDone?: boolean;
+  onDismiss?: () => void;
   onStepClick?: (step: GettingStartedStepKey) => void;
 }) {
   const doneCount = GETTING_STARTED_STEPS.filter(({ key }) => steps[key]).length;
@@ -78,11 +83,21 @@ export function GettingStartedCardView({
   return (
     <div className="overflow-hidden rounded-[14px] border border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[0_10px_30px_rgba(28,28,26,0.10)]">
       {allDone ? (
-        <div className="flex items-center gap-3 p-3.5">
+        // Completion: a toast-shaped confirmation. The X sits in the same
+        // slot the chevron occupied, styled like a toast close button.
+        <div className="relative flex items-center gap-3 p-3.5 pr-14">
           <ProgressRing done={total} total={total} />
-          <div className="text-[13px] font-medium leading-5 text-[var(--creed-text-primary)]">
+          <div className="flex-1 truncate text-[13px] font-medium leading-5 text-[var(--creed-text-primary)]">
             You&apos;re all set.
           </div>
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Dismiss"
+            className="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[8px] text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       ) : (
         <>
@@ -146,10 +161,14 @@ export function GettingStartedCard() {
   const gettingStarted = state.gettingStarted;
 
   const [expanded, setExpanded] = useState(false);
-  // Completion is held on screen briefly before the card leaves for good.
-  const [lingering, setLingering] = useState(false);
+  // The completion confirmation shows once the last step lands on screen and
+  // stays until dismissed (auto after the toast timer, or via the X).
+  const [showingCompletion, setShowingCompletion] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sawIncompleteRef = useRef(false);
+  const completionHandledRef = useRef(false);
+  const dismissTimerRef = useRef<number | null>(null);
 
   const steps = gettingStarted?.steps ?? {};
   const doneCount = GETTING_STARTED_STEPS.filter(({ key }) => steps[key]).length;
@@ -166,25 +185,49 @@ export function GettingStartedCard() {
     }
   }, []);
 
-  // Completing the last step while the card is on screen earns the all-set
-  // moment; arriving already-complete (page load after the fact) does not.
+  const dismiss = useCallback(() => {
+    if (dismissTimerRef.current !== null) {
+      window.clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = null;
+    }
+    setDismissed(true);
+  }, []);
+
+  // Completing the last step while the card is on screen shows the
+  // confirmation and starts the auto-dismiss timer; arriving already-complete
+  // (a page load after the fact) shows nothing. Handled exactly once, and the
+  // timer is NOT tied to this effect's lifecycle so a re-run (e.g. a sync
+  // giving `gettingStarted` a new identity) can't cancel or restart it.
   useEffect(() => {
     if (!gettingStarted) return;
     if (!allDone) {
       sawIncompleteRef.current = true;
       return;
     }
-    if (sawIncompleteRef.current && !lingering) {
-      setLingering(true);
-      const timeout = window.setTimeout(
-        () => setLingering(false),
-        COMPLETION_LINGER_MS,
+    if (sawIncompleteRef.current && !completionHandledRef.current) {
+      completionHandledRef.current = true;
+      setShowingCompletion(true);
+      dismissTimerRef.current = window.setTimeout(
+        dismiss,
+        COMPLETION_DISMISS_MS,
       );
-      return () => window.clearTimeout(timeout);
     }
-  }, [gettingStarted, allDone, lingering]);
+  }, [gettingStarted, allDone, dismiss]);
 
-  const visible = Boolean(gettingStarted) && (!allDone || lingering);
+  // Clear a pending timer if the card unmounts first.
+  useEffect(
+    () => () => {
+      if (dismissTimerRef.current !== null) {
+        window.clearTimeout(dismissTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const visible =
+    Boolean(gettingStarted) &&
+    !dismissed &&
+    (!allDone || showingCompletion);
 
   // Publish the card's live height so the toast stack sits above it. The
   // observer tracks the expand/collapse animation frame by frame.
@@ -234,7 +277,8 @@ export function GettingStartedCard() {
         steps={steps}
         expanded={expanded}
         onToggleExpanded={toggleExpanded}
-        allDone={lingering && allDone}
+        allDone={showingCompletion && allDone}
+        onDismiss={dismiss}
       />
     </div>
   );

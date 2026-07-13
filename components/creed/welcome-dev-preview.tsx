@@ -13,7 +13,10 @@ import { WelcomeDialog } from "@/components/creed/welcome-dialog";
 import { WelcomeVideoPreloader } from "@/components/creed/welcome-video-preloader";
 import { showVersionUpdateToast } from "@/components/creed/app-version-notifier";
 import { GettingStartedCardView } from "@/components/creed/getting-started-card";
-import type { GettingStartedStepKey } from "@/lib/creed-data";
+import {
+  GETTING_STARTED_STEPS,
+  type GettingStartedStepKey,
+} from "@/lib/creed-data";
 
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
@@ -43,11 +46,16 @@ function GettingStartedDevPreview() {
       ) {
         return;
       }
+      // Reset to a partial state each time it's opened so the O loop always
+      // starts from something you can click toward completion.
+      setSteps({ connect: true, review: true });
       setVisible((current) => !current);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  const allDone = GETTING_STARTED_STEPS.every(({ key }) => steps[key]);
 
   // Mirror the real card's toast-offset contract so the V toast stacks
   // above the preview exactly like production.
@@ -84,6 +92,8 @@ function GettingStartedDevPreview() {
       <GettingStartedCardView
         steps={steps}
         expanded={expanded}
+        allDone={allDone}
+        onDismiss={() => setVisible(false)}
         onToggleExpanded={() => setExpanded((current) => !current)}
         onStepClick={(step) =>
           setSteps((current) => ({ ...current, [step]: !current[step] }))
