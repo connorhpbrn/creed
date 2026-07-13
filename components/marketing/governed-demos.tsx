@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronDown, RotateCcw } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { DiffBadge, computeDiffParts, summarizeDiff } from "@/components/creed/inline-proposal-diff";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
 import { type AccentKey, type Proposal, getProposalPreviewText } from "@/lib/creed-data";
@@ -103,30 +103,25 @@ const SEED: Array<{ proposal: Proposal; base: string }> = [
 function DemoProposalDiff({
   proposal,
   existingContent,
-  onAccept,
-  onReject,
+  expanded,
 }: {
   proposal: Proposal;
   existingContent: string;
-  onAccept: () => void;
-  onReject: () => void;
+  expanded: boolean;
 }) {
-  const [expanded, setExpanded] = useState(true);
   const proposed = useMemo(() => getProposalPreviewText(proposal.draft), [proposal.draft]);
   const parts = useMemo(() => computeDiffParts(existingContent, proposed), [existingContent, proposed]);
   const stats = useMemo(() => summarizeDiff(parts), [parts]);
 
+  // Display only: the section auto-plays the review cycle, so nothing here is
+  // clickable. The chevron and the Reject / Accept controls are presentational.
   return (
     <div className="rounded-[14px] border border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[0_8px_24px_rgba(28,28,26,0.04)]">
       <div className="flex items-center justify-between gap-3 py-2 pl-3 pr-2">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="group/diff flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-[var(--creed-text-secondary)]"
-        >
+        <div className="flex min-w-0 flex-1 items-center gap-2 text-sm text-[var(--creed-text-secondary)]">
           <ChevronDown
             className={cn(
-              "h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)] transition-all duration-200 group-hover/diff:text-[var(--creed-text-primary)]",
+              "h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
               expanded ? "rotate-0" : "-rotate-90"
             )}
           />
@@ -137,24 +132,14 @@ function DemoProposalDiff({
             <DiffBadge tone="added" count={stats.added} size="md" />
             <DiffBadge tone="removed" count={stats.removed} size="md" />
           </span>
-        </button>
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={onReject}
-            aria-label="Reject"
-            className="inline-flex h-7 items-center rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
-          >
+        </div>
+        <div className="flex shrink-0 items-center gap-1" aria-hidden="true">
+          <span className="inline-flex h-7 items-center rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)]">
             Reject
-          </button>
-          <button
-            type="button"
-            onClick={onAccept}
-            aria-label="Accept"
-            className="inline-flex h-7 items-center rounded-md bg-[var(--creed-accent)] px-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--creed-accent-hover)]"
-          >
+          </span>
+          <span className="inline-flex h-7 items-center rounded-md bg-[var(--creed-accent)] px-2.5 text-sm font-medium text-white">
             Accept
-          </button>
+          </span>
         </div>
       </div>
       <AnimatePresence initial={false}>
@@ -185,28 +170,35 @@ function DemoProposalDiff({
 
 export function ProposalDemo() {
   const [present, setPresent] = useState<string[]>(SEED.map((s) => s.proposal.id));
+  // The card enters collapsed and expands mid-cycle; driven here (not inside
+  // the card) so the whole loop is self-playing.
+  const [expanded, setExpanded] = useState(false);
 
   const live = useMemo(() => SEED.filter((s) => present.includes(s.proposal.id)), [present]);
   const active = live[0];
-
-  const remove = (id: string) => setPresent((prev) => prev.filter((p) => p !== id));
-  const reset = () => setPresent(SEED.map((s) => s.proposal.id));
-
-  // Auto-loop like the other landing demos: each proposal resolves on a timer
-  // and the caught-up state replays, while clicks still work and simply jump
-  // the loop ahead.
   const activeId = active?.proposal.id ?? null;
+
+  // Auto-play, no clicks: each proposal enters collapsed, expands after a
+  // beat, then resolves and advances to the next. The caught-up state holds
+  // briefly, then the whole loop replays on its own - no replay button.
   useEffect(() => {
-    const id = window.setTimeout(
-      () =>
-        setPresent((prev) =>
-          activeId
-            ? prev.filter((p) => p !== activeId)
-            : SEED.map((s) => s.proposal.id),
-        ),
-      activeId ? 3600 : 2600,
+    if (!activeId) {
+      const replay = window.setTimeout(
+        () => setPresent(SEED.map((s) => s.proposal.id)),
+        2200,
+      );
+      return () => window.clearTimeout(replay);
+    }
+    setExpanded(false);
+    const expand = window.setTimeout(() => setExpanded(true), 650);
+    const advance = window.setTimeout(
+      () => setPresent((prev) => prev.filter((p) => p !== activeId)),
+      3600,
     );
-    return () => window.clearTimeout(id);
+    return () => {
+      window.clearTimeout(expand);
+      window.clearTimeout(advance);
+    };
   }, [activeId]);
 
   return (
@@ -223,8 +215,7 @@ export function ProposalDemo() {
             <DemoProposalDiff
               proposal={active.proposal}
               existingContent={active.base}
-              onAccept={() => remove(active.proposal.id)}
-              onReject={() => remove(active.proposal.id)}
+              expanded={expanded}
             />
           </motion.div>
         ) : (
@@ -240,14 +231,6 @@ export function ProposalDemo() {
               <Check className="h-4 w-4" />
             </span>
             <div className="text-[14px] font-medium text-[var(--creed-text-primary)]">You are all caught up</div>
-            <button
-              type="button"
-              onClick={reset}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface)] px-2.5 text-[12px] font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
-            >
-              <RotateCcw className="h-3 w-3" />
-              Replay
-            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -255,14 +238,11 @@ export function ProposalDemo() {
   );
 }
 
-function ApprovalToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+// Presentational only - the demo flips it on a timer, so it isn't clickable.
+function ApprovalToggle({ on }: { on: boolean }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label="Require approval for agent edits"
-      onClick={onToggle}
+    <div
+      aria-hidden="true"
       className={cn(
         "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
         on ? "bg-[#16A34A]" : "bg-[#DC2626]"
@@ -274,7 +254,7 @@ function ApprovalToggle({ on, onToggle }: { on: boolean; onToggle: () => void })
           on ? "left-[22px]" : "left-0.5"
         )}
       />
-    </button>
+    </div>
   );
 }
 
@@ -304,7 +284,7 @@ export function DirectEditDemo() {
           <div className="text-[14px] font-medium text-[var(--creed-text-primary)]">Require approval for agent edits</div>
           <div className="mt-0.5 text-[13px] text-[var(--creed-text-secondary)]">Review proposed edits first.</div>
         </div>
-        <ApprovalToggle on={approval} onToggle={() => setApproval((v) => !v)} />
+        <ApprovalToggle on={approval} />
       </div>
 
       <div className="rounded-[14px] border border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[0_8px_24px_rgba(28,28,26,0.04)]">

@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowUp, Check, ChevronDown } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, X } from "lucide-react";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
 import {
   DiffBadge,
@@ -234,7 +234,7 @@ export function ReadDemo() {
           >
             <div className="inline-flex items-center gap-2 rounded-[14px] bg-[var(--creed-surface-raised)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--creed-text-secondary)]">
               <CreedGlyph className="h-3 w-3" />
-              <span>Read creed.md</span>
+              <span>Read Creed</span>
               {step >= 3 ? (
                 <Check className="h-3 w-3 text-[var(--creed-success)]" />
               ) : (
@@ -344,26 +344,30 @@ function MiniProposalDiff({
           itemClassName="h-5 w-5"
           maxVisible={1}
         />
-        <span className="text-[var(--creed-text-tertiary)]">proposed</span>
-        <span className="text-[var(--creed-text-tertiary)]">·</span>
         <span className="inline-flex items-center gap-1">
           <DiffBadge tone="added" count={stats.added} size="md" />
           <DiffBadge tone="removed" count={stats.removed} size="md" />
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-1">
+          {/* Mobile is tight, so the labels collapse to icons (X / tick) below
+              the sm breakpoint and read as full buttons from sm up. */}
           <button
             type="button"
             onClick={onReject}
-            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
+            aria-label="Reject"
+            className="inline-flex h-7 items-center justify-center gap-1 rounded-md px-1.5 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] sm:px-2"
           >
-            Reject
+            <X className="h-3.5 w-3.5 sm:hidden" />
+            <span className="hidden sm:inline">Reject</span>
           </button>
           <button
             type="button"
             onClick={onAccept}
-            className="inline-flex h-7 items-center gap-1 rounded-md bg-[var(--creed-accent)] px-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--creed-accent-hover)]"
+            aria-label="Accept"
+            className="inline-flex h-7 items-center justify-center gap-1 rounded-md bg-[var(--creed-accent)] px-1.5 text-sm font-medium text-white transition-colors hover:bg-[var(--creed-accent-hover)] sm:px-2.5"
           >
-            Accept
+            <Check className="h-3.5 w-3.5 sm:hidden" />
+            <span className="hidden sm:inline">Accept</span>
           </button>
         </div>
       </div>
