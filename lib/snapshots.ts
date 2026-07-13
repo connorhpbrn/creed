@@ -5,6 +5,7 @@ import {
   type OverallState,
   type Snapshot,
 } from "./types";
+import { unstable_cache } from "next/cache";
 import { readSnapshots } from "./store";
 
 export const DAYS = 90;
@@ -71,22 +72,46 @@ function bucket(
   return result;
 }
 
+export type StatusDashboard = {
+  byComponent: Record<ComponentName, DailyBucket[]>;
+  overall: OverallState;
+};
+
+async function loadStatusDashboard(): Promise<StatusDashboard> {
+  const snapshots = await readSnapshots();
+  const byComponent = bucket(snapshots);
+  const latest = snapshots[0];
+  if (!latest) return { byComponent, overall: "ok" };
+
+  const oks = COMPONENTS.map(({ name }) => latest.components[name]?.ok);
+  return {
+    byComponent,
+    overall: oks.every(Boolean) ? "ok" : oks.some(Boolean) ? "degraded" : "down",
+  };
+}
+
+// Probes run every five minutes, so recomputing this on every public page view
+// only burns Blob reads and function time without making the page more current.
+const loadCachedStatusDashboard = unstable_cache(loadStatusDashboard, ["status-dashboard"], {
+  revalidate: 300,
+});
+
+export async function getStatusDashboard(): Promise<StatusDashboard> {
+  return process.env.NODE_ENV === "production"
+    ? loadCachedStatusDashboard()
+    : loadStatusDashboard();
+}
+
 export async function getBucketsByComponent(): Promise<
   Record<ComponentName, DailyBucket[]>
 > {
-  return bucket(await readSnapshots());
+  return (await getStatusDashboard()).byComponent;
 }
 
 // Overall current status = the most recent snapshot. all components ok → ok;
 // none ok → down; mixed → degraded. No snapshots yet → ok (cold start).
 export async function getOverallState(): Promise<OverallState> {
-  const snaps = await readSnapshots();
-  const latest = snaps[0];
-  if (!latest) return "ok";
-  const oks = COMPONENTS.map(({ name }) => latest.components[name]?.ok);
-  if (oks.every(Boolean)) return "ok";
-  if (oks.some(Boolean)) return "degraded";
-  return "down";
+  return (await getStatusDashboard()).overall;
 }
 
 export function componentUptime(buckets: DailyBucket[]): number {

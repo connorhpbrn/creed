@@ -1,11 +1,13 @@
 import type { Snapshot } from "./types";
 
 // Snapshot store. Prefer Redis for cheap append/list operations. If a Redis
-// resource is not attached yet, fall back to private Vercel Blob day files. In
-// local dev with neither env present, use a module-level in-memory ring buffer.
+// resource is not attached yet, fall back to one private Vercel Blob snapshot
+// document. In local dev with neither env present, use a module-level in-memory
+// ring buffer.
 const MAX = 26_000; // ~90 days at 5-min cadence + headroom
 const SNAPSHOT_KEY = "status:snapshots";
-const BLOB_PREFIX = "status/snapshots";
+const SNAPSHOT_BLOB_PATH = "status/snapshots.json";
+const LEGACY_BLOB_PREFIX = "status/snapshots";
 
 const redisUrl =
   process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
@@ -31,9 +33,7 @@ const serializeSnapshot = (snapshot: Snapshot): string =>
 const deserializeSnapshot = (json: string): Snapshot =>
   JSON.parse(json) as Snapshot;
 
-const dayKeyOf = (iso: string): string => iso.slice(0, 10);
-
-const dayPath = (day: string): string => `${BLOB_PREFIX}/${day}.json`;
+const legacyDayPath = (day: string): string => `${LEGACY_BLOB_PREFIX}/${day}.json`;
 
 function dayKeys(): string[] {
   const keys: string[] = [];
@@ -59,19 +59,38 @@ async function streamToText(stream: ReadableStream<Uint8Array>): Promise<string>
   return text + decoder.decode();
 }
 
-async function readBlobDay(day: string): Promise<Snapshot[]> {
+async function readBlob(
+  pathname: string,
+  useCache: boolean
+): Promise<Snapshot[] | null> {
   const { get } = await import("@vercel/blob");
-  const result = await get(dayPath(day), {
+  const result = await get(pathname, {
     access: "private",
-    useCache: false,
+    useCache,
   });
-  if (!result || result.statusCode !== 200) return [];
+  if (!result || result.statusCode !== 200) return null;
   return JSON.parse(await streamToText(result.stream)) as Snapshot[];
 }
 
-async function writeBlobDay(day: string, snapshots: Snapshot[]): Promise<void> {
+async function readLegacyBlobSnapshots(): Promise<Snapshot[]> {
+  const byDay = await Promise.all(
+    dayKeys().map(async (day) => (await readBlob(legacyDayPath(day), true)) ?? [])
+  );
+  return byDay.flat().sort((a, b) => b.t.localeCompare(a.t)).slice(0, MAX);
+}
+
+async function readBlobSnapshots(useCache = true): Promise<Snapshot[]> {
+  const snapshots = await readBlob(SNAPSHOT_BLOB_PATH, useCache);
+  if (snapshots !== null) return snapshots;
+
+  // One-time compatibility path for the first probe after this deploy. The
+  // next write promotes the historical day files into the single document.
+  return readLegacyBlobSnapshots();
+}
+
+async function writeBlobSnapshots(snapshots: Snapshot[]): Promise<void> {
   const { put } = await import("@vercel/blob");
-  await put(dayPath(day), JSON.stringify(snapshots), {
+  await put(SNAPSHOT_BLOB_PATH, JSON.stringify(snapshots), {
     access: "private",
     allowOverwrite: true,
     contentType: "application/json",
@@ -116,10 +135,11 @@ export async function pushSnapshot(s: Snapshot): Promise<void> {
     return;
   }
   if (hasBlob) {
-    const day = dayKeyOf(s.t);
-    const snapshots = await readBlobDay(day);
+    // A probe is the sole writer and must not prepend to a CDN-stale document.
+    const snapshots = await readBlobSnapshots(false);
     snapshots.unshift(s);
-    await writeBlobDay(day, snapshots);
+    if (snapshots.length > MAX) snapshots.length = MAX;
+    await writeBlobSnapshots(snapshots);
     return;
   }
   mem.unshift(json);
@@ -133,8 +153,7 @@ export async function readSnapshots(): Promise<Snapshot[]> {
     return raw.map(parseSnapshot);
   }
   if (hasBlob) {
-    const byDay = await Promise.all(dayKeys().map(readBlobDay));
-    return byDay.flat().sort((a, b) => b.t.localeCompare(a.t));
+    return readBlobSnapshots();
   }
   return mem.map(deserializeSnapshot);
 }
@@ -145,11 +164,7 @@ export async function snapshotCount(): Promise<number> {
     return redis.llen(SNAPSHOT_KEY);
   }
   if (hasBlob) {
-    const counts = await Promise.all(dayKeys().map(async (day) => {
-      const snapshots = await readBlobDay(day);
-      return snapshots.length;
-    }));
-    return counts.reduce((total, count) => total + count, 0);
+    return (await readBlobSnapshots()).length;
   }
   return mem.length;
 }

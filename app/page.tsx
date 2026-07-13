@@ -1,7 +1,6 @@
 import { COMPONENTS } from "@/lib/types";
 import {
-  getBucketsByComponent,
-  getOverallState,
+  getStatusDashboard,
   overallUptime,
   fmtPct,
 } from "@/lib/snapshots";
@@ -14,10 +13,7 @@ import { DevPulse } from "@/components/dev-pulse";
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const [byComponent, overall] = await Promise.all([
-    getBucketsByComponent(),
-    getOverallState(),
-  ]);
+  const { byComponent, overall } = await getStatusDashboard();
   const uptime = overallUptime(byComponent);
   const isDev = process.env.NODE_ENV !== "production";
 
