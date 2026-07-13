@@ -116,7 +116,7 @@ function DemoCard({
   return (
     <div
       className={cn(
-        "flex w-full flex-col rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-4 shadow-[0_8px_24px_rgba(28,28,26,0.06)]",
+        "flex w-full flex-col rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-4 shadow-[0_8px_24px_rgba(28,28,26,0.04)]",
         className,
       )}
     >
