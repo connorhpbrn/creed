@@ -58,7 +58,7 @@ function Block({ block }: { block: ArticleBlock }) {
               key={i}
               className="flex gap-3 text-[16px] leading-7 text-[var(--creed-text-secondary)]"
             >
-              <span className="mt-[2px] shrink-0 text-[14px] font-medium tabular-nums text-[var(--creed-text-tertiary)]">
+              <span className="mt-[2px] shrink-0 text-[14px] font-medium tabular-nums text-[#2563EB]">
                 {i + 1}.
               </span>
               <span>{item}</span>
@@ -115,7 +115,7 @@ function Block({ block }: { block: ArticleBlock }) {
       );
     case "code":
       return (
-        <pre className="mt-6 overflow-x-auto rounded-[14px] border border-[var(--creed-border)] bg-[var(--creed-surface)] p-4 font-mono text-[13px] leading-6 text-[var(--creed-text-primary)]">
+        <pre className="mt-6 overflow-x-auto rounded-[16px] bg-[var(--creed-surface)] p-5 font-mono text-[13px] leading-6 text-[var(--creed-text-primary)]">
           <code>{block.code}</code>
         </pre>
       );
@@ -139,7 +139,7 @@ export function LearnArticle({ article }: { article: Article }) {
         <article>
           <AnimatedPageTitle text={article.title} />
 
-          <div className="mt-6 border-l-2 border-[var(--creed-accent,#2563EB)] pl-5">
+          <div className="mt-6">
             {leadParagraphs.map((para, i) => (
               <p
                 key={i}

@@ -1,41 +1,12 @@
 import { NextResponse } from "next/server";
 
-const STATUS_URL = "https://status.creed.md";
+const STATUS_URL = "https://status.creed.md/api/summary";
 
 type StatusColor = "green" | "yellow" | "red";
 
-function stripTags(value: string) {
-  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function colorFromLabel(label: string): StatusColor {
-  const normalized = label.toLowerCase();
-  if (
-    normalized.includes("operational") ||
-    normalized.includes("resolved") ||
-    normalized.includes("healthy")
-  ) {
-    return "green";
-  }
-  if (
-    normalized.includes("outage") ||
-    normalized.includes("down") ||
-    normalized.includes("disruption")
-  ) {
-    return "red";
-  }
-  return "yellow";
-}
-
-function labelFromHtml(html: string) {
-  const statusMatch = html.match(
-    /role="status"[\s\S]*?<span[^>]*font-semibold[^>]*>([\s\S]*?)<\/span>/i,
-  );
-  return statusMatch ? stripTags(statusMatch[1]) : null;
-}
-
-// Status is identical for every visitor, so the CDN serves it: one upstream
-// fetch per minute globally instead of one per client per poll.
+// Status is identical for every visitor, so the CDN serves it. The upstream
+// summary is JSON rather than the rendered status page, avoiding an expensive
+// page render and Blob-history scan for a one-line marketing badge.
 const CACHE_HEADERS = {
   "Cache-Control": "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
 } as const;
@@ -51,11 +22,18 @@ export async function GET() {
       );
     }
 
-    const html = await response.text();
-    const label = labelFromHtml(html) ?? "Status unavailable";
+    const body: unknown = await response.json();
+    const payload = body && typeof body === "object" ? body as {
+      label?: unknown;
+      color?: unknown;
+    } : null;
+    const label = typeof payload?.label === "string" ? payload.label : "Status unavailable";
+    const color: StatusColor = payload?.color === "green" || payload?.color === "red"
+      ? payload.color
+      : "yellow";
 
     return NextResponse.json(
-      { label, color: colorFromLabel(label) },
+      { label, color },
       { headers: CACHE_HEADERS },
     );
   } catch {
