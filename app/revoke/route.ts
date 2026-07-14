@@ -55,7 +55,7 @@ export async function POST(request: Request) {
         .from("creed_mcp_clients")
         .delete()
         .eq("user_id", result.userId)
-        .eq("client_id", "cli");
+        .or(`client_id.eq.cli,client_id.like.cli-${result.tokenId}-%`);
     }
   }
 

@@ -2314,6 +2314,29 @@ export async function recordMcpClientUsage(
   );
 }
 
+export async function recordCliAgentUsage(
+  client: unknown,
+  userId: string,
+  tokenId: string,
+  agentIcon: AgentIconKind,
+  creedId: string,
+) {
+  const db = client as SupabaseLikeClient;
+  const now = new Date().toISOString();
+  const { error } = await db.from("creed_mcp_clients").upsert(
+    {
+      creed_id: creedId,
+      user_id: userId,
+      client_id: `cli-${tokenId}-${agentIcon}`,
+      client_name: `Creed CLI via ${agentIcon}`,
+      last_seen_at: now,
+      updated_at: now,
+    },
+    { onConflict: "creed_id,client_id" },
+  );
+  assertNoError(error, "Could not record CLI agent usage.");
+}
+
 export async function buildAgentPayloadForToken(
   client: unknown,
   token: string,

@@ -4,7 +4,11 @@ import test from "node:test";
 import { connectCreed, listAllPrompts, listAllResources, listAllTools } from "../src/mcp/client.js";
 
 test("discovers and invokes an MCP tool that the CLI has never defined", async (context) => {
+  let sawAgentAttribution = false;
   const server = createServer(async (request, response) => {
+    if (request.headers["x-creed-cli-agent"] === "codex") {
+      sawAgentAttribution = true;
+    }
     if (request.method === "GET") {
       response.writeHead(405).end();
       return;
@@ -36,7 +40,11 @@ test("discovers and invokes an MCP tool that the CLI has never defined", async (
   assert(address && typeof address !== "string");
   process.env.CREED_CONFIG_DIR = `/tmp/creed-cli-mcp-test-${process.pid}`;
 
-  const connection = await connectCreed(`http://127.0.0.1:${address.port}/mcp`, true);
+  const connection = await connectCreed(
+    `http://127.0.0.1:${address.port}/mcp`,
+    true,
+    "codex",
+  );
   context.after(() => connection.close());
   const [tools, resources, prompts] = await Promise.all([
     listAllTools(connection.client),
@@ -48,5 +56,6 @@ test("discovers and invokes an MCP tool that the CLI has never defined", async (
   assert.equal(prompts[0]?.name, "future-prompt");
   const result = await connection.client.callTool({ name: "future_creed_tool", arguments: { value: "live" } });
   assert.deepEqual(result.content, [{ type: "text", text: '{"echoed":"live"}' }]);
+  assert.equal(sawAgentAttribution, true);
   delete process.env.CREED_CONFIG_DIR;
 });

@@ -56,6 +56,15 @@ const CLI_SETUP_STEPS = [
 ];
 
 type ConnectionMode = "mcp" | "cli";
+type CliConnectionStatus = {
+  connected: boolean;
+  agents: Record<string, { lastSeenAt: string | null }>;
+};
+
+const EMPTY_CLI_STATUS: CliConnectionStatus = {
+  connected: false,
+  agents: {},
+};
 
 export function ConnectionsScreen() {
   const router = useRouter();
@@ -64,7 +73,7 @@ export function ConnectionsScreen() {
   const [setupOpen, setSetupOpen] = useState(false);
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>("mcp");
   const [agentTypeFilter, setAgentTypeFilter] = useState<string>("all");
-  const [cliConnected, setCliConnected] = useState(false);
+  const [cliStatus, setCliStatus] = useState<CliConnectionStatus>(EMPTY_CLI_STATUS);
 
   async function copyValue(key: string, value: string) {
     await navigator.clipboard.writeText(value);
@@ -78,11 +87,11 @@ export function ConnectionsScreen() {
     }
   }, [router, state.sections.length]);
 
-  const { mcp: mcpAgentClients, cli: cliClients } = useMemo(
-    () => splitConnectionClients(state.mcpClients),
+  const mcpAgentClients = useMemo(
+    () => splitConnectionClients(state.mcpClients).mcp,
     [state.mcpClients],
   );
-  const cliLastSeen = cliClients[0]?.lastUsed;
+  const cliConnected = cliStatus.connected;
   const connected = mcpAgentClients.length > 0;
   const mcpStatusLabel = connected ? "Connected" : "Not connected via MCP";
   const showMcpStack = connected;
@@ -90,7 +99,7 @@ export function ConnectionsScreen() {
   useEffect(() => {
     const creedId = state.creedId;
     if (!creedId) {
-      setCliConnected(false);
+      setCliStatus(EMPTY_CLI_STATUS);
       return;
     }
 
@@ -101,18 +110,23 @@ export function ConnectionsScreen() {
       controller = new AbortController();
       try {
         const response = await fetch(
-          `/api/app/mcp/test?icon=cli&creedId=${encodeURIComponent(creedId)}`,
+          `/api/app/mcp/cli-status?creedId=${encodeURIComponent(creedId)}`,
           { cache: "no-store", signal: controller.signal },
         );
         const payload = (await response.json().catch(() => ({}))) as {
           connected?: boolean;
+          agents?: Record<string, { lastSeenAt: string | null }>;
         };
         if (!disposed) {
-          setCliConnected(response.ok && payload.connected === true);
+          setCliStatus(
+            response.ok && payload.connected === true
+              ? { connected: true, agents: payload.agents ?? {} }
+              : EMPTY_CLI_STATUS,
+          );
         }
       } catch (error) {
         if (!disposed && !(error instanceof DOMException && error.name === "AbortError")) {
-          setCliConnected(false);
+          setCliStatus(EMPTY_CLI_STATUS);
         }
       }
     };
@@ -470,14 +484,13 @@ export function ConnectionsScreen() {
               connection,
               mcpAgentClients,
             );
+            const cliAgentStatus = cliStatus.agents[connection.icon];
             const cardConnected = connectionMode === "cli"
-              ? cliConnected
+              ? Boolean(cliAgentStatus)
               : isConnected;
             const cardLastSeen = connectionMode === "mcp"
               ? lastSeen
-              : cliConnected
-                ? cliLastSeen
-                : undefined;
+              : cliAgentStatus?.lastSeenAt ?? undefined;
             return (
               <ConnectionCard
                 key={connection.id}

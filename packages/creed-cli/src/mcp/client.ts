@@ -13,14 +13,23 @@ export type ConnectedCreedClient = {
   close(): Promise<void>;
 };
 
-export async function connectCreed(serverUrl: string, quiet = false): Promise<ConnectedCreedClient> {
+export async function connectCreed(
+  serverUrl: string,
+  quiet = false,
+  agent?: string,
+): Promise<ConnectedCreedClient> {
   const callback = await createCallbackListener();
   const provider = new CreedOAuthProvider(serverUrl, callback.redirectUrl, quiet);
   await provider.load();
 
   const makeConnection = async (): Promise<{ client: Client; transport: StreamableHTTPClientTransport }> => {
     const client = new Client({ name: "creed-cli", version: CLI_VERSION }, { capabilities: {} });
-    const transport = new StreamableHTTPClientTransport(new URL(serverUrl), { authProvider: provider });
+    const transport = new StreamableHTTPClientTransport(new URL(serverUrl), {
+      authProvider: provider,
+      requestInit: agent
+        ? { headers: { "X-Creed-CLI-Agent": agent } }
+        : undefined,
+    });
     await client.connect(transport);
     return { client, transport };
   };
@@ -37,7 +46,12 @@ export async function connectCreed(serverUrl: string, quiet = false): Promise<Co
       if (expectedState && result.state !== expectedState) {
         throw new CliError("OAuth state validation failed. Login was cancelled for your safety.");
       }
-      const transport = new StreamableHTTPClientTransport(new URL(serverUrl), { authProvider: provider });
+      const transport = new StreamableHTTPClientTransport(new URL(serverUrl), {
+        authProvider: provider,
+        requestInit: agent
+          ? { headers: { "X-Creed-CLI-Agent": agent } }
+          : undefined,
+      });
       await transport.finishAuth(result.code);
       const connected = await makeConnection();
       await callback.close();

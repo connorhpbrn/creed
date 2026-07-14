@@ -447,5 +447,10 @@ export async function revokeOAuthToken(token: string, clientId: string) {
     .eq("id", row.id);
   if (revokeError) return { ok: false as const, error: "server_error" };
 
-  return { ok: true as const, userId: row.user_id, clientId: row.client_id };
+  return {
+    ok: true as const,
+    userId: row.user_id,
+    clientId: row.client_id,
+    tokenId: row.id,
+  };
 }

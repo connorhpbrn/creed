@@ -17,6 +17,7 @@ import {
   loadCreedState,
   loadCompanyCreedState,
   recordMcpClientUsage,
+  recordCliAgentUsage,
   createBlankCreedState,
   getAvatarInitials,
 } from "@/lib/creed-backend";
@@ -42,12 +43,31 @@ export const dynamic = "force-dynamic";
 const MCP_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version, X-Creed-CLI-Agent",
   // Browser-based clients (ChatGPT web, Claude.ai) can only read the
   // WWW-Authenticate challenge off a cross-origin 401 if it's explicitly
   // exposed; without this they can't discover where to start the OAuth flow.
   "Access-Control-Expose-Headers": "WWW-Authenticate, Mcp-Session-Id",
 } as const;
+
+const CLI_AGENT_IDS = new Set([
+  "chatgpt",
+  "claude",
+  "grok",
+  "whirl",
+  "claudecode",
+  "codex",
+  "cursor",
+  "opencode",
+  "devin",
+  "replit",
+  "v0",
+  "factory",
+  "openclaw",
+  "hermes",
+  "manus",
+  "custom",
+]);
 
 // Injected into the model's context at connect time via the initialize
 // response. Carries the read-before-work / propose-narrowly contract so a
@@ -2217,6 +2237,25 @@ export async function POST(request: Request) {
     resolveMcpAgentName(firstRequest ?? {}, firstToolArgs, resolved.clientName) ??
     resolved.clientName;
   await recordMcpClientUsage(admin as never, userId, clientName, state.creedId);
+  const cliAgentHeader = request.headers
+    .get("x-creed-cli-agent")
+    ?.trim()
+    .toLowerCase();
+  const cliAgentIcon = getAgentIconKind(cliAgentHeader);
+  if (
+    getAgentIconKind(resolved.clientName) === "cli" &&
+    cliAgentHeader &&
+    state.creedId &&
+    CLI_AGENT_IDS.has(cliAgentHeader)
+  ) {
+    await recordCliAgentUsage(
+      admin as never,
+      userId,
+      resolved.tokenId,
+      cliAgentIcon,
+      state.creedId,
+    );
+  }
 
   const results = (
     await Promise.all(requests.map((rpcRequest) => handleRpcRequest(request, rpcRequest, state, userData.user as User, clientName)))

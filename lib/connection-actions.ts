@@ -22,9 +22,10 @@ export function splitConnectionClients(clients: McpClient[]) {
 }
 
 export function getCliConnectionPresentation(
+  connectionId: string,
   connectionName: string,
 ): ConnectionPresentation {
-  const command = "npx creed-cli call read_creed --json";
+  const command = `npx creed-cli --agent ${connectionId} call read_creed --json`;
   return {
     hint: `Use Creed CLI with ${connectionName}. The first run opens the Creed OAuth screen, then the same command reads your live context whenever the agent needs it.`,
     primary: {

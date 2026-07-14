@@ -18,17 +18,17 @@ test("keeps the CLI identity out of the MCP connection roster", () => {
 });
 
 test("CLI mode always offers a prompt followed by the executable command", () => {
-  const presentation = getCliConnectionPresentation("Codex");
+  const presentation = getCliConnectionPresentation("codex", "Codex");
 
   assert.deepEqual(presentation.primary, {
     kind: "copy",
     label: "Copy prompt",
-    value: "Use the Creed CLI for my personal context. Before meaningful work, run `npx creed-cli call read_creed --json`, complete the browser authorization if prompted, and use the returned Creed to shape your response.",
+    value: "Use the Creed CLI for my personal context. Before meaningful work, run `npx creed-cli --agent codex call read_creed --json`, complete the browser authorization if prompted, and use the returned Creed to shape your response.",
   });
   assert.deepEqual(presentation.secondary, {
     kind: "copy",
     label: "Copy command",
-    value: "npx creed-cli call read_creed --json",
+    value: "npx creed-cli --agent codex call read_creed --json",
   });
 });
 

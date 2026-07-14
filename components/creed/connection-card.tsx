@@ -83,6 +83,15 @@ const AGENT_DOCS_ANCHORS: Record<string, string> = {
 // Compacts the backend's relative-time strings ("2 days ago", "5 min ago",
 // "3h ago", "just now") to the card's short form ("2d", "5m", "3h", "now").
 function compactLastSeen(value: string) {
+  const timestamp = Date.parse(value);
+  if (Number.isFinite(timestamp)) {
+    const minutes = Math.max(Math.round((Date.now() - timestamp) / 60_000), 0);
+    if (minutes < 1) return "now";
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+    return `${Math.round(hours / 24)}d`;
+  }
   if (value === "just now") return "now";
   const match = value.match(/^(\d+)\s*(min|h|day)/);
   if (!match) return value;
@@ -211,7 +220,7 @@ export function ConnectionCard({
   // lib/connection-actions.ts for why they don't ride the server payload),
   // with the server definition as fallback and a plain Copy URL as the floor.
   const presentation = mode === "cli"
-    ? getCliConnectionPresentation(connection.name)
+    ? getCliConnectionPresentation(connection.id, connection.name)
     : getConnectionPresentation(connection.id, mcpUrl);
   const primaryAction: ConnectionAction = presentation.primary ??
     connection.primaryAction ?? {

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   getGrantedClientIds,
   hasActiveConnectionIcon,
+  resolveCliAgentStatuses,
 } from "../lib/mcp-connection-status.ts";
 
 test("connection status includes only tokens granted to the active Creed", () => {
@@ -59,4 +60,38 @@ test("a different specifically named client cannot borrow a roster identity", ()
     }),
     false,
   );
+});
+
+test("CLI attribution is bound to an active OAuth token", () => {
+  const statuses = resolveCliAgentStatuses(
+    new Set(["active-token"]),
+    [
+      {
+        clientId: "cli-expired-token-claude",
+        lastSeenAt: "2026-07-14T12:00:00.000Z",
+      },
+      {
+        clientId: "cli-active-token-codex",
+        lastSeenAt: "2026-07-14T13:00:00.000Z",
+      },
+    ],
+  );
+
+  assert.deepEqual(statuses, {
+    codex: { lastSeenAt: "2026-07-14T13:00:00.000Z" },
+  });
+});
+
+test("CLI attribution keeps the newest use across active sessions", () => {
+  const statuses = resolveCliAgentStatuses(
+    new Set(["token-a", "token-b"]),
+    [
+      { clientId: "cli-token-a-codex", lastSeenAt: "2026-07-14T12:00:00.000Z" },
+      { clientId: "cli-token-b-codex", lastSeenAt: "2026-07-14T13:00:00.000Z" },
+    ],
+  );
+
+  assert.deepEqual(statuses, {
+    codex: { lastSeenAt: "2026-07-14T13:00:00.000Z" },
+  });
 });

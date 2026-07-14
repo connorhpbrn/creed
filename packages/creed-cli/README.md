@@ -53,13 +53,16 @@ creed creed_get_section --section-id goals
 For scripts and coding agents, use JSON mode:
 
 ```bash
-creed tools --json
-creed call creed_search --args '{"query":"pricing","limit":5}' --json
-printf '%s' '{"sectionId":"goals"}' | creed call creed_get_section --json
+creed --agent codex tools --json
+creed --agent codex call creed_search --args '{"query":"pricing","limit":5}' --json
+printf '%s' '{"sectionId":"goals"}' | creed --agent codex call creed_get_section --json
 ```
 
 JSON is written to stdout and diagnostics are written to stderr. Interactive
 formatting and ANSI colour are disabled automatically outside a terminal.
+The per-agent commands copied from `creed.md/connections` include `--agent`
+automatically so the dashboard can show real CLI attribution and last-seen
+times. Omit it for un-attributed manual terminal use.
 
 ## Self-hosted Creed
 

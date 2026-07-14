@@ -186,6 +186,7 @@ const sections: DocsSection[] = [
       "Run without installing with npx creed-cli.",
       "Check the connection and live capability counts with creed doctor.",
       "List exact tool names with creed tools, or call one with creed call read_creed.",
+      "Use the per-agent --agent ID from the Connections page for attributed CLI status and last-seen times.",
       "Use --json for scripts and coding agents. Diagnostics stay on stderr and structured output stays on stdout.",
       "Run creed logout to revoke the OAuth grant and remove local credentials.",
     ],

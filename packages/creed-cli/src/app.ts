@@ -21,16 +21,19 @@ async function readStdin(): Promise<string> {
 }
 
 function usage(): string {
-  return `Usage: creed [command]\n\nCommands:\n  login                  Connect through Creed OAuth\n  logout                 Revoke and remove this connection\n  status                  Show local connection status\n  doctor                  Verify OAuth, MCP, tools, resources, and prompts\n  tools [--json]          List live MCP tools\n  call <tool> [options]   Call an exact MCP tool name\n  resources [--json]      List live MCP resources\n  resource <uri>          Read a resource\n  prompts [--json]        List live MCP prompts\n  prompt <name>           Get a prompt\n  config set server URL   Save a hosted or self-hosted MCP URL\n\nRun creed with no command for the interactive terminal.\n`;
+  return `Usage: creed [--agent ID] [command]\n\nCommands:\n  login                  Connect through Creed OAuth\n  logout                 Revoke and remove this connection\n  status                  Show local connection status\n  doctor                  Verify OAuth, MCP, tools, resources, and prompts\n  tools [--json]          List live MCP tools\n  call <tool> [options]   Call an exact MCP tool name\n  resources [--json]      List live MCP resources\n  resource <uri>          Read a resource\n  prompts [--json]        List live MCP prompts\n  prompt <name>           Get a prompt\n  config set server URL   Save a hosted or self-hosted MCP URL\n\nPass --agent ID when an agent invokes the CLI so Creed can attribute usage.\nRun creed with no command for the interactive terminal.\n`;
 }
 
 export async function run(argv: string[]): Promise<void> {
   const json = argv.includes("--json");
   const quiet = argv.includes("--quiet");
   const explicitServer = optionValue(argv, "--server") ?? process.env.CREED_MCP_URL;
+  const agent = optionValue(argv, "--agent");
   const serverUrl = explicitServer ?? await loadSavedServer() ?? DEFAULT_SERVER_URL;
   const args = argv.filter((value, index) =>
-    value !== "--server" && argv[index - 1] !== "--server" && value !== "--json" && value !== "--quiet"
+    value !== "--server" && argv[index - 1] !== "--server" &&
+    value !== "--agent" && argv[index - 1] !== "--agent" &&
+    value !== "--json" && value !== "--quiet"
   );
   const command = args[0];
 
@@ -73,7 +76,7 @@ export async function run(argv: string[]): Promise<void> {
     return;
   }
 
-  const connection = await connectCreed(serverUrl, quiet);
+  const connection = await connectCreed(serverUrl, quiet, agent);
   try {
     if (command === "login") {
       if (json) writeJson({ ok: true, server: serverUrl }); else process.stdout.write("Creed CLI is connected.\n");
