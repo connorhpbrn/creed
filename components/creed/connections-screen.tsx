@@ -78,10 +78,11 @@ export function ConnectionsScreen() {
     }
   }, [router, state.sections.length]);
 
-  const mcpAgentClients = useMemo(
-    () => splitConnectionClients(state.mcpClients).mcp,
+  const { mcp: mcpAgentClients, cli: cliClients } = useMemo(
+    () => splitConnectionClients(state.mcpClients),
     [state.mcpClients],
   );
+  const cliLastSeen = cliClients[0]?.lastUsed;
   const connected = mcpAgentClients.length > 0;
   const mcpStatusLabel = connected ? "Connected" : "Not connected via MCP";
   const showMcpStack = connected;
@@ -474,7 +475,9 @@ export function ConnectionsScreen() {
               : isConnected;
             const cardLastSeen = connectionMode === "mcp"
               ? lastSeen
-              : undefined;
+              : cliConnected
+                ? cliLastSeen
+                : undefined;
             return (
               <ConnectionCard
                 key={connection.id}

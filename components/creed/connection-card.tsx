@@ -313,13 +313,13 @@ export function ConnectionCard({
               <span>
                 {mode === "cli"
                   ? isConnected
-                    ? "Connected"
+                    ? "Connected via CLI"
                     : "Not connected via CLI"
                   : isConnected
                     ? "Connected via MCP"
                     : "Not connected"}
               </span>
-              {mode === "mcp" && isConnected && lastSeen ? (
+              {isConnected && lastSeen ? (
                 <>
                   <span>·</span>
                   <span>Last seen {compactLastSeen(lastSeen)}</span>
