@@ -106,7 +106,7 @@ export function LandingHero({ configured }: { configured: boolean }) {
       {/* The app demo bridges the hero and the first content section: pulled up
           so its top overlaps the faded hero art and its body extends into the
           page below (like a hero product shot crossing the seam). */}
-      <div className="relative z-20 -mt-[42vh] px-4 md:-mt-[34vh] md:px-10 lg:px-12">
+      <div className="relative z-20 -mt-[30vh] px-4 md:-mt-[34vh] md:px-10 lg:px-12">
         <div className="mx-auto max-w-6xl">
           <CreedAppDemo />
         </div>

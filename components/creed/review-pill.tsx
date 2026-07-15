@@ -56,17 +56,19 @@ function ReviewAllActions({
         type="button"
         onClick={onRejectAll}
         aria-label="Reject all"
-        className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
+        className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-sm font-medium whitespace-nowrap text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
       >
-        Reject all
+        <span className="md:hidden">Reject</span>
+        <span className="hidden md:inline">Reject all</span>
       </button>
       <button
         type="button"
         onClick={onAcceptAll}
         aria-label="Accept all"
-        className="inline-flex h-7 items-center gap-1 rounded-md bg-[var(--creed-accent)] px-2.5 text-sm font-medium text-white transition-colors hover:bg-[var(--creed-accent-hover)]"
+        className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-[var(--creed-accent)] px-2.5 text-sm font-medium whitespace-nowrap text-white transition-colors hover:bg-[var(--creed-accent-hover)]"
       >
-        Accept all
+        <span className="md:hidden">Accept</span>
+        <span className="hidden md:inline">Accept all</span>
       </button>
     </>
   );
@@ -159,7 +161,7 @@ export function ReviewPill({
   }
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-xl border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1.5 shadow-[0_8px_24px_rgba(28,28,26,0.04)]">
+    <div className="inline-flex max-w-full items-center gap-1 rounded-xl border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1.5 shadow-[0_8px_24px_rgba(28,28,26,0.04)]">
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           <button
