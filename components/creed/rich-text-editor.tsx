@@ -86,8 +86,8 @@ type SlashMenuState = {
   query: string;
   items: SlashCommand[];
   x: number;
-  y: number;
   placeAbove: boolean;
+  top?: number;
   bottomOffset?: number;
 };
 
@@ -300,6 +300,10 @@ export function RichTextEditor({
   // serializes the entire ProseMirror doc twice.
   const lastEmittedHtmlRef = useRef<string | null>(content);
   const slashItemsRef = useRef<SlashCommand[]>([]);
+  const slashSuggestionRef = useRef<SuggestionProps<
+    SlashCommand,
+    SlashCommand
+  > | null>(null);
   const sectionTagItemsRef = useRef<SectionTagTarget[]>([]);
   const sectionTagTargetsRef = useRef<SectionTagTarget[]>(sectionTagTargets);
   const sectionTagQueryRef = useRef("");
@@ -535,15 +539,25 @@ export function RichTextEditor({
       // update before the state setter so handleSlashKeyDown sees the fresh
       // list even if Enter fires inside the same tick.
       slashItemsRef.current = props.items;
-      if (readOnly || !containerRef.current || !props.clientRect) {
+      slashSuggestionRef.current = props;
+      if (readOnly || !props.clientRect) {
         setSlashState(null);
         return;
       }
 
       const clientRect = props.clientRect();
-      const containerRect = containerRef.current.getBoundingClientRect();
 
       if (!clientRect) {
+        setSlashState(null);
+        return;
+      }
+
+      if (
+        clientRect.bottom < 0 ||
+        clientRect.top > window.innerHeight ||
+        clientRect.right < 0 ||
+        clientRect.left > window.innerWidth
+      ) {
         setSlashState(null);
         return;
       }
@@ -554,18 +568,21 @@ export function RichTextEditor({
       );
       const viewportBottomSpace = window.innerHeight - clientRect.bottom;
       const placeAbove = viewportBottomSpace < estimatedMenuHeight + 24;
+      const menuWidth = 220;
+      const left = Math.max(
+        8,
+        Math.min(clientRect.left, window.innerWidth - menuWidth - 8),
+      );
 
       setSlashState({
         query: props.query,
         items: props.items,
-        x: clientRect.left - containerRect.left,
-        y: placeAbove
-          ? clientRect.top - containerRect.top - 10
-          : clientRect.bottom - containerRect.top + 10,
+        x: left,
         placeAbove,
+        top: placeAbove ? undefined : clientRect.bottom + 10,
         bottomOffset: placeAbove
           ? Math.max(
-              containerRect.height - (clientRect.top - containerRect.top - 10),
+              window.innerHeight - clientRect.top + 10,
               0,
             )
           : undefined,
@@ -573,6 +590,26 @@ export function RichTextEditor({
     },
     [readOnly],
   );
+
+  useEffect(() => {
+    if (!slashState) return;
+
+    function repositionSlashMenu() {
+      const props = slashSuggestionRef.current;
+      if (!props) {
+        setSlashState(null);
+        return;
+      }
+      updateSlashMenu(props);
+    }
+
+    window.addEventListener("scroll", repositionSlashMenu, true);
+    window.addEventListener("resize", repositionSlashMenu);
+    return () => {
+      window.removeEventListener("scroll", repositionSlashMenu, true);
+      window.removeEventListener("resize", repositionSlashMenu);
+    };
+  }, [slashState, updateSlashMenu]);
 
   function handleSlashKeyDown({ event, view }: SuggestionKeyDownProps) {
     const items = slashItemsRef.current;
@@ -801,6 +838,7 @@ export function RichTextEditor({
                 onKeyDown: (props) => handleSlashKeyDown(props),
                 onExit: () => {
                   slashSelectRef.current = null;
+                  slashSuggestionRef.current = null;
                   setSlashIndex(0);
                   setSlashState(null);
                 },
@@ -1567,53 +1605,59 @@ export function RichTextEditor({
         </DialogContent>
       </Dialog>
 
-      <AnimatePresence>
-        {slashState && slashState.items.length > 0 ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.12, ease: "easeOut" }}
-            className="absolute z-30 w-[220px] overflow-hidden rounded-xl border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1 shadow-[0_8px_24px_rgba(28,28,26,0.08)]"
-            style={{
-              left: slashState.x,
-              top: slashState.placeAbove ? undefined : slashState.y,
-              bottom: slashState.placeAbove
-                ? slashState.bottomOffset
-                : undefined,
-            }}
-          >
-            {slashState.items.map((command, index) => {
-              const Icon = command.icon;
-              const isActive = index === slashIndex;
-
-              return (
-                <button
-                  key={`${sectionId}-${command.title}`}
-                  type="button"
-                  data-active={isActive}
-                  className="editor-command-item flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[13px] text-[var(--creed-text-primary)] transition-colors duration-100"
-                  onMouseEnter={() => setSlashIndex(index)}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    selectSlashItem(command);
+      {typeof document !== "undefined"
+        ? createPortal(
+            <AnimatePresence>
+              {slashState && slashState.items.length > 0 ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12, ease: "easeOut" }}
+                  className="fixed z-50 w-[220px] overflow-hidden rounded-xl border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1 shadow-[0_8px_24px_rgba(28,28,26,0.08)]"
+                  style={{
+                    ...editorThemeStyle,
+                    left: slashState.x,
+                    top: slashState.placeAbove ? undefined : slashState.top,
+                    bottom: slashState.placeAbove
+                      ? slashState.bottomOffset
+                      : undefined,
                   }}
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)]" />
-                  <span className="flex-1 truncate font-medium">
-                    {command.title}
-                  </span>
-                  {isActive ? (
-                    <span className="text-[11px] text-[var(--creed-text-tertiary)]">
-                      {command.description}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+                  {slashState.items.map((command, index) => {
+                    const Icon = command.icon;
+                    const isActive = index === slashIndex;
+
+                    return (
+                      <button
+                        key={`${sectionId}-${command.title}`}
+                        type="button"
+                        data-active={isActive}
+                        className="editor-command-item flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[13px] text-[var(--creed-text-primary)] transition-colors duration-100"
+                        onMouseEnter={() => setSlashIndex(index)}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          selectSlashItem(command);
+                        }}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)]" />
+                        <span className="flex-1 truncate font-medium">
+                          {command.title}
+                        </span>
+                        {isActive ? (
+                          <span className="text-[11px] text-[var(--creed-text-tertiary)]">
+                            {command.description}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              ) : null}
+            </AnimatePresence>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

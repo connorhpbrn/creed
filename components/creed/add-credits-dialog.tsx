@@ -149,7 +149,8 @@ export function AddCreditsDialog({
                               color: "var(--creed-text-primary)",
                               background:
                                 "linear-gradient(135deg, color-mix(in srgb, var(--creed-text-primary) 10%, transparent) 0%, color-mix(in srgb, var(--creed-text-primary) 15%, transparent) 100%)",
-                              boxShadow: "0 0 0 1px var(--creed-text-primary) inset",
+                              boxShadow:
+                                "0 0 0 1px var(--creed-text-primary) inset",
                             }
                           : undefined
                       }
@@ -188,7 +189,7 @@ export function AddCreditsDialog({
                 Cancel
               </Button>
               <Button
-                className="rounded-md bg-[var(--creed-text-primary)] text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
+                className="rounded-md bg-[var(--creed-accent)] text-white hover:bg-[var(--creed-accent-hover)]"
                 onClick={() => void handleContinue()}
                 disabled={!amountValid || creating}
               >
@@ -274,7 +275,7 @@ function PaymentForm({
           Back
         </Button>
         <Button
-          className="rounded-md bg-[var(--creed-text-primary)] text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
+          className="rounded-md bg-[var(--creed-accent)] text-white hover:bg-[var(--creed-accent-hover)]"
           onClick={() => void handlePay()}
           disabled={!stripe || submitting}
         >

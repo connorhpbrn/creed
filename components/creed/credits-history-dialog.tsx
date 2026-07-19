@@ -127,8 +127,8 @@ export function CreditsHistoryDialog({
                         className={cn(
                           "font-mono text-[13px]",
                           isCredit
-                            ? "text-[#16A34A]"
-                            : "text-[#DC2626] dark:text-[#F87171]"
+                            ? "text-[#15803D] dark:text-[#4ADE80]"
+                            : "text-[#B91C1C] dark:text-[#F87171]"
                         )}
                       >
                         {isCredit ? "+" : "-"}

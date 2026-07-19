@@ -1149,7 +1149,7 @@ function PersonalSettingsScreen() {
                           </span>
                         ) : null}
                         <Button
-                          className="rounded-md bg-[var(--creed-text-primary)] px-4 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
+                          className="rounded-md bg-[var(--creed-accent)] px-4 text-white hover:bg-[var(--creed-accent-hover)]"
                           onClick={() => setAddCreditsOpen(true)}
                         >
                           Add credits

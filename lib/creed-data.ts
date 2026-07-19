@@ -1972,7 +1972,125 @@ export const sectionSuggestions = [
     starter:
       "<p>Anything else AI should know about you that doesn't have its own section yet.</p>",
   },
+  {
+    name: "Projects",
+    description:
+      "Active, maintained, and parked projects with enough context to keep advice grounded.",
+    starter:
+      "<p>Describe the projects that matter, their current status, and what would count as meaningful progress.</p>",
+  },
+  {
+    name: "Decision Making",
+    description:
+      "The principles, trade-offs, and evidence you use to make consequential choices.",
+    starter:
+      "<p>Capture how you weigh trade-offs, what evidence changes your mind, and which decisions need extra care.</p>",
+  },
+  {
+    name: "Communication",
+    description:
+      "How you prefer to communicate across writing, meetings, feedback, and collaboration.",
+    starter:
+      "<p>Describe the communication patterns that help you think clearly and work well with other people.</p>",
+  },
+  {
+    name: "Learning",
+    description:
+      "How you learn best, what you are developing, and where explanations should begin.",
+    starter:
+      "<p>Note what you are learning, how you learn effectively, and the knowledge an agent should not assume.</p>",
+  },
+  {
+    name: "Finances",
+    description:
+      "Durable financial priorities, risk boundaries, and planning assumptions.",
+    starter:
+      "<p>Record the financial goals, constraints, and risk preferences that should shape relevant advice.</p>",
+  },
+  {
+    name: "Travel",
+    description:
+      "Travel preferences, recurring destinations, practical needs, and hard noes.",
+    starter:
+      "<p>Capture how you like to travel, the details worth remembering, and what makes a trip work for you.</p>",
+  },
+  {
+    name: "Family",
+    description:
+      "Family context, responsibilities, and recurring considerations that affect decisions.",
+    starter:
+      "<p>Add only the family context that helps an agent respond with the right assumptions and sensitivity.</p>",
+  },
+  {
+    name: "Creative Work",
+    description:
+      "Creative practice, influences, standards, and ideas worth carrying between conversations.",
+    starter:
+      "<p>Describe what you make, the qualities you protect, and the influences that genuinely shape the work.</p>",
+  },
+  {
+    name: "Home",
+    description:
+      "Stable context about where and how you live that affects plans and recommendations.",
+    starter:
+      "<p>Note the practical details about your home or living environment that repeatedly matter.</p>",
+  },
+  {
+    name: "Reading",
+    description:
+      "Reading interests, current threads, trusted authors, and recommendation preferences.",
+    starter:
+      "<p>Capture what you read, what you want to understand next, and what makes a recommendation worthwhile.</p>",
+  },
+  {
+    name: "Career",
+    description:
+      "Long-term professional direction, current positioning, and opportunities worth prioritising.",
+    starter:
+      "<p>Describe the direction you are building toward and the career trade-offs an agent should understand.</p>",
+  },
 ];
+
+const SECTION_SUGGESTION_COUNT = 6;
+
+export function normalizeSectionName(name: string) {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export function hasSectionName(existingNames: readonly string[], name: string) {
+  const normalizedName = normalizeSectionName(name);
+  return existingNames.some(
+    (existingName) => normalizeSectionName(existingName) === normalizedName,
+  );
+}
+
+function stableSectionNameHash(names: readonly string[]) {
+  const value = names.map(normalizeSectionName).sort().join("|");
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+}
+
+export function getSectionSuggestions(existingNames: readonly string[]) {
+  const available = sectionSuggestions.filter(
+    (suggestion) => !hasSectionName(existingNames, suggestion.name),
+  );
+
+  if (available.length <= SECTION_SUGGESTION_COUNT) {
+    return available;
+  }
+
+  const start = stableSectionNameHash(existingNames) % available.length;
+  return Array.from(
+    { length: SECTION_SUGGESTION_COUNT },
+    (_, index) => available[(start + index) % available.length],
+  );
+}
 
 export function createStarterContent(name: string) {
   const suggestion = sectionSuggestions.find((item) => item.name === name);
@@ -1980,7 +2098,7 @@ export function createStarterContent(name: string) {
     return suggestion.starter;
   }
 
-  return `<h2>${name}</h2><p>Start shaping this section. Keep it specific enough that an agent can act on it without guessing.</p>`;
+  return "<p>Start shaping this section. Keep it specific enough that an agent can act on it without guessing.</p>";
 }
 
 export function getProposalPreviewText(draft: ProposalDraft) {

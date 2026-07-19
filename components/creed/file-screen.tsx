@@ -118,10 +118,11 @@ import {
   accentLabelMap,
   accentTintMap,
   VISIBLE_ACCENT_KEYS,
+  getSectionSuggestions,
   getProposalPreviewText,
+  hasSectionName,
   normalizeLegacyProposalDraft,
   normalizeProposalForSection,
-  sectionSuggestions,
   sectionToMarkdown,
   type AccentKey,
   type ActivityEntry,
@@ -376,6 +377,15 @@ function scrollFileElementIntoView(
   element: HTMLElement,
   behavior: ScrollBehavior,
 ) {
+  const targetTop = getFileElementScrollTop(container, element);
+
+  container.scrollTo({ top: targetTop, behavior });
+}
+
+function getFileElementScrollTop(
+  container: HTMLElement,
+  element: HTMLElement,
+) {
   const stickyHeader = container.querySelector<HTMLElement>(
     "[data-file-sticky-header]",
   );
@@ -383,17 +393,14 @@ function scrollFileElementIntoView(
   const containerRect = container.getBoundingClientRect();
   const elementRect = element.getBoundingClientRect();
 
-  container.scrollTo({
-    top: Math.max(
-      container.scrollTop +
-        elementRect.top -
-        containerRect.top -
-        stickyOffset -
-        16,
-      0,
-    ),
-    behavior,
-  });
+  return Math.max(
+    container.scrollTop +
+      elementRect.top -
+      containerRect.top -
+      stickyOffset -
+      16,
+    0,
+  );
 }
 
 type SectionChangeKind = "added" | "removed" | "modified";
@@ -942,6 +949,7 @@ export function FileScreen() {
   const [analyzedSectionFingerprints, setAnalyzedSectionFingerprints] =
     useState<Record<string, string>>({});
   const [composerOpen, setComposerOpen] = useState(false);
+  const [composerRevealed, setComposerRevealed] = useState(false);
   const [composerName, setComposerName] = useState("");
   const [composerStarter, setComposerStarter] = useState<string | undefined>();
   const [insertAfterId, setInsertAfterId] = useState<string | null>(null);
@@ -999,6 +1007,8 @@ export function FileScreen() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const editorScrollRef = useRef<HTMLDivElement | null>(null);
   const composerAreaRef = useRef<HTMLDivElement | null>(null);
+  const composerCardRef = useRef<HTMLDivElement | null>(null);
+  const cancelComposerRevealRef = useRef<() => void>(() => {});
   const qualityBaselineLoadedRef = useRef(false);
   // Tracks which Creed the quality state belongs to, so a Creed switch can drop
   // the previous Creed's report (the runner store is module-global).
@@ -1232,10 +1242,10 @@ export function FileScreen() {
   }, [primaryVersionAction, pullDisabled, pushDisabled]);
 
   useEffect(() => {
-    if (composerOpen) {
-      inputRef.current?.focus();
+    if (composerOpen && composerRevealed) {
+      inputRef.current?.focus({ preventScroll: true });
     }
-  }, [composerOpen]);
+  }, [composerOpen, composerRevealed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1620,10 +1630,7 @@ export function FileScreen() {
         return false;
       }
 
-      container.scrollTo({
-        top: Math.max(composerArea.offsetTop - 24, 0),
-        behavior,
-      });
+      scrollFileElementIntoView(container, composerArea, behavior);
 
       return true;
     },
@@ -1632,12 +1639,58 @@ export function FileScreen() {
 
   const openComposerAndReveal = useCallback(
     (afterSectionId?: string) => {
+      cancelComposerRevealRef.current();
       setFileViewMode("editor");
+
+      if (composerOpen) {
+        openComposer(afterSectionId);
+        setComposerRevealed(true);
+        window.requestAnimationFrame(() => {
+          scrollComposerIntoView("smooth");
+        });
+        return;
+      }
+
+      // Mount the full card invisibly before measuring the destination. This
+      // gives the scroll container its final height up front, so one smooth
+      // scroll can land correctly without a corrective jump after expansion.
+      setComposerRevealed(false);
       openComposer(afterSectionId);
 
       let attempts = 0;
       const tryScroll = () => {
-        if (scrollComposerIntoView("smooth")) {
+        const container = editorScrollRef.current;
+        const composerCard = composerCardRef.current;
+
+        if (container && composerCard) {
+          const targetTop = getFileElementScrollTop(container, composerCard);
+          const needsScroll = Math.abs(container.scrollTop - targetTop) > 2;
+          let finished = false;
+          let fallbackId = 0;
+          let revealId = 0;
+          const cleanup = () => {
+            window.clearTimeout(fallbackId);
+            window.clearTimeout(revealId);
+            container.removeEventListener("scrollend", finish);
+          };
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            cleanup();
+            revealId = window.setTimeout(() => {
+              setComposerRevealed(true);
+              cancelComposerRevealRef.current = () => {};
+            }, 80);
+          };
+          cancelComposerRevealRef.current = cleanup;
+
+          if (needsScroll) {
+            container.addEventListener("scrollend", finish, { once: true });
+            fallbackId = window.setTimeout(finish, 600);
+            container.scrollTo({ top: targetTop, behavior: "smooth" });
+          } else {
+            finish();
+          }
           return;
         }
 
@@ -1649,21 +1702,38 @@ export function FileScreen() {
 
       window.requestAnimationFrame(tryScroll);
     },
-    [openComposer, scrollComposerIntoView],
+    [composerOpen, openComposer, scrollComposerIntoView],
   );
 
+  useEffect(() => {
+    return () => cancelComposerRevealRef.current();
+  }, []);
+
   function submitComposer() {
-    if (!composerName.trim()) {
+    const trimmedName = composerName.trim();
+    if (!trimmedName) {
+      return;
+    }
+
+    const occupiedSectionNames = [
+      ...state.sections.map((section) => section.name),
+      ...normalizedPendingProposals.flatMap((proposal) =>
+        proposal.draft.kind === "new-section" ? [proposal.draft.name] : [],
+      ),
+    ];
+    if (hasSectionName(occupiedSectionNames, trimmedName)) {
+      toast.error(`A section named "${trimmedName}" already exists.`);
       return;
     }
 
     if (insertAfterId) {
-      addSectionAfter(insertAfterId, composerName, composerStarter);
+      addSectionAfter(insertAfterId, trimmedName, composerStarter);
     } else {
-      addSection(composerName, composerStarter);
+      addSection(trimmedName, composerStarter);
     }
 
     setComposerOpen(false);
+    setComposerRevealed(false);
     setComposerName("");
     setComposerStarter(undefined);
     setInsertAfterId(null);
@@ -2045,6 +2115,16 @@ export function FileScreen() {
       ).length,
     [state.proposals],
   );
+
+  const suggestedSections = useMemo(() => {
+    const occupiedSectionNames = [
+      ...state.sections.map((section) => section.name),
+      ...normalizedPendingProposals.flatMap((proposal) =>
+        proposal.draft.kind === "new-section" ? [proposal.draft.name] : [],
+      ),
+    ];
+    return getSectionSuggestions(occupiedSectionNames);
+  }, [normalizedPendingProposals, state.sections]);
 
   useEffect(() => {
     const container = editorScrollRef.current;
@@ -2892,13 +2972,21 @@ export function FileScreen() {
                     <div ref={composerAreaRef} className="mt-10 md:mt-16">
                       {composerOpen ? (
                         <motion.div
-                          initial={{ opacity: 0, y: -8 }}
-                          animate={{ opacity: 1, y: 0 }}
+                          ref={composerCardRef}
+                          initial={false}
+                          animate={
+                            composerRevealed
+                              ? { opacity: 1, y: 0, scale: 1 }
+                              : { opacity: 0, y: 10, scale: 0.99 }
+                          }
                           transition={{
-                            duration: 0.18,
+                            duration: 0.26,
                             ease: [0.22, 1, 0.36, 1],
                           }}
-                          className="rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-4 sm:p-5"
+                          className={cn(
+                            "rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-4 sm:p-5",
+                            !composerRevealed && "pointer-events-none",
+                          )}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
@@ -2913,7 +3001,10 @@ export function FileScreen() {
                               variant="ghost"
                               size="icon-sm"
                               className="rounded-md"
-                              onClick={() => setComposerOpen(false)}
+                              onClick={() => {
+                                setComposerOpen(false);
+                                setComposerRevealed(false);
+                              }}
                               aria-label="Close composer"
                             >
                               <X className="h-4 w-4" />
@@ -2937,7 +3028,7 @@ export function FileScreen() {
                           />
 
                           <div className="mt-3 flex flex-wrap gap-1.5">
-                            {sectionSuggestions.map((suggestion) => (
+                            {suggestedSections.map((suggestion) => (
                               <button
                                 key={suggestion.name}
                                 type="button"
@@ -2957,6 +3048,7 @@ export function FileScreen() {
                                     );
                                   }
                                   setComposerOpen(false);
+                                  setComposerRevealed(false);
                                   setInsertAfterId(null);
                                 }}
                                 className="rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface)] px-2.5 py-1 text-[12px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
@@ -2970,13 +3062,16 @@ export function FileScreen() {
                             <Button
                               variant="ghost"
                               className="rounded-md text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
-                              onClick={() => setComposerOpen(false)}
+                              onClick={() => {
+                                setComposerOpen(false);
+                                setComposerRevealed(false);
+                              }}
                             >
                               Cancel
                             </Button>
                             <Button
                               onClick={submitComposer}
-                              className="rounded-md bg-[var(--creed-text-primary)] px-4 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
+                              className="rounded-md bg-[var(--creed-accent)] px-4 text-white hover:bg-[var(--creed-accent-hover)]"
                             >
                               Create
                             </Button>

@@ -191,8 +191,8 @@ export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
                   <p className="mt-1 text-[13px] leading-6 text-[var(--creed-text-primary)]">
                     {credits
                       ? credits.allowanceResets
-                        ? `${formatUsd(credits.balanceUsd)} in credits, refreshed monthly.`
-                        : `${formatUsd(credits.balanceUsd)} in credits included.`
+                        ? `${formatUsd(credits.allowanceUsd)} in credits, refreshed monthly.`
+                        : `${formatUsd(credits.allowanceUsd)} in credits included.`
                       : "No credits on this plan."}
                     {isSubscription && renewal
                       ? ` ${plan.cancelAtPeriodEnd ? "Ends" : "Renews"} ${renewal}.`
