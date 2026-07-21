@@ -381,7 +381,12 @@ function MiniProposalDiff({
           >
             <div className="border-t border-[var(--creed-border)]" />
             <div className="creed-diff-block px-4 py-3">
-              <DiffParts parts={parts} />
+              <span className="sm:hidden">
+                <span className="creed-diff-add">{ROUTINES_ADD}</span>
+              </span>
+              <span className="hidden sm:inline">
+                <DiffParts parts={parts} />
+              </span>
             </div>
           </motion.div>
         ) : null}
@@ -398,7 +403,7 @@ export function UpdateDemo() {
 
   return (
     <div ref={ref} className="w-full">
-      <DemoCard>
+      <DemoCard className="min-h-[220px]">
         <div className="flex items-center gap-2.5">
           <span
             className="h-7 w-[3px] shrink-0 rounded-full"
@@ -606,7 +611,7 @@ export function ScoreDemo() {
 
   return (
     <div ref={ref} className="w-full">
-      <DemoCard>
+      <DemoCard className="min-h-[220px]">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <span

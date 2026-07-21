@@ -436,7 +436,7 @@ function NavRail({
         <div className="flex items-center justify-center gap-2.5 rounded-sm px-1 py-1 lg:justify-start lg:px-[7px]">
           <Avatar className="h-6 w-6 overflow-hidden rounded-[8px] bg-[var(--creed-accent)]">
             <AvatarImage
-              src="/assets/landing/steve-jobs-profile.png"
+              src="/assets/easter-eggs/steve-jobs-profile.png"
               alt="Steve"
               className="rounded-[8px] object-cover object-[50%_18%]"
             />
@@ -756,7 +756,7 @@ export function CreedAppDemo() {
 
             <div ref={scrollRef} className="creed-scrollbar relative min-w-0 flex-1 overflow-y-auto bg-[var(--creed-surface)]">
               {/* sticky header (mirrors file-screen) */}
-              <div className="sticky top-0 z-20 mb-7 bg-[color:var(--creed-surface)]/95 pb-4 pt-3 backdrop-blur-sm">
+              <div className="sticky top-0 z-[60] mb-7 bg-[color:var(--creed-surface)]/95 pb-4 pt-3 backdrop-blur-sm">
                 <div className="mx-auto flex max-w-[700px] flex-col gap-4 px-4 md:flex-row md:items-start md:justify-between md:px-7">
                   <div>
                     <div className="whitespace-nowrap text-[18px] font-medium tracking-[-0.02em] text-[var(--creed-text-primary)] md:text-[20px]">Steve / Creed</div>

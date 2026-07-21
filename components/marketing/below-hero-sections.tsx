@@ -306,6 +306,7 @@ function WhyUseItSection() {
 // equal height via the grid; the plate flexes to fill.
 function PlateCard({
   plateColor,
+  plateClassName,
   number,
   numberColor,
   title,
@@ -314,6 +315,7 @@ function PlateCard({
   children,
 }: {
   plateColor: string;
+  plateClassName?: string;
   number?: string;
   numberColor?: string;
   title: string;
@@ -334,6 +336,7 @@ function PlateCard({
           // Square plate at the 3-up desktop width; auto height (content) when
           // the grid collapses to one column so a full-width square isn't huge.
           square ? "lg:aspect-square" : "min-h-[380px] flex-1",
+          plateClassName,
         )}
         style={{ backgroundColor: plateColor }}
       >
@@ -704,6 +707,7 @@ function AiFeaturesSection() {
       <div className="mx-auto mt-14 grid max-w-6xl items-stretch gap-5 lg:grid-cols-3">
         <PlateCard
           plateColor="#2563EB"
+          plateClassName="min-h-[272px]"
           title="Analysis"
           body="Score every section for signal, weak spots, and what to sharpen next."
           square

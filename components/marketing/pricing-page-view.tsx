@@ -332,15 +332,11 @@ function OwnedCorner({ tone }: { tone: "blue" | "amber" }) {
   return (
     <div
       className={cn(
-        "pointer-events-none absolute right-0 top-0 h-[76px] w-[92px] rounded-tr-[20px]",
+        "pointer-events-none absolute right-6 top-6 flex h-10 w-10 items-center justify-center rounded-[12px] md:right-7 md:top-7",
         colorClassName,
       )}
-      style={{ clipPath: "polygon(0 0, 100% 0, 100% 100%)" }}
     >
-      <Check
-        className="absolute right-[13px] top-[12px] h-6 w-6 text-white"
-        strokeWidth={3.2}
-      />
+      <Check className="h-5 w-5 text-white" strokeWidth={3} />
     </div>
   );
 }

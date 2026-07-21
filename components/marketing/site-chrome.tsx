@@ -935,7 +935,7 @@ function MobileNavRow({
             animate={{ opacity: 1, width: "auto" }}
             exit={{ opacity: 0, width: 0 }}
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="flex max-w-[min(68vw,24rem)] items-center gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain bg-black/[0.04] px-7 py-3 backdrop-blur-[12px] [scrollbar-width:none] [touch-action:pan-x] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
+            className="flex max-w-[min(68vw,24rem)] items-center gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain px-7 py-3 backdrop-blur-[12px] [scrollbar-width:none] [touch-action:pan-x] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
             style={{
               WebkitBackdropFilter: "blur(12px)",
               maskImage:
