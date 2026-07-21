@@ -799,7 +799,9 @@ export function NexusView({
 
         if (hovered || selected) {
           ctx.lineWidth = Math.max(1, 1.5 / transform.k);
-          ctx.strokeStyle = resolveCanvasColor(NODE_SELECTION_STROKE);
+          ctx.strokeStyle = resolveCanvasColor(
+            hovered ? node.color : NODE_SELECTION_STROKE,
+          );
           ctx.stroke();
         }
       }

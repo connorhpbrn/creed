@@ -512,7 +512,8 @@ export function InlineMetaProposal({
                 : "text-[var(--creed-text-tertiary)]",
             )}
           >
-            {headline}
+            <span className="sm:hidden">proposed</span>
+            <span className="hidden sm:inline">{headline}</span>
           </span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
           {/* Delete proposals get a red `−` prefix mirroring the green `+`

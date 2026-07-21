@@ -224,14 +224,14 @@ function getProposalStatusStyles(status: ActivityStatus) {
 
 function formatRelativeTime(timestamp?: string, fallbackLabel?: string) {
   if (!timestamp) {
-    return fallbackLabel ?? "just now";
+    return fallbackLabel === "just now" ? "now" : (fallbackLabel ?? "now");
   }
 
   const deltaMs = Math.max(Date.now() - new Date(timestamp).getTime(), 0);
   const minutes = Math.round(deltaMs / 60000);
 
   if (minutes < 1) {
-    return "just now";
+    return "now";
   }
 
   if (minutes < 60) {
@@ -4486,8 +4486,18 @@ function ActivityRow({
   // For pending entries the parent feeds us the same live values the inline
   // card uses; for accepted/rejected/stale entries we fall back to the
   // snapshot stored on the entry.
-  const beforeForDiff = liveExistingContent ?? entry.beforeText ?? "";
-  const afterForDiff = liveProposedText ?? entry.afterText ?? "";
+  // A live pending diff is useful only as a complete pair. During state
+  // reconciliation the proposal or section can briefly be missing; mixing one
+  // live value with one persisted value can collapse a real change into an
+  // empty diff. Keep the stored snapshot intact until both live sides exist.
+  const hasCompleteLiveDiff =
+    liveExistingContent !== undefined && liveProposedText !== undefined;
+  const beforeForDiff = hasCompleteLiveDiff
+    ? liveExistingContent
+    : (entry.beforeText ?? "");
+  const afterForDiff = hasCompleteLiveDiff
+    ? liveProposedText
+    : (entry.afterText ?? "");
   const diffParts = useMemo(
     () => computeDiffParts(beforeForDiff, afterForDiff),
     [beforeForDiff, afterForDiff],
@@ -4589,7 +4599,7 @@ function ActivityRow({
               className="overflow-hidden"
             >
               <div className="-mx-3 border-t border-[var(--creed-border)]" />
-              <div className="creed-scrollbar creed-diff-block -mx-3 max-h-72 overflow-y-auto px-4 py-3">
+              <div className="creed-scrollbar creed-diff-block -mx-3 max-h-72 overflow-y-auto px-4 py-2.5 leading-[1.6]">
                 {isDeletionActivity ? (
                   // Render the Delete line as a removal - same red
                   // background + strikethrough as `creed-diff-remove` so
