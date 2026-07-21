@@ -32,24 +32,44 @@ function shortDate(day: string): string {
 
 export function UptimeBars({ buckets }: { buckets: DailyBucket[] }) {
   const rowRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(false);
   const [hovered, setHovered] = useState(0);
 
   // Tooltip x glides between bars with a spring — the smooth cursor-follow.
   const x = useSpring(0, { stiffness: 320, damping: 30, mass: 0.5 });
 
-  function handleMove(e: React.MouseEvent<HTMLDivElement>) {
+  function selectAt(clientX: number) {
     const row = rowRef.current;
-    if (!row) return;
+    if (!row || buckets.length === 0) return;
     const rect = row.getBoundingClientRect();
     const n = buckets.length;
     const barW = (rect.width - (n - 1) * GAP) / n;
-    const relX = e.clientX - rect.left;
+    const relX = clientX - rect.left;
     const i = Math.min(n - 1, Math.max(0, Math.floor(relX / (barW + GAP))));
     setHovered(i);
     if (!active) setActive(true);
-    // Snap the spring target to the hovered bar's centre.
-    x.set(i * (barW + GAP) + barW / 2);
+
+    // Keep the tooltip inside the chart (and therefore the mobile viewport)
+    // while its pointer continues to track the selected bar.
+    const naturalX = i * (barW + GAP) + barW / 2;
+    const tooltipHalf = (tooltipRef.current?.offsetWidth ?? 0) / 2;
+    x.set(Math.min(rect.width - tooltipHalf, Math.max(tooltipHalf, naturalX)));
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    // Touch and pen only scrub after contact; mouse keeps Creed's hover model.
+    if (e.pointerType !== "mouse" && e.buttons === 0) return;
+    selectAt(e.clientX);
+  }
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    selectAt(e.clientX);
+  }
+
+  function handlePointerEnd(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType !== "mouse") setActive(false);
   }
 
   const b = buckets[hovered];
@@ -67,6 +87,7 @@ export function UptimeBars({ buckets }: { buckets: DailyBucket[] }) {
         transition={{ duration: 0.13, ease: "easeOut" }}
       >
         <div
+          ref={tooltipRef}
           role="tooltip"
           className="-translate-x-1/2 whitespace-nowrap rounded-[10px] border px-2.5 py-2 text-[12px] shadow-[0_12px_32px_rgba(28,28,26,0.18)]"
           style={{
@@ -103,9 +124,14 @@ export function UptimeBars({ buckets }: { buckets: DailyBucket[] }) {
 
       <div
         ref={rowRef}
-        className="flex h-6 w-full items-stretch gap-[2px]"
-        onMouseMove={handleMove}
-        onMouseLeave={() => setActive(false)}
+        className="flex h-6 w-full touch-pan-y items-stretch gap-[2px]"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+        onPointerLeave={(e) => {
+          if (e.pointerType === "mouse") setActive(false);
+        }}
       >
         {buckets.map((bucket, i) => (
           <div

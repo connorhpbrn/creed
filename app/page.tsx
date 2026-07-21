@@ -18,7 +18,7 @@ export default async function Page() {
   const isDev = process.env.NODE_ENV !== "production";
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[640px] flex-col px-5 py-14 sm:py-20">
+    <main className="mx-auto flex min-h-screen w-full min-w-0 max-w-[640px] flex-col px-5 py-14 sm:py-20">
       <header className="flex items-center justify-center gap-2.5">
         <CreedMark className="h-[26px] w-auto" />
         <span className="text-[17px] font-semibold tracking-tight">
