@@ -100,7 +100,10 @@ import {
   subscribeQualityRunner,
 } from "@/lib/ai/quality-runner";
 import { RichTextEditor } from "@/components/creed/rich-text-editor";
-import { NexusView } from "@/components/creed/nexus-view";
+import {
+  NexusView,
+  type NexusViewState,
+} from "@/components/creed/nexus-view";
 import { CreedFindReplace } from "@/components/creed/find-replace";
 import {
   DiffBadge,
@@ -911,6 +914,19 @@ export function FileScreen() {
   const [fileViewMode, setFileViewMode] = useState<"editor" | "nexus">(
     "editor",
   );
+  const nexusViewStateRef = useRef<{
+    creedId: string | undefined;
+    viewState: NexusViewState | null;
+  }>({
+    creedId: state.creedId,
+    viewState: null,
+  });
+  if (nexusViewStateRef.current.creedId !== state.creedId) {
+    nexusViewStateRef.current = {
+      creedId: state.creedId,
+      viewState: null,
+    };
+  }
   // Version-history sheet target (company owner/admin only).
   const [historySectionState, setHistorySectionState] = useState<{
     id: string;
@@ -1979,6 +1995,15 @@ export function FileScreen() {
     [revealEditorTarget],
   );
 
+  const preserveNexusViewState = useCallback(
+    (viewState: NexusViewState) => {
+      if (nexusViewStateRef.current.creedId === state.creedId) {
+        nexusViewStateRef.current.viewState = viewState;
+      }
+    },
+    [state.creedId],
+  );
+
   const revealProposalOrSection = useCallback(
     (proposalId: string) => {
       const proposal = normalizedPendingProposals.find(
@@ -2755,8 +2780,11 @@ export function FileScreen() {
 
               {fileViewMode === "nexus" ? (
                 <NexusView
+                  key={`nexus-${state.creedId ?? "unscoped"}`}
                   sections={visibleSections}
                   scoresBySectionId={nexusScoresBySectionId}
+                  initialViewState={nexusViewStateRef.current.viewState}
+                  onViewStateChange={preserveNexusViewState}
                 />
               ) : (
                 <>

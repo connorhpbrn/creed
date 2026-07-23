@@ -96,3 +96,20 @@ test("Nexus graph carries section scores onto nodes", () => {
     undefined,
   );
 });
+
+test("Nexus graph counts unique neighbouring sections", () => {
+  const graph = buildNexusGraph([
+    section("identity", "Identity", "<p>#Beliefs</p>"),
+    section("beliefs", "Beliefs", "<p>#Identity #Goals</p>"),
+    section("goals", "Goals", "<p></p>"),
+  ]);
+
+  assert.equal(
+    graph.nodes.find((node) => node.id === "identity")?.degree,
+    1,
+  );
+  assert.equal(
+    graph.nodes.find((node) => node.id === "beliefs")?.degree,
+    2,
+  );
+});

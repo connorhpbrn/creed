@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -24,6 +25,17 @@ type NexusViewProps = {
   sections: CreedSection[];
   scoresBySectionId?: ReadonlyMap<string, number>;
   className?: string;
+  initialViewState?: NexusViewState | null;
+  onViewStateChange?: (state: NexusViewState) => void;
+};
+
+export type NexusViewState = {
+  nodes: Record<
+    string,
+    Pick<SimNode, "x" | "y" | "vx" | "vy">
+  >;
+  size: CanvasSize;
+  transform: ViewTransform;
 };
 
 type SimNode = NexusGraphNode & {
@@ -62,6 +74,9 @@ type Gesture =
       pointerId: number;
       nodeId: string;
       offset: PointerPoint;
+      start: PointerPoint;
+      moved: boolean;
+      deselectOnClick: boolean;
     }
   | {
       mode: "pinch";
@@ -76,6 +91,8 @@ type TooltipState = {
   name: string;
   color: string;
   score?: number;
+  degree: number;
+  possibleConnections: number;
   x: number;
   y: number;
 } | null;
@@ -84,7 +101,6 @@ const MIN_ZOOM = 0.34;
 const BASE_MAX_ZOOM = 2.8;
 const NODE_BASE_RADIUS = 7;
 const EDGE_LENGTH = 145;
-const NODE_SELECTION_STROKE = "var(--accent-color-mono)";
 const EMPTY_SCORES = new Map<string, number>();
 
 function clamp(value: number, min: number, max: number) {
@@ -160,6 +176,39 @@ function resolveCanvasColor(value: string) {
   return resolved || value;
 }
 
+function mixCanvasColors(
+  foreground: string,
+  background: string,
+  foregroundWeight: number,
+) {
+  const resolvedForeground = resolveCanvasColor(foreground);
+  const resolvedBackground = resolveCanvasColor(background);
+  const foregroundMatch = resolvedForeground.match(
+    /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i,
+  );
+  const backgroundMatch = resolvedBackground.match(
+    /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i,
+  );
+  if (!foregroundMatch || !backgroundMatch) {
+    return resolvedForeground;
+  }
+
+  const mixChannel = (foregroundChannel: string, backgroundChannel: string) => {
+    const foregroundValue = Number.parseInt(foregroundChannel, 16);
+    const backgroundValue = Number.parseInt(backgroundChannel, 16);
+    return Math.round(
+      backgroundValue +
+        (foregroundValue - backgroundValue) * foregroundWeight,
+    );
+  };
+
+  return `rgb(${mixChannel(foregroundMatch[1], backgroundMatch[1])}, ${mixChannel(foregroundMatch[2], backgroundMatch[2])}, ${mixChannel(foregroundMatch[3], backgroundMatch[3])})`;
+}
+
+function lightenCanvasColor(value: string) {
+  return mixCanvasColors(value, "#ffffff", 0.68);
+}
+
 function nodeRadiusFromContent(node: NexusGraphNode) {
   const contentWeight = Math.log1p(
     Math.max(node.characterCount, node.wordCount * 6),
@@ -228,9 +277,12 @@ export function NexusView({
   sections,
   scoresBySectionId = EMPTY_SCORES,
   className,
+  initialViewState = null,
+  onViewStateChange,
 }: NexusViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
   const graph = useMemo(
     () => buildNexusGraph(sections, scoresBySectionId),
     [sections, scoresBySectionId],
@@ -238,24 +290,70 @@ export function NexusView({
   const graphKey = useMemo(
     () =>
       [
-        graph.nodes.map((node) => node.id).join(","),
-        graph.edges.map((edge) => edge.id).join(","),
+        graph.nodes
+          .map((node) => node.id)
+          .sort()
+          .join(","),
+        graph.edges
+          .map((edge) => edge.id)
+          .sort()
+          .join(","),
       ].join("|"),
     [graph],
   );
+  const nodeKey = useMemo(
+    () =>
+      graph.nodes
+        .map((node) => node.id)
+        .sort()
+        .join(","),
+    [graph],
+  );
   const [size, setSize] = useState<CanvasSize>({ width: 0, height: 0 });
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
   const [tooltip, setTooltip] = useState<TooltipState>(null);
+  const [tooltipSize, setTooltipSize] = useState<CanvasSize>({
+    width: 400,
+    height: 66,
+  });
+  const tooltipId = tooltip?.id ?? null;
   const [dragging, setDragging] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const simNodesRef = useRef<Map<string, SimNode>>(new Map());
   const edgesRef = useRef<NexusGraphEdge[]>([]);
-  const transformRef = useRef<ViewTransform>({ x: 0, y: 0, k: 1 });
+  const initialViewStateRef = useRef(initialViewState);
+  const transformRef = useRef<ViewTransform>(
+    initialViewState?.transform ?? { x: 0, y: 0, k: 1 },
+  );
   const pointersRef = useRef<Map<number, PointerPoint>>(new Map());
   const gestureRef = useRef<Gesture>(null);
   const draggedNodeRef = useRef<string | null>(null);
   const hoveredNodeRef = useRef<string | null>(null);
-  const animationAlphaRef = useRef(1);
-  const needsFitRef = useRef(true);
+  const animationAlphaRef = useRef(initialViewState ? 0.08 : 1);
+  const needsFitRef = useRef(!initialViewState);
+  const graphKeyRef = useRef("");
+  const nodeKeyRef = useRef("");
+  const graphHydratedRef = useRef(false);
+  const restoredSizeRef = useRef(initialViewState?.size ?? null);
+  const onViewStateChangeRef = useRef(onViewStateChange);
+  onViewStateChangeRef.current = onViewStateChange;
+
+  useEffect(() => {
+    return () => {
+      const nodes = Object.fromEntries(
+        Array.from(simNodesRef.current.values()).map((node) => [
+          node.id,
+          { x: node.x, y: node.y, vx: node.vx, vy: node.vy },
+        ]),
+      );
+      onViewStateChangeRef.current?.({
+        nodes,
+        size: sizeRef.current,
+        transform: { ...transformRef.current },
+      });
+    };
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -268,11 +366,28 @@ export function NexusView({
       if (!rect) {
         return;
       }
-      setSize({
-        width: Math.max(0, rect.width),
-        height: Math.max(0, rect.height),
+      const width = Math.max(0, rect.width);
+      const height = Math.max(0, rect.height);
+      setSize((current) => {
+        if (current.width === width && current.height === height) {
+          return current;
+        }
+
+        if (current.width > 0 && current.height > 0) {
+          transformRef.current.x += (width - current.width) / 2;
+          transformRef.current.y += (height - current.height) / 2;
+        } else if (restoredSizeRef.current) {
+          transformRef.current.x +=
+            (width - restoredSizeRef.current.width) / 2;
+          transformRef.current.y +=
+            (height - restoredSizeRef.current.height) / 2;
+          restoredSizeRef.current = null;
+        } else {
+          needsFitRef.current = true;
+        }
+
+        return { width, height };
       });
-      needsFitRef.current = true;
       animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.5);
     });
 
@@ -280,10 +395,35 @@ export function NexusView({
     return () => observer.disconnect();
   }, []);
 
+  useLayoutEffect(() => {
+    const element = tooltipRef.current;
+    if (!element || !tooltipId) {
+      return;
+    }
+
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect();
+      setTooltipSize((current) =>
+        current.width === rect.width && current.height === rect.height
+          ? current
+          : { width: rect.width, height: rect.height },
+      );
+    };
+    updateSize();
+
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [tooltipId]);
+
   useEffect(() => {
     const previous = simNodesRef.current;
     const next = new Map<string, SimNode>();
     const total = graph.nodes.length;
+    const nodesChanged = nodeKeyRef.current !== nodeKey;
+    const topologyChanged = graphKeyRef.current !== graphKey;
+    const initialHydration = !graphHydratedRef.current;
+    const restoredNodes = initialViewStateRef.current?.nodes;
 
     graph.nodes.forEach((node, index) => {
       const existing = previous.get(node.id);
@@ -293,6 +433,16 @@ export function NexusView({
         next.set(node.id, {
           ...existing,
           ...node,
+          radius,
+        });
+        return;
+      }
+
+      const restored = restoredNodes?.[node.id];
+      if (restored) {
+        next.set(node.id, {
+          ...node,
+          ...restored,
           radius,
         });
         return;
@@ -310,14 +460,43 @@ export function NexusView({
 
     simNodesRef.current = next;
     edgesRef.current = graph.edges;
-    needsFitRef.current = true;
-    animationAlphaRef.current = 1;
-    hoveredNodeRef.current = null;
+    needsFitRef.current ||=
+      nodesChanged && !(initialHydration && initialViewStateRef.current);
+    animationAlphaRef.current =
+      topologyChanged && !(initialHydration && initialViewStateRef.current)
+        ? 1
+        : Math.max(animationAlphaRef.current, 0.12);
+    graphKeyRef.current = graphKey;
+    nodeKeyRef.current = nodeKey;
+    graphHydratedRef.current = true;
     setSelectedNodeId((current) =>
       current && next.has(current) ? current : null,
     );
-    setTooltip(null);
-  }, [graph, graphKey]);
+    setTooltip((current) => {
+      if (!current) {
+        return null;
+      }
+      const node = next.get(current.id);
+      if (!node) {
+        hoveredNodeRef.current = null;
+        return null;
+      }
+      const screen = worldToScreen(
+        { x: node.x, y: node.y },
+        transformRef.current,
+      );
+      return {
+        ...current,
+        name: node.name,
+        color: node.color,
+        score: node.score,
+        degree: node.degree,
+        possibleConnections: Math.max(0, next.size - 1),
+        x: screen.x,
+        y: screen.y,
+      };
+    });
+  }, [graph, graphKey, nodeKey]);
 
   const fitToGraph = useCallback(() => {
     const nodes = Array.from(simNodesRef.current.values());
@@ -404,6 +583,8 @@ export function NexusView({
       name: node.name,
       color: node.color,
       score: node.score,
+      degree: node.degree,
+      possibleConnections: Math.max(0, simNodesRef.current.size - 1),
       x: screen.x,
       y: screen.y,
     });
@@ -451,6 +632,9 @@ export function NexusView({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
       };
+      if (pointersRef.current.size >= 2) {
+        return;
+      }
       pointersRef.current.set(event.pointerId, point);
       event.currentTarget.setPointerCapture(event.pointerId);
 
@@ -463,6 +647,7 @@ export function NexusView({
             initialCenter: midpoint(first, second),
             transform: { ...transformRef.current },
           };
+          draggedNodeRef.current = null;
           setDragging(true);
         }
         return;
@@ -470,6 +655,7 @@ export function NexusView({
 
       const node = findNodeAt(point);
       if (node) {
+        const deselectOnClick = selectedNodeId === node.id;
         setSelectedNodeId(node.id);
         const world = screenToWorld(point, transformRef.current);
         gestureRef.current = {
@@ -480,6 +666,9 @@ export function NexusView({
             x: node.x - world.x,
             y: node.y - world.y,
           },
+          start: point,
+          moved: false,
+          deselectOnClick,
         };
         draggedNodeRef.current = node.id;
         animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.5);
@@ -498,7 +687,7 @@ export function NexusView({
       updateTooltipForNode(null);
       setDragging(true);
     },
-    [findNodeAt, updateTooltipForNode],
+    [findNodeAt, selectedNodeId, updateTooltipForNode],
   );
 
   const handlePointerMove = useCallback(
@@ -508,9 +697,16 @@ export function NexusView({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
       };
-      pointersRef.current.set(event.pointerId, point);
 
       const gesture = gestureRef.current;
+      const activePointer = pointersRef.current.has(event.pointerId);
+      if (gesture && !activePointer) {
+        return;
+      }
+      if (activePointer) {
+        pointersRef.current.set(event.pointerId, point);
+      }
+
       if (gesture?.mode === "pinch") {
         const [first, second] = Array.from(pointersRef.current.values());
         if (!first || !second) {
@@ -547,6 +743,9 @@ export function NexusView({
         gesture?.mode === "drag-node" &&
         gesture.pointerId === event.pointerId
       ) {
+        if (!gesture.moved && distance(gesture.start, point) > 3) {
+          gesture.moved = true;
+        }
         const node = simNodesRef.current.get(gesture.nodeId);
         if (!node) {
           return;
@@ -562,7 +761,7 @@ export function NexusView({
         return;
       }
 
-      if (pointersRef.current.size <= 1) {
+      if (!gesture) {
         updateTooltipForNode(findNodeAt(point));
       }
     },
@@ -571,12 +770,30 @@ export function NexusView({
 
   const handlePointerUp = useCallback(
     (event: ReactPointerEvent<HTMLCanvasElement>) => {
+      const gesture = gestureRef.current;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const pointerInside =
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom;
       pointersRef.current.delete(event.pointerId);
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
 
       if (pointersRef.current.size === 0) {
+        if (
+          gesture?.mode === "drag-node" &&
+          gesture.pointerId === event.pointerId &&
+          !gesture.moved &&
+          gesture.deselectOnClick
+        ) {
+          setSelectedNodeId(null);
+        }
+        if (!pointerInside || event.type === "pointercancel") {
+          updateTooltipForNode(null);
+        }
         gestureRef.current = null;
         draggedNodeRef.current = null;
         setDragging(false);
@@ -595,7 +812,7 @@ export function NexusView({
         }
       }
     },
-    [],
+    [updateTooltipForNode],
   );
 
   const handlePointerLeave = useCallback(() => {
@@ -633,13 +850,16 @@ export function NexusView({
       } else if (event.key === "0") {
         event.preventDefault();
         resetView();
+      } else if (event.key === "Escape" && selectedNodeId) {
+        event.preventDefault();
+        setSelectedNodeId(null);
       } else {
         return;
       }
 
       animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.16);
     },
-    [applyZoom, resetView, size.height, size.width],
+    [applyZoom, resetView, selectedNodeId, size.height, size.width],
   );
 
   useEffect(() => {
@@ -788,20 +1008,41 @@ export function NexusView({
       }
       ctx.globalAlpha = 1;
 
+      const focusedNodeIds = new Set<string>();
+      if (selectedNodeId) {
+        focusedNodeIds.add(selectedNodeId);
+        for (const edge of edgesRef.current) {
+          if (edge.sourceId === selectedNodeId) {
+            focusedNodeIds.add(edge.targetId);
+          } else if (edge.targetId === selectedNodeId) {
+            focusedNodeIds.add(edge.sourceId);
+          }
+        }
+      }
+      const canvasBackground = resolveCanvasColor(
+        "var(--creed-background)",
+      );
+
       for (const node of nodes) {
         const hovered = hoveredNodeRef.current === node.id;
         const selected = selectedNodeId === node.id;
+        const directlyConnected =
+          !selectedNodeId || focusedNodeIds.has(node.id);
 
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-        ctx.fillStyle = resolveCanvasColor(node.color);
+        ctx.fillStyle = selected
+          ? lightenCanvasColor(node.color)
+          : directlyConnected || hovered
+            ? resolveCanvasColor(node.color)
+            : mixCanvasColors(node.color, canvasBackground, 0.3);
         ctx.fill();
 
         if (hovered || selected) {
-          ctx.lineWidth = Math.max(1, 1.5 / transform.k);
-          ctx.strokeStyle = resolveCanvasColor(
-            hovered ? node.color : NODE_SELECTION_STROKE,
-          );
+          ctx.lineWidth = selected
+            ? Math.max(2.5, 3 / transform.k)
+            : Math.max(1, 1.5 / transform.k);
+          ctx.strokeStyle = resolveCanvasColor(node.color);
           ctx.stroke();
         }
       }
@@ -813,7 +1054,7 @@ export function NexusView({
 
     frameId = window.requestAnimationFrame(draw);
     return () => window.cancelAnimationFrame(frameId);
-  }, [fitToGraph, graphKey, selectedNodeId, size]);
+  }, [fitToGraph, selectedNodeId, size]);
 
   return (
     <div
@@ -861,37 +1102,68 @@ export function NexusView({
 
       {tooltip ? (
         <div
-          className="pointer-events-none absolute z-10 w-64 rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-3 text-[12px] shadow-[0_8px_24px_rgba(28,28,26,0.10)]"
+          ref={tooltipRef}
+          className="pointer-events-none absolute z-10 flex w-max items-baseline gap-3 rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-3 text-[12px] shadow-[0_8px_24px_rgba(28,28,26,0.10)]"
           style={{
-            left: clamp(tooltip.x + 14, 8, Math.max(8, size.width - 256)),
-            top: clamp(tooltip.y + 14, 8, Math.max(8, size.height - 92)),
+            left: clamp(
+              tooltip.x + 14,
+              8,
+              Math.max(8, size.width - tooltipSize.width - 8),
+            ),
+            top: clamp(
+              tooltip.y + 14,
+              8,
+              Math.max(8, size.height - tooltipSize.height - 8),
+            ),
+            maxWidth: Math.min(400, Math.max(0, size.width - 16)),
           }}
         >
-          <div className="flex items-baseline justify-between gap-3">
-            <div
-              className="min-w-0 truncate text-[17px] font-medium leading-tight tracking-[-0.01em] text-[var(--creed-text-primary)]"
+          <div
+            className="min-w-0 max-w-[220px] truncate text-[17px] font-medium leading-tight tracking-[-0.01em]"
+            style={{ color: resolveCanvasColor(tooltip.color) }}
+          >
+            {tooltip.name}
+          </div>
+          <span
+            aria-hidden="true"
+            className="shrink-0 text-[var(--creed-text-tertiary)]"
+          >
+            ·
+          </span>
+          <div className="flex shrink-0 items-baseline gap-1.5">
+            <span
+              className="font-mono text-[20px] font-medium leading-none tracking-[-0.02em] tabular-nums"
               style={{ color: resolveCanvasColor(tooltip.color) }}
             >
-              {tooltip.name}
-            </div>
-            {typeof tooltip.score === "number" ? (
-              <div className="flex items-baseline gap-1.5">
-                <span
-                  className="font-mono text-[20px] font-medium leading-none tracking-[-0.02em] tabular-nums"
-                  style={{ color: qualityScoreColor(tooltip.score) }}
-                >
-                  {tooltip.score}
-                </span>
-                <span className="text-[12px] font-medium text-[var(--creed-text-primary)]">
-                  / 100
-                </span>
-              </div>
-            ) : (
-              <div className="shrink-0 text-[12px] font-medium text-[var(--creed-text-tertiary)]">
-                No score
-              </div>
-            )}
+              {tooltip.degree}
+            </span>
+            <span className="text-[12px] font-medium text-[var(--creed-text-primary)]">
+              / {tooltip.possibleConnections}
+            </span>
           </div>
+          <span
+            aria-hidden="true"
+            className="shrink-0 text-[var(--creed-text-tertiary)]"
+          >
+            ·
+          </span>
+          {typeof tooltip.score === "number" ? (
+            <div className="flex shrink-0 items-baseline gap-1.5">
+              <span
+                className="font-mono text-[20px] font-medium leading-none tracking-[-0.02em] tabular-nums"
+                style={{ color: qualityScoreColor(tooltip.score) }}
+              >
+                {tooltip.score}
+              </span>
+              <span className="text-[12px] font-medium text-[var(--creed-text-primary)]">
+                / 100
+              </span>
+            </div>
+          ) : (
+            <div className="shrink-0 text-[12px] font-medium text-[var(--creed-text-tertiary)]">
+              No score
+            </div>
+          )}
         </div>
       ) : null}
     </div>

@@ -158,6 +158,7 @@ export function buildNexusGraph(
   const edgeById = new Map<string, NexusGraphEdge>();
   const incoming = new Map<string, number>();
   const outgoing = new Map<string, number>();
+  const neighbours = new Map<string, Set<string>>();
 
   for (const section of visibleSections) {
     const refs = [
@@ -183,6 +184,12 @@ export function buildNexusGraph(
       });
       outgoing.set(section.id, (outgoing.get(section.id) ?? 0) + 1);
       incoming.set(target.id, (incoming.get(target.id) ?? 0) + 1);
+      const sourceNeighbours = neighbours.get(section.id) ?? new Set<string>();
+      sourceNeighbours.add(target.id);
+      neighbours.set(section.id, sourceNeighbours);
+      const targetNeighbours = neighbours.get(target.id) ?? new Set<string>();
+      targetNeighbours.add(section.id);
+      neighbours.set(target.id, targetNeighbours);
     }
   }
 
@@ -200,7 +207,7 @@ export function buildNexusGraph(
       wordCount: text ? text.split(/\s+/).length : 0,
       outgoing: out,
       incoming: inCount,
-      degree: out + inCount,
+      degree: neighbours.get(section.id)?.size ?? 0,
     };
   });
 
