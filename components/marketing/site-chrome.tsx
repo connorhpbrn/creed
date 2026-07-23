@@ -51,7 +51,10 @@ function stickySurfacePath(
   collapsedCap = false,
   preserveJoin = false,
 ) {
+  // `rounded-xl` resolves to --radius-xl (16px) in app/globals.css.
   const outerRadius = 16;
+  const outerHandle = outerRadius * 0.55228475;
+  const outerInset = outerRadius - outerHandle;
   const joinRadius = expanded || preserveJoin ? 20 : 0;
   const joinHandle = joinRadius * 0.55228475;
   const bottomRadius = expanded || collapsedCap ? 16 : 0;
@@ -64,9 +67,9 @@ function stickySurfacePath(
   return [
     `M${outerRadius} 0`,
     `H${width - outerRadius}`,
-    `Q${width} 0 ${width} ${outerRadius}`,
+    `C${width - outerInset} 0 ${width} ${outerInset} ${width} ${outerRadius}`,
     `V${headerHeight - outerRadius}`,
-    `Q${width} ${headerHeight} ${width - outerRadius} ${headerHeight}`,
+    `C${width} ${headerHeight - outerInset} ${width - outerInset} ${headerHeight} ${width - outerRadius} ${headerHeight}`,
     `H${right + joinRadius}`,
     `C${right + joinRadius - joinHandle} ${headerHeight} ${right} ${headerHeight + joinRadius - joinHandle} ${right} ${headerHeight + joinRadius}`,
     `V${bottom - bottomRadius}`,
@@ -76,9 +79,9 @@ function stickySurfacePath(
     `V${headerHeight + joinRadius}`,
     `C${left} ${headerHeight + joinRadius - joinHandle} ${left - joinRadius + joinHandle} ${headerHeight} ${left - joinRadius} ${headerHeight}`,
     `H${outerRadius}`,
-    `Q0 ${headerHeight} 0 ${headerHeight - outerRadius}`,
+    `C${outerInset} ${headerHeight} 0 ${headerHeight - outerInset} 0 ${headerHeight - outerRadius}`,
     `V${outerRadius}`,
-    `Q0 0 ${outerRadius} 0Z`,
+    `C0 ${outerInset} ${outerInset} 0 ${outerRadius} 0Z`,
   ].join(" ");
 }
 
