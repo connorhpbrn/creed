@@ -55,6 +55,8 @@ import { ShortcutKey } from "@/components/creed/shortcut-key";
 
 const FILE_NAV_INTENT_KEY = "creed:file-nav-intent";
 const SIDEBAR_COLLAPSED_KEY = "creed:sidebar-collapsed";
+const SIDEBAR_PRESS_CLASS =
+  "transform-gpu transition-[color,background-color,transform,filter] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] active:translate-y-px active:scale-[0.98] active:brightness-[0.96]";
 
 type ShellProps = {
   children: ReactNode;
@@ -96,12 +98,12 @@ function ShellNavLink({
   collapsed: boolean;
 }) {
   const Icon = item.icon;
-  const router = useRouter();
   const { iconRef, start, settle, initialState } = useAnimatedIconControls(120);
 
   return (
     <Link
       href={item.href}
+      prefetch={true}
       className={cn(
         // Sizing kept identical to the section nav buttons below this row so
         // the two stacks read as one continuous list. On mobile each button is
@@ -109,17 +111,15 @@ function ShellNavLink({
         // a square, not a slight rectangle; lg restores the full-width row.
         // When the sidebar is collapsed (S key) the lg styles are dropped so
         // desktop renders the same icon rail as mobile.
-        "flex h-8 w-8 mx-auto items-center justify-center rounded-sm text-[14px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+        "flex h-8 w-8 mx-auto items-center justify-center rounded-sm text-[14px] font-medium text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+        SIDEBAR_PRESS_CLASS,
         !collapsed &&
           "lg:h-auto lg:w-auto lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
         active &&
           "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)] hover:bg-[var(--creed-surface-raised)]"
       )}
       aria-label={item.label}
-      onMouseEnter={() => {
-        router.prefetch(item.href);
-        start();
-      }}
+      onMouseEnter={start}
       onMouseLeave={settle}
     >
       <Icon
@@ -245,12 +245,6 @@ export function CreedShell({
     }
     return rows;
   }, [state.proposals]);
-
-  useEffect(() => {
-    navItems.forEach((item) => {
-      router.prefetch(item.href);
-    });
-  }, [router]);
 
   useEffect(() => {
     // The settings preload warms the PERSONAL settings screen's shared caches
@@ -398,7 +392,8 @@ export function CreedShell({
                 onMouseEnter={() => searchIconRef.current?.startAnimation()}
                 onMouseLeave={() => searchIconRef.current?.stopAnimation()}
                 className={cn(
-                  "flex h-8 w-8 mx-auto items-center justify-center rounded-sm text-[14px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+                  "flex h-8 w-8 mx-auto items-center justify-center rounded-sm text-[14px] font-medium text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+                  SIDEBAR_PRESS_CLASS,
                   !collapsed && "lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2"
                 )}
                 aria-label="Search"
@@ -524,7 +519,8 @@ export function CreedShell({
                     type="button"
                     onClick={() => handleSectionClick(section.id)}
                     className={cn(
-                      "flex h-8 w-8 mx-auto items-center justify-center rounded-sm text-left text-[14px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+                      "flex h-8 w-8 mx-auto items-center justify-center rounded-sm text-left text-[14px] font-medium text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+                      SIDEBAR_PRESS_CLASS,
                       !collapsed &&
                         "lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
                       isActive &&
@@ -560,7 +556,8 @@ export function CreedShell({
                   type="button"
                   onClick={() => handleProposalClick(row.id)}
                   className={cn(
-                    "flex h-8 w-8 mx-auto items-center justify-center rounded-sm bg-[#ECFDF5] text-left text-[14px] font-medium text-[#047857] transition-colors duration-150 hover:bg-[#D1FAE5] hover:text-[#065F46] dark:bg-[#052e1a]/40 dark:text-[#4ade80] dark:hover:bg-[#052e1a]/60 dark:hover:text-[#4ade80]",
+                    "flex h-8 w-8 mx-auto items-center justify-center rounded-sm bg-[#ECFDF5] text-left text-[14px] font-medium text-[#047857] hover:bg-[#D1FAE5] hover:text-[#065F46] dark:bg-[#052e1a]/40 dark:text-[#4ade80] dark:hover:bg-[#052e1a]/60 dark:hover:text-[#4ade80]",
+                    SIDEBAR_PRESS_CLASS,
                     !collapsed &&
                       "lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
                     // Same active-equals-hover rule as the pending-delete
@@ -586,7 +583,8 @@ export function CreedShell({
                 type="button"
                 onClick={handleAddSectionClick}
                 className={cn(
-                  "flex h-8 w-8 mx-auto items-center justify-center rounded-sm text-left text-[14px] text-[var(--creed-text-tertiary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+                  "flex h-8 w-8 mx-auto items-center justify-center rounded-sm text-left text-[14px] text-[var(--creed-text-tertiary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+                  SIDEBAR_PRESS_CLASS,
                   !collapsed && "lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-2 lg:px-2 lg:py-2"
                 )}
                 aria-label="Add section"
