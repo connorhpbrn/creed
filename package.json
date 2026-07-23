@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "NODE_OPTIONS=--max-http-header-size=65536 next start",
     "lint": "eslint",
-    "test": "node --test --experimental-strip-types 'tests/**/*.test.ts'",
+    "test": "node --test --experimental-strip-types 'tests/**/*.test.ts' 'lib/**/*.test.ts'",
     "indexnow": "node --experimental-strip-types scripts/indexnow-ping.ts"
   },
   "dependencies": {

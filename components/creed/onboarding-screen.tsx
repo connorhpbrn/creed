@@ -31,6 +31,10 @@ import {
   buildOnboardingPreviewSections,
   compileOnboardingDraft,
 } from "@/lib/onboarding/compile";
+import {
+  isAlreadyComposedConflict,
+  type OnboardingComposeResponse,
+} from "@/lib/onboarding/compose-response";
 import { cn } from "@/lib/utils";
 
 // 10-step flow indexed 0-9: welcome / Q1 identity / explainer / Q2 goals /
@@ -154,17 +158,17 @@ export function OnboardingScreen({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ markdown }),
         });
-        // Already composed (a re-paste): just move on to the preview.
-        if (res.status === 409) {
-          setStep(PREVIEW_STEP);
-          return;
-        }
-        const data = (await res.json().catch(() => ({}))) as {
+        const data = (await res.json().catch(() => ({}))) as OnboardingComposeResponse & {
           ok?: boolean;
           matched?: number;
           sections?: CreedSection[];
-          error?: string;
         };
+        // A re-paste after a successful compose is safe to resume. Other
+        // conflicts, such as a missing seed, must remain visible to the user.
+        if (isAlreadyComposedConflict(res.status, data)) {
+          setStep(PREVIEW_STEP);
+          return;
+        }
         if (!res.ok) {
           setPasteError(
             typeof data.error === "string" ? data.error : "Could not save that. Try again."
