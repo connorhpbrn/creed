@@ -73,6 +73,7 @@ const nextConfig: NextConfig = {
   ...(process.env.NODE_ENV === "development"
     ? { distDir: process.env.CREED_DIST_DIR || ".next-runtime" }
     : {}),
+  output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
   images: {

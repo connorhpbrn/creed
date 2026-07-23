@@ -45,6 +45,20 @@ If you touched a Supabase migration, run `supabase db reset` against a
 local Supabase before pushing — schema-only PRs that haven't been
 applied will not be merged.
 
+If you touched `Dockerfile`, `.dockerignore`, or the `output: "standalone"`
+setting in `next.config.ts`, verify the container still builds and boots
+before pushing:
+
+```bash
+docker build --build-arg NEXT_PUBLIC_SITE_URL=http://localhost:3000 -t creed .
+docker run --rm -p 3000:3000 --env-file .env creed
+```
+
+Confirm `http://localhost:3000` serves the app, then check the image
+didn't regress in size (`docker image ls creed`) — the whole point of the
+multi-stage build is that the runner stage ships no source tree, dev
+dependencies, or package manager cache.
+
 ## Coding style
 
 We follow the surrounding code rather than a strict written style guide,
