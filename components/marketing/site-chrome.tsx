@@ -1,9 +1,7 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -34,53 +32,6 @@ import {
 } from "@/lib/branding";
 
 type NavItem = { label: string; href: string };
-
-type StickyDropdownSurface = {
-  label: string;
-  left: number;
-  right: number;
-  bottom: number;
-  headerHeight: number;
-  containerWidth: number;
-  open: boolean;
-};
-
-function stickySurfacePath(
-  surface: StickyDropdownSurface,
-  expanded: boolean,
-  collapsedCap = false,
-  preserveJoin = false,
-) {
-  const outerRadius = 16;
-  const joinRadius = expanded || preserveJoin ? 20 : 0;
-  const joinHandle = joinRadius * 0.55228475;
-  const bottomRadius = expanded || collapsedCap ? 16 : 0;
-  const { containerWidth: width, headerHeight, left, right } = surface;
-  const bottom = expanded
-    ? surface.bottom
-    : headerHeight +
-      (collapsedCap ? bottomRadius + (preserveJoin ? joinRadius : 0) : 0);
-
-  return [
-    `M${outerRadius} 0`,
-    `H${width - outerRadius}`,
-    `Q${width} 0 ${width} ${outerRadius}`,
-    `V${headerHeight - outerRadius}`,
-    `Q${width} ${headerHeight} ${width - outerRadius} ${headerHeight}`,
-    `H${right + joinRadius}`,
-    `C${right + joinRadius - joinHandle} ${headerHeight} ${right} ${headerHeight + joinRadius - joinHandle} ${right} ${headerHeight + joinRadius}`,
-    `V${bottom - bottomRadius}`,
-    `Q${right} ${bottom} ${right - bottomRadius} ${bottom}`,
-    `H${left + bottomRadius}`,
-    `Q${left} ${bottom} ${left} ${bottom - bottomRadius}`,
-    `V${headerHeight + joinRadius}`,
-    `C${left} ${headerHeight + joinRadius - joinHandle} ${left - joinRadius + joinHandle} ${headerHeight} ${left - joinRadius} ${headerHeight}`,
-    `H${outerRadius}`,
-    `Q0 ${headerHeight} 0 ${headerHeight - outerRadius}`,
-    `V${outerRadius}`,
-    `Q0 0 ${outerRadius} 0Z`,
-  ].join(" ");
-}
 
 // Header nav groups. Mirror the footer's Product / Legal / Resources columns so
 // the two stay in lockstep; each renders as a dropdown in the desktop chrome.
@@ -174,31 +125,17 @@ export function MarketingHeader({
   void scrolled;
   const authState = useLandingAuthState(configured);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const chromeRef = useRef<HTMLDivElement | null>(null);
-  const headerRef = useRef<HTMLElement | null>(null);
-  const [stickyDropdownSurface, setStickyDropdownSurface] =
-    useState<StickyDropdownSurface | null>(null);
-  const [desktopDropdownPromoted, setDesktopDropdownPromoted] = useState(false);
   // Which mobile dropdown row is expanded (one at a time).
   const [openMobileGroup, setOpenMobileGroup] = useState<string | null>(null);
   // Sticky-header morph: once scrolled past the hero's top edge the header
-  // condenses into a translucent rounded bar (in-app surface material).
+  // condenses into a rounded bar using the in-app surface material.
   const [isScrolled, setIsScrolled] = useState(false);
-  const stickyChromeActive =
-    isScrolled ||
-    desktopDropdownPromoted ||
-    stickyDropdownSurface !== null ||
-    mobileMenuOpen;
-
-  const promoteDesktopDropdown = useCallback(() => {
-    setDesktopDropdownPromoted(true);
-  }, []);
+  const stickyChromeActive = isScrolled || mobileMenuOpen;
 
   useEffect(() => {
     function onScroll() {
       const nextIsScrolled = window.scrollY > 64;
       setIsScrolled(nextIsScrolled);
-      if (nextIsScrolled) setDesktopDropdownPromoted(false);
     }
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -219,43 +156,12 @@ export function MarketingHeader({
     return () => window.removeEventListener("scroll", closeOnScroll);
   }, [mobileMenuOpen]);
 
-  useEffect(() => {
-    if (!stickyChromeActive) setStickyDropdownSurface(null);
-  }, [stickyChromeActive]);
-
-  const updateStickyDropdownSurface = useCallback(
-    (label: string, menu: HTMLDivElement | null) => {
-      if (!menu || !chromeRef.current || !headerRef.current) {
-        setStickyDropdownSurface((current) =>
-          current?.label === label ? { ...current, open: false } : current,
-        );
-        return;
-      }
-
-      const containerRect = chromeRef.current.getBoundingClientRect();
-      const headerRect = headerRef.current.getBoundingClientRect();
-      const menuRect = menu.getBoundingClientRect();
-
-      setStickyDropdownSurface({
-        label,
-        left: menuRect.left - containerRect.left,
-        right: menuRect.right - containerRect.left,
-        bottom: menuRect.bottom - containerRect.top,
-        headerHeight: headerRect.bottom - containerRect.top,
-        containerWidth: containerRect.width,
-        open: true,
-      });
-    },
-    [],
-  );
-
   return (
     <div className="pointer-events-none fixed inset-x-0 top-0 z-50 px-3 pt-3 md:px-4 md:pt-4">
       <div
-        ref={chromeRef}
         className={cn(
           "pointer-events-auto relative mx-auto w-full transition-[max-width] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-          stickyChromeActive ? "max-w-[720px]" : "max-w-[880px]",
+          stickyChromeActive ? "max-w-[800px]" : "max-w-[880px]",
         )}
       >
         {/* The sticky surface stays behind the chrome. On mobile it extends
@@ -267,68 +173,12 @@ export function MarketingHeader({
           transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
           className={cn(
             "pointer-events-none absolute inset-x-0 top-0 drop-shadow-[0_10px_18px_rgba(0,0,0,0.16)]",
-            (stickyChromeActive || mobileMenuOpen) && !stickyDropdownSurface
-              ? "opacity-100"
-              : "opacity-0",
+            stickyChromeActive ? "opacity-100" : "opacity-0",
           )}
         >
           <div className="absolute inset-0 rounded-xl bg-[var(--creed-surface)]" />
         </motion.div>
-        {stickyDropdownSurface ? (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 drop-shadow-[0_10px_18px_rgba(0,0,0,0.16)]"
-            style={{ height: stickyDropdownSurface.bottom }}
-          >
-            <motion.div
-              className="absolute inset-0 bg-[var(--creed-surface)]"
-              initial={{
-                clipPath: `path("${stickySurfacePath(
-                  stickyDropdownSurface,
-                  false,
-                  true,
-                )}")`,
-              }}
-              animate={{
-                clipPath: stickyDropdownSurface.open
-                  ? `path("${stickySurfacePath(stickyDropdownSurface, true)}")`
-                  : [
-                      `path("${stickySurfacePath(stickyDropdownSurface, true)}")`,
-                      `path("${stickySurfacePath(
-                        stickyDropdownSurface,
-                        false,
-                        true,
-                        true,
-                      )}")`,
-                      `path("${stickySurfacePath(
-                        stickyDropdownSurface,
-                        false,
-                        true,
-                      )}")`,
-                      `path("${stickySurfacePath(stickyDropdownSurface, false)}")`,
-                    ],
-              }}
-              transition={{
-                clipPath: stickyDropdownSurface.open
-                  ? { duration: 0.24, ease: [0.22, 1, 0.36, 1] }
-                  : {
-                      duration: 0.28,
-                      times: [0, 0.82, 0.96, 1],
-                      ease: [0.22, 1, 0.36, 1],
-                    },
-              }}
-              onAnimationComplete={() => {
-                if (!stickyDropdownSurface.open) {
-                  setStickyDropdownSurface((current) =>
-                    current && !current.open ? null : current,
-                  );
-                }
-              }}
-            />
-          </div>
-        ) : null}
         <header
-          ref={headerRef}
           className={cn(
             "relative z-10 flex w-full items-center justify-between transition-[padding] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
             stickyChromeActive ? "py-1.5 pl-4 pr-1.5" : "px-1 py-1",
@@ -364,9 +214,6 @@ export function MarketingHeader({
             items={group.items}
             align="left"
             scrolled={stickyChromeActive}
-            delayOpen={!stickyChromeActive}
-            onStickySurfaceChange={updateStickyDropdownSurface}
-            onStickyOpen={promoteDesktopDropdown}
           />
         ))}
       </nav>
@@ -374,11 +221,8 @@ export function MarketingHeader({
       <HeaderAuthActions
         authState={authState}
         scrolled={stickyChromeActive}
-        delayOpen={!stickyChromeActive}
         mobileMenuOpen={mobileMenuOpen}
         setMobileMenuOpen={setMobileMenuOpen}
-        onStickySurfaceChange={updateStickyDropdownSurface}
-        onStickyOpen={promoteDesktopDropdown}
       />
 
       <AnimatePresence initial={false}>
@@ -575,64 +419,21 @@ function HeaderDropdown({
   items,
   align = "left",
   scrolled,
-  delayOpen = false,
   className,
-  onStickySurfaceChange,
-  onStickyOpen,
 }: {
   label: string;
   items: NavItem[];
   align?: "left" | "right";
   scrolled?: boolean;
-  delayOpen?: boolean;
   className?: string;
-  onStickySurfaceChange?: (
-    label: string,
-    menu: HTMLDivElement | null,
-  ) => void;
-  onStickyOpen?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [pendingOpen, setPendingOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const openDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alignRight = align === "right";
 
-  const cancelPendingOpen = useCallback(() => {
-    if (openDelayRef.current) clearTimeout(openDelayRef.current);
-    openDelayRef.current = null;
-    setPendingOpen(false);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (openDelayRef.current) clearTimeout(openDelayRef.current);
-    },
-    [],
-  );
-
-  useLayoutEffect(() => {
-    if (!open || !scrolled || !menuRef.current || !onStickySurfaceChange) {
-      return;
-    }
-
-    const menu = menuRef.current;
-    const updateSurface = () => onStickySurfaceChange(label, menu);
-    updateSurface();
-
-    const resizeObserver = new ResizeObserver(updateSurface);
-    resizeObserver.observe(menu);
-    return () => {
-      resizeObserver.disconnect();
-      onStickySurfaceChange(label, null);
-    };
-  }, [label, onStickySurfaceChange, open, scrolled]);
-
   useEffect(() => {
-    if (!open && !pendingOpen) return;
+    if (!open) return;
     const closeDropdown = () => {
-      if (pendingOpen) cancelPendingOpen();
       setOpen(false);
     };
     function onPointerDown(event: MouseEvent) {
@@ -654,42 +455,19 @@ function HeaderDropdown({
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("scroll", onScroll);
     };
-  }, [cancelPendingOpen, open, pendingOpen]);
+  }, [open]);
 
-  const linkClass = cn(
-    "flex h-9 items-center justify-start rounded-md px-3.5 text-[14px] font-medium leading-none transition-colors duration-200",
-    scrolled
-      ? "text-[var(--creed-text-primary)] hover:text-[var(--creed-text-secondary)]"
-      : "text-white hover:text-white/55",
-  );
+  const linkClass =
+    "flex h-9 items-center justify-start rounded-md px-3.5 text-[14px] font-medium leading-none text-[var(--creed-text-primary)] transition-colors duration-200 hover:text-[var(--creed-text-secondary)]";
 
   return (
     <div ref={ref} className={cn("relative", className)}>
       <button
         type="button"
         onClick={() => {
-          if (pendingOpen) {
-            cancelPendingOpen();
-            return;
-          }
-          if (open) {
-            setOpen(false);
-            return;
-          }
-          if (delayOpen) {
-            onStickyOpen?.();
-            setPendingOpen(true);
-            openDelayRef.current = setTimeout(() => {
-              openDelayRef.current = null;
-              setPendingOpen(false);
-              setOpen(true);
-            }, 360);
-            return;
-          }
-          setOpen(true);
+          setOpen((value) => !value);
         }}
-        aria-expanded={open || pendingOpen}
-        aria-busy={pendingOpen || undefined}
+        aria-expanded={open}
         aria-haspopup="menu"
         className={cn(
           "inline-flex h-9 items-center gap-1 rounded-md px-3.5 text-[14px] font-medium transition-colors duration-200",
@@ -709,95 +487,61 @@ function HeaderDropdown({
 
       <AnimatePresence initial={false}>
         {open ? (
-          <>
-            {!scrolled ? (
-              <motion.div
-                aria-hidden
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                className={cn(
-                  "pointer-events-none absolute top-[1.15rem] w-[13rem] bg-black/[0.03] backdrop-blur-[12px]",
-                  alignRight ? "-right-8" : "-left-8",
-                )}
-                style={{
-                  height: `${items.length * 2.75 + 2.5}rem`,
-                  WebkitBackdropFilter: "blur(12px)",
-                  WebkitMaskImage:
-                    "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.55) 13%, #000 28%, #000 72%, rgba(0,0,0,0.55) 87%, transparent 100%), linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.55) 14%, #000 28%, #000 72%, rgba(0,0,0,0.55) 86%, transparent 100%)",
-                  maskImage:
-                    "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.55) 13%, #000 28%, #000 72%, rgba(0,0,0,0.55) 87%, transparent 100%), linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.55) 14%, #000 28%, #000 72%, rgba(0,0,0,0.55) 86%, transparent 100%)",
-                  maskComposite: "intersect",
-                  WebkitMaskComposite: "source-in",
-                }}
-              />
-            ) : null}
             <motion.div
-              ref={menuRef}
               initial={{
                 opacity: 0,
                 y: -8,
-                scaleY: scrolled ? 0.96 : 1,
-                filter: scrolled ? "none" : "blur(8px)",
+                scale: 0.98,
               }}
               animate={{
                 opacity: 1,
                 y: 0,
-                scaleY: 1,
-                filter: scrolled ? "none" : "blur(0px)",
+                scale: 1,
               }}
               exit={{
                 opacity: 0,
                 y: -8,
-                scaleY: scrolled ? 0.96 : 1,
-                filter: scrolled ? "none" : "blur(8px)",
+                scale: 0.98,
               }}
               transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
               style={{ transformOrigin: "top center" }}
               className={cn(
-                "absolute z-10 flex flex-col gap-2",
-                scrolled
-                  ? "top-[calc(100%+0.3125rem)] left-1/2 w-full -translate-x-1/2 pb-4 pt-2"
-                  : "top-[2.6rem] w-[9rem] text-white",
-                scrolled
-                  ? "items-start"
-                  : alignRight
-                    ? "right-0 items-end"
-                    : "left-0 items-start",
+                "absolute top-full z-10 w-32 pt-4",
+                "left-0",
               )}
             >
-              {items.map((item, index) => (
-                <motion.div
-                  key={item.label}
-                  className="w-full"
-                  initial={{ opacity: 0, x: alignRight ? 10 : -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{
-                    opacity: 0,
-                    x: alignRight ? 10 : -10,
-                    transition: {
-                      duration: 0.16,
+              <div className="flex flex-col gap-1 rounded-xl bg-[var(--creed-surface)] p-1.5 shadow-[0_10px_18px_rgba(0,0,0,0.16)]">
+                {items.map((item, index) => (
+                  <motion.div
+                    key={item.label}
+                    className="w-full"
+                    initial={{ opacity: 0, x: alignRight ? 10 : -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{
+                      opacity: 0,
+                      x: alignRight ? 10 : -10,
+                      transition: {
+                        duration: 0.16,
+                        ease: [0.22, 1, 0.36, 1],
+                      },
+                    }}
+                    transition={{
+                      duration: 0.24,
+                      delay: 0.04 + index * 0.04,
                       ease: [0.22, 1, 0.36, 1],
-                    },
-                  }}
-                  transition={{
-                    duration: 0.24,
-                    delay: 0.04 + index * 0.04,
-                    ease: [0.22, 1, 0.36, 1],
-                  }}
-                >
-                  <Link
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={linkClass}
+                    }}
                   >
-                    {item.label}
-                  </Link>
-                </motion.div>
-              ))}
+                    <Link
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      className={linkClass}
+                    >
+                      {item.label}
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
             </motion.div>
-          </>
         ) : null}
       </AnimatePresence>
     </div>
@@ -807,22 +551,13 @@ function HeaderDropdown({
 function HeaderAuthActions({
   authState,
   scrolled,
-  delayOpen,
   mobileMenuOpen,
   setMobileMenuOpen,
-  onStickySurfaceChange,
-  onStickyOpen,
 }: {
   authState: "loading" | "signed-in" | "signed-out";
   scrolled?: boolean;
-  delayOpen: boolean;
   mobileMenuOpen: boolean;
   setMobileMenuOpen: Dispatch<SetStateAction<boolean>>;
-  onStickySurfaceChange: (
-    label: string,
-    menu: HTMLDivElement | null,
-  ) => void;
-  onStickyOpen: () => void;
 }) {
   const enterArrow = useAnimatedIconControls(80, undefined, 420);
 
@@ -896,10 +631,7 @@ function HeaderAuthActions({
         ]}
         align="right"
         scrolled={scrolled}
-        delayOpen={delayOpen}
         className="hidden md:block"
-        onStickySurfaceChange={onStickySurfaceChange}
-        onStickyOpen={onStickyOpen}
       />
       <GitHubStarButton scrolled={scrolled} className="hidden md:inline-flex" />
       {mobileLinksTrigger}

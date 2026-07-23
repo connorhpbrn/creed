@@ -3,21 +3,33 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
+const SCENERY_WIDTHS: Record<string, number> = {
+  "dark-auth.png": 1122,
+  "light-auth.png": 1122,
+  "dark-finale.png": 1642,
+  "light-finale.png": 1642,
+  "dark-hero.png": 1672,
+  "light-hero.png": 1672,
+};
+
 // A landing backdrop image (hero / auth panel) that self-heals while art is
 // still being made: if the file 404s, it renders a labelled placeholder
 // telling you exactly which file to drop into public/assets/landing/scenery/. As
 // soon as the real image exists it loads and the placeholder disappears - no
 // flags to flip. `className` carries theme visibility (e.g. `dark:hidden`).
 //
-// Uses a native <img> (not next/image) on purpose: these are hand-made static
-// backdrops served as-is, and a native element gives reliable onError +
-// naturalWidth so the missing-file fallback actually fires.
+// Uses a native <picture> (not next/image) on purpose: these are hand-made
+// static backdrops served as cache-busted, high-quality 10-bit AVIFs with a
+// responsive 960px source and the PNG master as the final fallback. A native
+// element also gives reliable onError + naturalWidth for the missing-file
+// fallback.
 export function SceneryImage({
   src,
   fileName,
   label,
   hint,
   priority,
+  sizes = "100vw",
   className,
 }: {
   src: string;
@@ -25,6 +37,7 @@ export function SceneryImage({
   label?: string;
   hint?: string;
   priority?: boolean;
+  sizes?: string;
   className?: string;
 }) {
   const [errored, setErrored] = useState(false);
@@ -63,14 +76,17 @@ export function SceneryImage({
     );
   }
 
-  // Prefer the AVIF sibling (~40x smaller than the PNG masters); browsers
-  // without AVIF support, or a missing .avif file, fall back to the PNG <img>.
-  const avifSrc = src.endsWith(".png") ? src.replace(/\.png$/, ".avif") : null;
+  const avifBase = src.endsWith(".png") ? src.replace(/\.png$/, "") : null;
+  const fullWidth = SCENERY_WIDTHS[fileName];
+  const avifSrcSet = avifBase && fullWidth
+    ? `${avifBase}.v2-960.avif 960w, ${avifBase}.v2.avif ${fullWidth}w`
+    : null;
 
   return (
     <picture>
-      {avifSrc ? <source srcSet={avifSrc} type="image/avif" /> : null}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {avifSrcSet ? (
+        <source srcSet={avifSrcSet} sizes={sizes} type="image/avif" />
+      ) : null}
       <img
         ref={imgRef}
         src={src}

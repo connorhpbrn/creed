@@ -156,6 +156,10 @@ export function BelowHeroSections({ configured }: { configured: boolean }) {
       <WhatsOnTheWaySection />
       <FaqSection />
       <ClosingCtaSection configured={configured} />
+      <div
+        aria-hidden="true"
+        className="h-16 bg-[var(--creed-background)] md:h-20"
+      />
       <MarketingFooter />
     </main>
   );
@@ -507,7 +511,7 @@ const PANEL_DEMO_STEPS = [
   },
 ] as const;
 
-function useCyclingIndex(length: number, intervalMs = 1900) {
+function useCyclingIndex(length: number, intervalMs = 2400) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -527,14 +531,21 @@ function useTypedPanelPrompt(text: string, resetKey: number) {
   useEffect(() => {
     setTyped("");
     let index = 0;
-    const intervalId = window.setInterval(() => {
-      index += 1;
-      setTyped(text.slice(0, index));
-      if (index >= text.length) {
-        window.clearInterval(intervalId);
-      }
-    }, 34);
-    return () => window.clearInterval(intervalId);
+    let intervalId: number | undefined;
+    const startTimeoutId = window.setTimeout(() => {
+      intervalId = window.setInterval(() => {
+        index += 1;
+        setTyped(text.slice(0, index));
+        if (index >= text.length && intervalId !== undefined) {
+          window.clearInterval(intervalId);
+        }
+      }, 34);
+    }, 240);
+
+    return () => {
+      window.clearTimeout(startTimeoutId);
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+    };
   }, [resetKey, text]);
 
   return typed;
@@ -573,11 +584,7 @@ function PanelFeatureDemo() {
 
       <div className="p-3.5">
         <div className="rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 py-2.5 text-[13px] text-[var(--creed-text-primary)]">
-          {typedPrompt || (
-            <span className="text-[var(--creed-text-tertiary)]">
-              {step.prompt}
-            </span>
-          )}
+          {typedPrompt || "\u00A0"}
         </div>
 
         <div className="mt-3 space-y-2">
@@ -612,7 +619,8 @@ type TabDemoPhase =
   | "loading"
   | "ghost"
   | "press-accept"
-  | "accepted";
+  | "accepted"
+  | "pause";
 
 const TAB_DEMO_PHASE_MS: Record<Exclude<TabDemoPhase, "typing">, number> = {
   "press-invoke": 170,
@@ -620,6 +628,7 @@ const TAB_DEMO_PHASE_MS: Record<Exclude<TabDemoPhase, "typing">, number> = {
   ghost: 1500,
   "press-accept": 170,
   accepted: 2400,
+  pause: 300,
 };
 
 const TAB_DEMO_NEXT: Record<Exclude<TabDemoPhase, "typing">, TabDemoPhase> = {
@@ -627,7 +636,8 @@ const TAB_DEMO_NEXT: Record<Exclude<TabDemoPhase, "typing">, TabDemoPhase> = {
   loading: "ghost",
   ghost: "press-accept",
   "press-accept": "accepted",
-  accepted: "typing",
+  accepted: "pause",
+  pause: "typing",
 };
 
 function TabFeatureDemo() {
@@ -964,12 +974,7 @@ function RoadmapTeaserCard({
         </span>
       </div>
       <div className="flex flex-1 flex-col p-5">
-        {task.code ? (
-          <div className="font-mono text-[11px] tracking-tight text-[var(--creed-text-tertiary)]">
-            {task.code}
-          </div>
-        ) : null}
-        <h3 className="mt-1.5 text-[16px] font-medium leading-snug tracking-[-0.01em] text-[var(--creed-text-primary)]">
+        <h3 className="text-[16px] font-medium leading-snug tracking-[-0.01em] text-[var(--creed-text-primary)]">
           {task.title}
         </h3>
         {task.description ? (

@@ -52,7 +52,7 @@ yarn-error.log*
 /video/
 
 # private project notes — not shipped publicly
-/project-context/
+/context/
 /creed.md
 /design.md
 /docs.md

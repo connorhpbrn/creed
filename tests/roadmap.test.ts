@@ -84,7 +84,6 @@ test("internal sort keys never leak into the public task shape", () => {
     { id: "1", title: "A", phase: "todo", order: 3, taskNumber: 7 },
   ]);
   assert.deepEqual(Object.keys(next.tasks[0]).sort(), [
-    "code",
     "description",
     "id",
     "labels",
@@ -106,13 +105,12 @@ test("empty or non-array input yields three empty columns", () => {
   }
 });
 
-test("malformed fields fall back safely (missing id/code, non-array labels)", () => {
+test("malformed fields fall back safely (missing id, non-array labels)", () => {
   const [next] = groupTasksIntoColumns([
-    { title: "No id or code", phase: "todo", labels: "not-an-array" },
+    { title: "No id", phase: "todo", labels: "not-an-array" },
   ]);
   const task = next.tasks[0];
-  assert.equal(task.code, null);
   assert.deepEqual(task.labels, []);
-  // id falls back to `${phase}-${title}` when neither id nor code is present.
-  assert.equal(task.id, "todo-No id or code");
+  // id falls back to `${phase}-${title}` when id is absent.
+  assert.equal(task.id, "todo-No id");
 });

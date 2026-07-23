@@ -69,7 +69,7 @@ lib/
 
 supabase/migrations/    canonical schema (forward-only, idempotent)
 public/                 static assets
-project-context/        gitignored — internal context pack (read this first)
+context/                gitignored — internal context pack (read this first)
 ```
 
 The four "god" files to be careful in:
@@ -82,12 +82,12 @@ The four "god" files to be careful in:
 
 ## Reading order before edits
 
-1. `project-context/index.md` (gitignored — exists locally for the maintainer
+1. `context/index.md` (gitignored — exists locally for the maintainer
    and any agent working in the repo)
-2. The other files in `project-context/` listed by `index.md`
+2. The other files in `context/` listed by `index.md`
 3. The exact code path you're about to change
 
-If `project-context/` is missing (you cloned a public copy without it),
+If `context/` is missing (you cloned a public copy without it),
 read `README.md` + `CONTRIBUTING.md` + `SECURITY.md` and then this file
 end-to-end.
 
@@ -186,7 +186,7 @@ a sample update.
 
 Decide:
 - Did I learn something durable about the product, architecture, or
-  repo conventions? → update the relevant file in `project-context/`.
+  repo conventions? → update the relevant file in `context/`.
 - Did I leave the code worse in some small way (a `TODO`, a duplicated
   helper, a missing edge case)? → fix it now or call it out.
 - Did I create a new file or pattern? → make sure it's discoverable

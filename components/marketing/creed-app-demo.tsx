@@ -332,14 +332,16 @@ function SectionCard({
         </DropdownMenu>
       </div>
 
-      <RichTextEditor
-        sectionId={section.id}
-        content={section.content}
-        readOnly
-        accentColor={accent}
-        sectionTagTargets={sectionTagTargets}
-        onChange={ignoreEditorChange}
-      />
+      <div className="pointer-events-none select-none">
+        <RichTextEditor
+          sectionId={section.id}
+          content={section.content}
+          readOnly
+          accentColor={accent}
+          sectionTagTargets={sectionTagTargets}
+          onChange={ignoreEditorChange}
+        />
+      </div>
 
       <AnimatePresence initial={false}>
         {pendingProposals.map((p) => (

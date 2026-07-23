@@ -29,7 +29,6 @@ const PHASE_TO_COLUMN: Record<string, RoadmapColumnId> = {
 // used only to sort within a column.
 export type RoadmapTask = {
   id: string;
-  code: string | null; // taskCode, e.g. "HPB-14"
   title: string;
   description: string | null;
   labels: string[];
@@ -54,7 +53,6 @@ const COLUMN_META: Omit<RoadmapColumn, "tasks">[] = [
 // The subset of median's task shape we read; everything else is ignored.
 type MedianTask = {
   id?: unknown;
-  taskCode?: unknown;
   taskNumber?: unknown;
   title?: unknown;
   description?: unknown;
@@ -77,14 +75,12 @@ function toMappedTask(raw: MedianTask): MappedTask | null {
   const phase = typeof raw.phase === "string" ? raw.phase : "";
   if (!title || !phase) return null;
 
-  const code = typeof raw.taskCode === "string" ? raw.taskCode : null;
   return {
     phase,
     order: typeof raw.order === "number" ? raw.order : 0,
     taskNumber: typeof raw.taskNumber === "number" ? raw.taskNumber : 0,
     task: {
-      id: typeof raw.id === "string" ? raw.id : code ?? `${phase}-${title}`,
-      code,
+      id: typeof raw.id === "string" ? raw.id : `${phase}-${title}`,
       title,
       description:
         typeof raw.description === "string" && raw.description.trim()

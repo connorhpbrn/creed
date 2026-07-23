@@ -53,6 +53,7 @@ export function AuthShell({ topRight, children }: { topRight?: ReactNode; childr
           src={lightPanelImage}
           fileName="light-auth.png"
           label="Light auth"
+          sizes="(min-width: 768px) 50vw, 100vw"
           priority
           className="dark:hidden"
         />
@@ -61,6 +62,7 @@ export function AuthShell({ topRight, children }: { topRight?: ReactNode; childr
           fileName="dark-auth.png"
           label="Dark auth"
           hint="portrait"
+          sizes="(min-width: 768px) 50vw, 100vw"
           className="hidden dark:block"
         />
         {/* Smooth, eased fade from the page bg on the inner (left) edge into

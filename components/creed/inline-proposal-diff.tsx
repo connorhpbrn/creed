@@ -210,11 +210,12 @@ export function InlineProposalDiff({
             initials={proposal.authorInitials}
             agentName={agentName}
           />
-          <span className="truncate font-medium text-[var(--creed-text-primary)]">
+          <span className="hidden truncate font-medium text-[var(--creed-text-primary)] sm:inline">
             {agentName}
           </span>
           <span className="text-[var(--creed-text-tertiary)]">
-            proposed an update
+            <span className="sm:hidden">proposed</span>
+            <span className="hidden sm:inline">proposed an update</span>
           </span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
           <span className="inline-flex items-center gap-1">

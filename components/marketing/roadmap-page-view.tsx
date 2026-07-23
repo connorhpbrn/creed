@@ -86,13 +86,7 @@ function RoadmapColumnView({ column }: { column: RoadmapColumn }) {
 function RoadmapCard({ task }: { task: RoadmapTask }) {
   return (
     <article className="rounded-xl bg-[var(--creed-surface)] p-5">
-      {task.code ? (
-        <div className="font-mono text-[11px] tracking-tight text-[var(--creed-text-tertiary)]">
-          {task.code}
-        </div>
-      ) : null}
-
-      <h3 className="mt-2 text-[16px] font-medium leading-snug tracking-[-0.01em] text-[var(--creed-text-primary)]">
+      <h3 className="text-[16px] font-medium leading-snug tracking-[-0.01em] text-[var(--creed-text-primary)]">
         {task.title}
       </h3>
 

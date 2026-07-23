@@ -39,15 +39,21 @@ function useTypedLoop(text: string, active: boolean, speedMs = 32) {
 
     setTyped("");
     let index = 0;
-    const intervalId = window.setInterval(() => {
-      index += 1;
-      setTyped(text.slice(0, index));
-      if (index >= text.length) {
-        window.clearInterval(intervalId);
-      }
-    }, speedMs);
+    let intervalId: number | undefined;
+    const startTimeoutId = window.setTimeout(() => {
+      intervalId = window.setInterval(() => {
+        index += 1;
+        setTyped(text.slice(0, index));
+        if (index >= text.length && intervalId !== undefined) {
+          window.clearInterval(intervalId);
+        }
+      }, speedMs);
+    }, 300);
 
-    return () => window.clearInterval(intervalId);
+    return () => {
+      window.clearTimeout(startTimeoutId);
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+    };
   }, [active, speedMs, text]);
 
   return typed;
@@ -99,11 +105,7 @@ export function CreateDemo() {
               </div>
               <div className="mt-3 flex h-11 items-center rounded-xl border border-[var(--creed-border)] bg-[var(--creed-surface)] px-3.5 text-[14px] text-[var(--creed-text-primary)]">
                 <span className="truncate">
-                  {typed || (
-                    <span className="text-[var(--creed-text-tertiary)]">
-                      {current.placeholder}
-                    </span>
-                  )}
+                  {typed || "\u00A0"}
                 </span>
               </div>
               <div className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-md bg-[var(--creed-text-primary)] px-4 text-[13px] font-medium text-[var(--creed-button-primary-fg)]">
@@ -196,13 +198,13 @@ export function ConnectDemo() {
 // ----- step 3: usage --------------------------------------------------------
 
 const USAGE_DAYS = [
-  { analysis: 34, tab: 0, panel: 8 },
-  { analysis: 22, tab: 10, panel: 6 },
-  { analysis: 45, tab: 18, panel: 14 },
-  { analysis: 18, tab: 22, panel: 4 },
-  { analysis: 30, tab: 14, panel: 18 },
-  { analysis: 52, tab: 20, panel: 12 },
-  { analysis: 26, tab: 28, panel: 10 },
+  { label: "Jul 17", analysis: 34, tab: 0, panel: 8 },
+  { label: "Jul 18", analysis: 22, tab: 10, panel: 6 },
+  { label: "Jul 19", analysis: 45, tab: 18, panel: 14 },
+  { label: "Jul 20", analysis: 18, tab: 22, panel: 4 },
+  { label: "Jul 21", analysis: 30, tab: 14, panel: 18 },
+  { label: "Jul 22", analysis: 52, tab: 20, panel: 12 },
+  { label: "Jul 23", analysis: 26, tab: 28, panel: 10 },
 ] as const;
 
 const USAGE_COLORS = {
@@ -213,6 +215,12 @@ const USAGE_COLORS = {
 
 export function UsageDemo() {
   const [active, setActive] = useState(0);
+  const tooltipDay = USAGE_DAYS[active];
+  const tooltipRows = [
+    { label: "Analysis", value: tooltipDay.analysis, color: USAGE_COLORS.analysis },
+    { label: "Tab", value: tooltipDay.tab, color: USAGE_COLORS.tab },
+    { label: "Panel", value: tooltipDay.panel, color: USAGE_COLORS.panel },
+  ] as const;
 
   useEffect(() => {
     const intervalId = window.setInterval(
@@ -239,7 +247,7 @@ export function UsageDemo() {
           </span>
         </div>
 
-        <div className="mt-5 flex h-[116px] items-end gap-2 border-b border-dashed border-[var(--creed-border)] pb-1">
+        <div className="relative mt-5 flex h-[116px] items-end gap-2 border-b border-dashed border-[var(--creed-border)] pb-1">
           {USAGE_DAYS.map((day, index) => {
             const total = day.analysis + day.tab + day.panel;
             const height = 34 + total * 0.72;
@@ -280,6 +288,46 @@ export function UsageDemo() {
               </div>
             );
           })}
+
+          <motion.div
+            key={active}
+            initial={{ opacity: 0, scale: 0.95, y: 3 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.15, ease: EASE }}
+            className={[
+              "pointer-events-none absolute bottom-4 z-10 grid min-w-[8rem] items-start gap-1.5 rounded-sm border border-[var(--creed-border)] bg-[var(--creed-surface)] px-2.5 py-2 text-[12px] shadow-[0_12px_32px_rgba(28,28,26,0.12)]",
+              active <= 3 ? "origin-bottom-left" : "origin-bottom-right",
+            ].join(" ")}
+            style={{
+              left:
+                active <= 3
+                  ? `clamp(0px, calc(${((active + 0.5) / USAGE_DAYS.length) * 100}% + 1.375rem), calc(100% - 8rem))`
+                  : `clamp(0px, calc(${((active + 0.5) / USAGE_DAYS.length) * 100}% - 9.375rem), calc(100% - 8rem))`,
+            }}
+          >
+            <div className="font-medium text-[var(--creed-text-primary)]">
+              {tooltipDay.label}
+            </div>
+            <div className="grid gap-1.5">
+              {tooltipRows.map(({ label, value, color }) => (
+                <div
+                  key={label}
+                  className="flex w-full items-center justify-between gap-3"
+                >
+                  <span className="flex items-center gap-1.5 text-[var(--creed-text-secondary)]">
+                    <span
+                      className="h-2.5 w-2.5 rounded-[2px]"
+                      style={{ backgroundColor: color }}
+                    />
+                    {label}
+                  </span>
+                  <span className="font-mono text-[var(--creed-text-primary)]">
+                    ${(value / 100).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-medium text-[var(--creed-text-secondary)]">

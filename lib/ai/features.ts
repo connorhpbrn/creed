@@ -1,5 +1,5 @@
 // The AI features that spend credits. "analysis" and "panel" are wired to live
-// features today; "tab" is planned (see project-context/roadmap.md) and already
+// features today; "tab" is planned (see context/roadmap.md) and already
 // carries its display metadata + model env mapping, so shipping it is a new
 // call site, not a new subsystem.
 //
