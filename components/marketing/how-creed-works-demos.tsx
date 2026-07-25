@@ -230,7 +230,7 @@ export function ReadDemo() {
             transition={{ duration: 0.3, ease: EASE }}
             className="flex justify-end"
           >
-            <div className="max-w-[84%] rounded-lg bg-[var(--creed-surface-raised)] px-3.5 py-2 text-[13px] leading-snug text-[var(--creed-text-primary)]">
+            <div className="max-w-[84%] rounded-[10px] bg-[var(--creed-surface-raised)] px-3.5 py-2 text-[13px] leading-snug text-[var(--creed-text-primary)]">
               {READ_PROMPT}
             </div>
           </motion.div>
@@ -240,8 +240,10 @@ export function ReadDemo() {
             transition={{ duration: 0.3, ease: EASE }}
             className="flex"
           >
-            <div className="inline-flex items-center gap-2 rounded-lg bg-[var(--creed-surface-raised)] px-2.5 py-1.5 text-[12px] font-medium text-[var(--creed-text-secondary)]">
-              <CreedGlyph className="h-3 w-3" />
+            <div className="inline-flex items-center gap-2 rounded-[10px] bg-[var(--creed-surface-raised)] py-1.5 pl-1.5 pr-2.5 text-[12px] font-medium text-[var(--creed-text-primary)]">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-[7px] bg-[#2563EB] text-white">
+                <CreedGlyph className="h-3 w-3" />
+              </span>
               <span>Read Creed</span>
               {step >= 3 ? (
                 <Check className="h-3 w-3 text-[var(--creed-success)]" />
@@ -268,7 +270,7 @@ export function ReadDemo() {
         </div>
 
         {/* Mini prompt bar pinned to the bottom: the prompt types in here, then sends. */}
-        <div className="mt-auto flex items-center gap-2 rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] py-1.5 pl-3.5 pr-1.5">
+        <div className="mt-auto flex items-center gap-2 rounded-[10px] border border-[var(--creed-border)] bg-[var(--creed-surface)] py-1.5 pl-3.5 pr-1.5">
           <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--creed-text-primary)]">
             {step === 0 && typed ? (
               typed

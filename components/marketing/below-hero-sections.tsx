@@ -187,7 +187,7 @@ const WHY_USE_IT_STATS = [
     decimals: 0,
     label: "estimated multi-tool AI users",
     body: "A simple 35 percent estimate across monthly AI users.",
-    accent: "#22C55E",
+    accent: "#F97316",
   },
   {
     value: 2_100_000_000_000,
@@ -261,7 +261,7 @@ function AnimatedStatNumber({
         ) : null}
         {suffix}
       </span>
-      <span className="mb-[0.2em] ml-[0.08em] text-[0.34em] font-medium leading-none tracking-[-0.02em] text-[var(--creed-text-primary)]">
+      <span className="mb-[0.2em] ml-[0.08em] text-[0.46em] font-medium leading-none tracking-[-0.02em] text-current">
         {cadence}
       </span>
     </span>
@@ -277,15 +277,15 @@ function WhyUseItSection() {
         className="max-w-[64rem]"
       />
 
-      <div className="mx-auto mt-14 grid max-w-6xl items-stretch gap-5 lg:grid-cols-3">
+      <div className="mx-auto mt-14 grid max-w-[70rem] items-stretch gap-5 lg:grid-cols-3">
         {WHY_USE_IT_STATS.map((stat) => (
           <article
             key={stat.label}
-            className="flex h-auto min-h-0 flex-col rounded-xl bg-[var(--creed-surface)] p-6 md:h-full md:min-h-[250px] md:p-7"
+            className="flex h-auto min-h-0 flex-col rounded-xl bg-[var(--creed-surface)] p-3 md:h-full"
           >
             <div
-              className="text-[4rem] font-semibold leading-[0.9] tracking-[-0.045em] md:text-[5.25rem]"
-              style={{ color: stat.accent }}
+              className="flex min-h-[120px] items-center rounded-lg px-5 text-[3.75rem] font-semibold leading-[0.9] tracking-[-0.045em] text-[var(--creed-background)] md:min-h-[130px] md:px-6 md:text-[4.5rem]"
+              style={{ backgroundColor: stat.accent }}
             >
               <AnimatedStatNumber
                 value={stat.value}
@@ -295,7 +295,7 @@ function WhyUseItSection() {
                 cadence={stat.cadence}
               />
             </div>
-            <div className="mt-5">
+            <div className="px-3 pb-3 pt-5 md:px-4 md:pb-4">
               <h3 className="text-[1.35rem] font-medium leading-tight tracking-[-0.025em] text-[var(--creed-text-primary)]">
                 {stat.label}
               </h3>
