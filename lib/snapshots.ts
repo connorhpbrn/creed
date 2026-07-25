@@ -2,6 +2,7 @@ import {
   COMPONENTS,
   type ComponentName,
   type DailyBucket,
+  type DayState,
   type OverallState,
   type Snapshot,
 } from "./types";
@@ -27,12 +28,36 @@ function dayWindow(): string[] {
   return keys;
 }
 
+const EXPECTED_DAILY_PROBES = 288;
+const AMBER_FAILURE_LIMIT = Math.ceil(EXPECTED_DAILY_PROBES * 0.01) - 1;
+
+export function classifyDayState(
+  okCount: number,
+  downCount: number,
+  isActiveDay: boolean
+): DayState {
+  const total = okCount + downCount;
+  if (total === 0) return "no-data";
+  if (downCount === 0) return "ok";
+
+  // A partial UTC day has not accumulated its full denominator yet. Classify
+  // it by the equivalent five-minute downtime budget so one early miss does
+  // not leave the page falsely red for hours. Completed days use the agreed
+  // 100 / 99 / <99 percentage thresholds.
+  if (isActiveDay) {
+    return downCount <= AMBER_FAILURE_LIMIT ? "degraded" : "down";
+  }
+
+  return (okCount / total) * 100 >= 99 ? "degraded" : "down";
+}
+
 // Bucket all snapshots into per-component, per-day tallies. A component is "ok"
 // for a tick when its `ok` flag is true; otherwise that tick counts as down.
-function bucket(
+export function bucketSnapshots(
   snapshots: Snapshot[]
 ): Record<ComponentName, DailyBucket[]> {
   const window = dayWindow();
+  const activeDay = window[window.length - 1];
   const result = {} as Record<ComponentName, DailyBucket[]>;
 
   for (const { name } of COMPONENTS) {
@@ -58,13 +83,14 @@ function bucket(
         };
       }
       const total = tally.ok + tally.down;
+      const uptimePct = (tally.ok / total) * 100;
       return {
         day,
-        state: tally.down > 0 ? "down" : "ok",
+        state: classifyDayState(tally.ok, tally.down, day === activeDay),
         okCount: tally.ok,
         degradedCount: 0,
         downCount: tally.down,
-        uptimePct: (tally.ok / total) * 100,
+        uptimePct,
       };
     });
   }
@@ -74,18 +100,33 @@ function bucket(
 
 export type StatusDashboard = {
   byComponent: Record<ComponentName, DailyBucket[]>;
+  currentByComponent: Record<ComponentName, DayState>;
   overall: OverallState;
 };
 
 async function loadStatusDashboard(): Promise<StatusDashboard> {
   const snapshots = await readSnapshots();
-  const byComponent = bucket(snapshots);
+  const byComponent = bucketSnapshots(snapshots);
   const latest = snapshots[0];
-  if (!latest) return { byComponent, overall: "ok" };
+  if (!latest) {
+    return {
+      byComponent,
+      currentByComponent: Object.fromEntries(
+        COMPONENTS.map(({ name }) => [name, "no-data"])
+      ) as Record<ComponentName, DayState>,
+      overall: "ok",
+    };
+  }
 
   const oks = COMPONENTS.map(({ name }) => latest.components[name]?.ok);
   return {
     byComponent,
+    currentByComponent: Object.fromEntries(
+      COMPONENTS.map(({ name }) => [
+        name,
+        latest.components[name]?.ok ? "ok" : "down",
+      ])
+    ) as Record<ComponentName, DayState>,
     overall: oks.every(Boolean) ? "ok" : oks.some(Boolean) ? "degraded" : "down",
   };
 }
@@ -129,8 +170,8 @@ export function overallUptime(
   byComponent: Record<ComponentName, DailyBucket[]>
 ): number {
   const vals = Object.values(byComponent)
-    .map(componentUptime)
-    .filter((v) => v > 0);
+    .filter((buckets) => buckets.some((b) => b.state !== "no-data"))
+    .map(componentUptime);
   if (vals.length === 0) return 0;
   const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
   return Math.round(mean * 100) / 100;

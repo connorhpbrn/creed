@@ -39,10 +39,10 @@ daily bucket with an uptime percentage.
   recorded as `down`.
 - **Store** — [`lib/store.ts`](lib/store.ts) persists snapshots newest-first.
   In production it uses Vercel KV (Upstash Redis) when configured, otherwise a
-  single private Vercel Blob document. The first Blob-backed probe migrates any
-  existing daily history files into that document. In local dev it falls back to
-  an in-memory ring buffer, so the full pipeline runs with zero external
-  services.
+  single private Vercel Blob document with ETag-protected writes. The first
+  Blob-backed probe migrates any existing daily history files into that
+  document. In local dev it falls back to an in-memory ring buffer, so the full
+  pipeline runs with zero external services.
 - **Rollup** — [`lib/snapshots.ts`](lib/snapshots.ts) collapses raw snapshots
   into daily buckets and overall state, caching the production dashboard for
   the five-minute probe interval.
@@ -70,7 +70,7 @@ days of operational history and tops up today's bar with live probes of
 | `NEXT_PUBLIC_CREED_ORIGIN` | Origin to probe (defaults to `https://creed.md`) |
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Vercel KV credentials; when unset, `BLOB_READ_WRITE_TOKEN` enables the Blob fallback |
 | `BLOB_READ_WRITE_TOKEN` | Private Vercel Blob token for aggregate snapshot storage |
-| `STATUS_PROBE_SECRET` | Bearer secret required to hit `/api/probe`; open when unset |
+| `CRON_SECRET` / `STATUS_PROBE_SECRET` | Bearer secret required to hit `/api/probe` in production; local development remains open |
 
 ## Tech stack
 

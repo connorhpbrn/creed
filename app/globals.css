@@ -17,9 +17,9 @@
   --status-text-tertiary: #9a9a96;
 
   /* Status hues = Creed's numeric stat colours. */
-  --status-ok: #16a34a;
-  --status-degraded: #d97706;
-  --status-down: #dc2626;
+  --status-ok: #22c55e;
+  --status-degraded: #f59e0b;
+  --status-down: #ef4444;
   --status-empty: #e6e6e2;
 
   /* The chip behind a status glyph (and the banner label). Follows the theme:
@@ -44,9 +44,9 @@
   --status-text-secondary: #9c9c95;
   --status-text-tertiary: #6b6b65;
 
-  --status-ok: #4ade80;
-  --status-degraded: #fbbf24;
-  --status-down: #f87171;
+  --status-ok: #22c55e;
+  --status-degraded: #f59e0b;
+  --status-down: #ef4444;
   --status-empty: #262624;
 
   --status-glyph-ink: #0e0e0d;
@@ -65,9 +65,9 @@
     --status-text-secondary: #9c9c95;
     --status-text-tertiary: #6b6b65;
 
-    --status-ok: #4ade80;
-    --status-degraded: #fbbf24;
-    --status-down: #f87171;
+    --status-ok: #22c55e;
+    --status-degraded: #f59e0b;
+    --status-down: #ef4444;
     --status-empty: #262624;
 
     --status-glyph-ink: #0e0e0d;

@@ -13,7 +13,7 @@ function authorized(req: Request): boolean {
     process.env.STATUS_PROBE_SECRET,
   ].filter(Boolean);
 
-  if (secrets.length === 0) return true; // dev / unconfigured
+  if (secrets.length === 0) return process.env.NODE_ENV !== "production";
 
   const header =
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??

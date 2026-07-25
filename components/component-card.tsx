@@ -3,12 +3,6 @@ import { componentUptime, fmtPct } from "@/lib/snapshots";
 import { UptimeBars } from "./uptime-bars";
 import { CheckIcon, AlertIcon } from "./icons";
 
-// The card's dot reflects current status — the most recent day, not the
-// worst day in the 90-day window (history lives in the bars).
-function cardState(buckets: DailyBucket[]): DayState {
-  return buckets[buckets.length - 1]?.state ?? "no-data";
-}
-
 function StatusDot({ state }: { state: DayState }) {
   const color =
     state === "down"
@@ -38,18 +32,19 @@ function StatusDot({ state }: { state: DayState }) {
 export function ComponentCard({
   meta,
   buckets,
+  currentState,
 }: {
   meta: ComponentMeta;
   buckets: DailyBucket[];
+  currentState: DayState;
 }) {
-  const state = cardState(buckets);
   const uptime = componentUptime(buckets);
   const hasData = buckets.some((b) => b.state !== "no-data");
 
   return (
     <section className="card-surface rounded-[var(--status-radius-card)] p-6">
       <header className="flex items-start justify-between gap-4">
-        <StatusDot state={state} />
+        <StatusDot state={currentState} />
         <div className="text-right">
           <h2 className="text-[17px] font-semibold leading-tight">
             {meta.label}

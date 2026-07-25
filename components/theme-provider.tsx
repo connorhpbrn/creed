@@ -37,16 +37,17 @@ function systemTheme(): Theme {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") return "light";
+    const stored = localStorage.getItem(KEY) as Theme | null;
+    return stored ?? systemTheme();
+  });
   const pointer = useRef<Origin | null>(null);
 
   useEffect(() => {
     // Follow the browser theme by default; a stored value is an explicit
     // override that wins.
-    const stored = localStorage.getItem(KEY) as Theme | null;
-    const initial = stored ?? systemTheme();
-    setTheme(initial);
-    apply(initial);
+    apply(theme);
 
     const mql = matchMedia("(prefers-color-scheme: dark)");
     const onScheme = (e: MediaQueryListEvent) => {
@@ -67,7 +68,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       mql.removeEventListener("change", onScheme);
       window.removeEventListener("pointermove", onMove);
     };
-  }, []);
+  }, [theme]);
 
   const toggleTheme = useCallback(
     (origin?: Origin) => {

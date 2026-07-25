@@ -13,7 +13,8 @@ import { DevPulse } from "@/components/dev-pulse";
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const { byComponent, overall } = await getStatusDashboard();
+  const { byComponent, currentByComponent, overall } =
+    await getStatusDashboard();
   const uptime = overallUptime(byComponent);
   const isDev = process.env.NODE_ENV !== "production";
 
@@ -41,15 +42,27 @@ export default async function Page() {
             key={meta.name}
             meta={meta}
             buckets={byComponent[meta.name]}
+            currentState={currentByComponent[meta.name]}
           />
         ))}
       </div>
 
       <footer
-        className="mt-14 text-center text-[13px]"
+        className="mt-14 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[13px] leading-[1.55]"
         style={{ color: "var(--status-text-tertiary)" }}
       >
-        © Creed 2026
+        <span>© 2026 Creed</span>
+        <span aria-hidden="true">·</span>
+        <span>by</span>
+        <a
+          href="https://hpbrn.cc"
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium transition-opacity hover:opacity-70"
+          style={{ color: "var(--status-text-primary)" }}
+        >
+          hpbrn
+        </a>
       </footer>
 
       <span className="sr-only">{`Overall uptime ${fmtPct(uptime)}%`}</span>

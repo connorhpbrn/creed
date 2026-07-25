@@ -62,39 +62,57 @@ async function streamToText(stream: ReadableStream<Uint8Array>): Promise<string>
 async function readBlob(
   pathname: string,
   useCache: boolean
-): Promise<Snapshot[] | null> {
+): Promise<{ snapshots: Snapshot[]; etag: string } | null> {
   const { get } = await import("@vercel/blob");
   const result = await get(pathname, {
     access: "private",
     useCache,
   });
   if (!result || result.statusCode !== 200) return null;
-  return JSON.parse(await streamToText(result.stream)) as Snapshot[];
+  return {
+    snapshots: JSON.parse(await streamToText(result.stream)) as Snapshot[],
+    // Blob GET responses expose a weak HTTP ETag (`W/"..."`), while the
+    // conditional PUT endpoint expects the equivalent strong validator.
+    etag: result.blob.etag.replace(/^W\//, ""),
+  };
 }
 
 async function readLegacyBlobSnapshots(): Promise<Snapshot[]> {
   const byDay = await Promise.all(
-    dayKeys().map(async (day) => (await readBlob(legacyDayPath(day), true)) ?? [])
+    dayKeys().map(
+      async (day) =>
+        (await readBlob(legacyDayPath(day), true))?.snapshots ?? []
+    )
   );
   return byDay.flat().sort((a, b) => b.t.localeCompare(a.t)).slice(0, MAX);
 }
 
-async function readBlobSnapshots(useCache = true): Promise<Snapshot[]> {
-  const snapshots = await readBlob(SNAPSHOT_BLOB_PATH, useCache);
-  if (snapshots !== null) return snapshots;
+async function readBlobDocument(
+  useCache = true
+): Promise<{ snapshots: Snapshot[]; etag: string | null }> {
+  const document = await readBlob(SNAPSHOT_BLOB_PATH, useCache);
+  if (document !== null) return document;
 
   // One-time compatibility path for the first probe after this deploy. The
   // next write promotes the historical day files into the single document.
-  return readLegacyBlobSnapshots();
+  return { snapshots: await readLegacyBlobSnapshots(), etag: null };
 }
 
-async function writeBlobSnapshots(snapshots: Snapshot[]): Promise<void> {
+async function readBlobSnapshots(useCache = true): Promise<Snapshot[]> {
+  return (await readBlobDocument(useCache)).snapshots;
+}
+
+async function writeBlobSnapshots(
+  snapshots: Snapshot[],
+  ifMatch: string | null
+): Promise<void> {
   const { put } = await import("@vercel/blob");
   await put(SNAPSHOT_BLOB_PATH, JSON.stringify(snapshots), {
     access: "private",
     allowOverwrite: true,
     contentType: "application/json",
     cacheControlMaxAge: 60,
+    ...(ifMatch ? { ifMatch } : {}),
   });
 }
 
@@ -135,11 +153,25 @@ export async function pushSnapshot(s: Snapshot): Promise<void> {
     return;
   }
   if (hasBlob) {
-    // A probe is the sole writer and must not prepend to a CDN-stale document.
-    const snapshots = await readBlobSnapshots(false);
-    snapshots.unshift(s);
-    if (snapshots.length > MAX) snapshots.length = MAX;
-    await writeBlobSnapshots(snapshots);
+    const { BlobPreconditionFailedError } = await import("@vercel/blob");
+
+    // Optimistic concurrency prevents overlapping cron/manual probes from
+    // silently overwriting one another's snapshots.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const document = await readBlobDocument(false);
+      const snapshots = document.snapshots;
+      snapshots.unshift(s);
+      if (snapshots.length > MAX) snapshots.length = MAX;
+
+      try {
+        await writeBlobSnapshots(snapshots, document.etag);
+        return;
+      } catch (error) {
+        if (!(error instanceof BlobPreconditionFailedError) || attempt === 4) {
+          throw error;
+        }
+      }
+    }
     return;
   }
   mem.unshift(json);
