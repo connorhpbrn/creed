@@ -4,37 +4,61 @@ import { useEffect, useState } from "react";
 import type { OverallState } from "@/lib/types";
 import { StatusBanner } from "./status-banner";
 
-const CREED_ORIGIN =
-  process.env.NEXT_PUBLIC_CREED_ORIGIN ?? "https://creed.md";
-const POLL_MS = 30_000;
+const POLL_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 8_000;
+
+type SummaryResponse = {
+  color?: "green" | "yellow" | "red";
+};
+
+function stateFromSummary(summary: SummaryResponse): OverallState | null {
+  if (summary.color === "green") return "ok";
+  if (summary.color === "yellow") return "degraded";
+  if (summary.color === "red") return "down";
+  return null;
+}
 
 // Server renders the banner from the latest snapshot. After mount we poll
-// /api/health directly so a user sitting on the page sees a state change
-// within 30s of an outage starting, without waiting for the next 5-min probe.
-// Cards stay snapshot-driven and do not re-render here.
+// the public summary used by every Creed status indicator. Its one-minute CDN
+// cache bounds live health probes regardless of visitor count, while focus and
+// visibility refreshes make a returning tab catch up immediately.
 export function LiveIndicator({ initial }: { initial: OverallState }) {
   const [state, setState] = useState<OverallState>(initial);
 
   useEffect(() => {
     let alive = true;
+    let pending = false;
 
     async function poll() {
+      if (pending || document.visibilityState !== "visible") return;
+      pending = true;
       try {
-        const res = await fetch(`${CREED_ORIGIN}/api/health`, {
-          cache: "no-store",
+        const res = await fetch("/api/summary", {
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
-        const json = (await res.json()) as { status?: OverallState };
-        if (alive && json.status) setState(json.status);
+        const next = stateFromSummary((await res.json()) as SummaryResponse);
+        if (alive && next) setState(next);
       } catch {
-        // Network error — keep the last known state, don't flash an outage.
+        // Keep the last known state on a client-network failure.
+      } finally {
+        pending = false;
       }
     }
 
-    const id = setInterval(poll, POLL_MS);
-    poll();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void poll();
+    };
+    const onFocus = () => void poll();
+    const id = window.setInterval(() => void poll(), POLL_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    void poll();
+
     return () => {
       alive = false;
-      clearInterval(id);
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 
