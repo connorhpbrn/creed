@@ -30,6 +30,16 @@ const stackRows = [
     website: "https://openrouter.ai",
   },
   {
+    name: "Resend",
+    purpose: "Transactional email delivery",
+    website: "https://resend.com",
+  },
+  {
+    name: "GitHub",
+    purpose: "Version control and optional Creed file sync",
+    website: "https://github.com",
+  },
+  {
     name: "Median",
     purpose: "Processes feedback submitted via the in-app modal",
     website: "https://median.sh",
@@ -65,13 +75,13 @@ export function StackPageView() {
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-[var(--creed-border)]">
-                <th className="px-1 py-4 text-[13px] font-medium text-[var(--creed-text-tertiary)] md:px-2">
+                <th className="px-1 py-4 text-[15px] font-medium text-[var(--creed-text-tertiary)] md:px-2 md:text-[16px]">
                   Name
                 </th>
-                <th className="px-1 py-4 text-[13px] font-medium text-[var(--creed-text-tertiary)] md:px-2">
+                <th className="px-1 py-4 text-[15px] font-medium text-[var(--creed-text-tertiary)] md:px-2 md:text-[16px]">
                   Purpose
                 </th>
-                <th className="px-1 py-4 text-[13px] font-medium text-[var(--creed-text-tertiary)] md:px-2">
+                <th className="px-1 py-4 text-[15px] font-medium text-[var(--creed-text-tertiary)] md:px-2 md:text-[16px]">
                   Website
                 </th>
               </tr>
