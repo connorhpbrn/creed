@@ -17,29 +17,41 @@ type StatusVariant = {
   text: string;
 };
 
-type LiveStatusColor = "green" | "yellow" | "red";
+type LiveStatusColor = "green" | "yellow" | "red" | "neutral";
 
 type LiveStatusResponse = {
   label?: unknown;
   color?: unknown;
 };
 
-const DEFAULT_STATUS: SystemStatus = "operational";
 const DEFAULT_LABEL = "Fully operational";
 const STATUS_ENDPOINT = "/api/status";
+const POLL_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 8_000;
 
-const STATUS_COLOR_CLASSES: Record<LiveStatusColor, Pick<StatusVariant, "dot" | "pulse">> = {
+const STATUS_COLOR_CLASSES: Record<
+  LiveStatusColor,
+  Pick<StatusVariant, "dot" | "pulse" | "text">
+> = {
   green: {
     dot: "bg-[#22C55E]",
     pulse: "bg-[#22C55E]/60",
+    text: "text-[var(--creed-text-secondary)]",
   },
   yellow: {
     dot: "bg-[#F59E0B]",
     pulse: "bg-[#F59E0B]/60",
+    text: "text-[var(--creed-text-secondary)]",
   },
   red: {
     dot: "bg-[#DC2626]",
     pulse: "bg-[#DC2626]/60",
+    text: "text-[var(--creed-text-secondary)]",
+  },
+  neutral: {
+    dot: "bg-[var(--creed-text-tertiary)]",
+    pulse: "bg-transparent",
+    text: "text-[var(--creed-text-secondary)]",
   },
 };
 
@@ -69,10 +81,10 @@ const STATUS_VARIANTS: Record<SystemStatus, StatusVariant> = {
     text: "text-[var(--creed-text-secondary)]",
   },
   unknown: {
-    label: "Status unavailable",
+    label: "Checking status",
     dot: "bg-[var(--creed-text-tertiary)]",
     pulse: "bg-transparent",
-    text: "text-[var(--creed-text-tertiary)]",
+    text: "text-[var(--creed-text-secondary)]",
   },
 };
 
@@ -81,7 +93,7 @@ function isLiveStatusColor(value: unknown): value is LiveStatusColor {
 }
 
 export function SystemStatusPill({
-  status = DEFAULT_STATUS,
+  status = "unknown",
   href,
   className,
 }: {
@@ -95,17 +107,28 @@ export function SystemStatusPill({
     color: LiveStatusColor;
   }>({
     label: initialVariant.label,
-    color: status === "outage" ? "red" : status === "operational" ? "green" : "yellow",
+    color:
+      status === "outage"
+        ? "red"
+        : status === "operational"
+          ? "green"
+          : status === "unknown"
+            ? "neutral"
+            : "yellow",
   });
 
   useEffect(() => {
     let cancelled = false;
+    let pending = false;
 
     async function loadStatus() {
       // Skip while hidden; the next visible poll (or refocus) catches up.
-      if (document.visibilityState !== "visible") return;
+      if (pending || document.visibilityState !== "visible") return;
+      pending = true;
       try {
-        const response = await fetch(STATUS_ENDPOINT);
+        const response = await fetch(STATUS_ENDPOINT, {
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
         if (!response.ok) return;
 
         const data = (await response.json()) as LiveStatusResponse;
@@ -117,17 +140,26 @@ export function SystemStatusPill({
         }
       } catch {
         // Keep the server-rendered fallback if the status endpoint is unreachable.
+      } finally {
+        pending = false;
       }
     }
 
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadStatus();
+    };
+    const onFocus = () => void loadStatus();
+
     void loadStatus();
-    // 5 min cadence: the route is CDN-cached for 60s anyway, and a status
-    // pill in the footer doesn't need sub-minute freshness.
-    const intervalId = window.setInterval(loadStatus, 300_000);
+    const intervalId = window.setInterval(() => void loadStatus(), POLL_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
 
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 const STATUS_URL = "https://status.creed.md/api/summary";
+const REQUEST_TIMEOUT_MS = 8_000;
 
 type StatusColor = "green" | "yellow" | "red";
 
@@ -8,12 +9,14 @@ type StatusColor = "green" | "yellow" | "red";
 // summary is JSON rather than the rendered status page, avoiding an expensive
 // page render and Blob-history scan for a one-line marketing badge.
 const CACHE_HEADERS = {
-  "Cache-Control": "public, max-age=0, s-maxage=60, stale-while-revalidate=300",
+  "Cache-Control": "public, max-age=0, s-maxage=60, must-revalidate",
 } as const;
 
 export async function GET() {
   try {
-    const response = await fetch(STATUS_URL, { next: { revalidate: 60 } });
+    const response = await fetch(STATUS_URL, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
 
     if (!response.ok) {
       return NextResponse.json(
