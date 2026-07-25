@@ -12,10 +12,13 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { AnimatedIconButton } from "@/components/creed/animated-icon-action";
 import { AnimatedCheckmark } from "@/components/ui/animated-checkmark";
+import { ArrowRightIcon } from "@/components/ui/arrow-right";
+import { Button } from "@/components/ui/button";
 import { CopyIcon } from "@/components/ui/copy";
+import { accentColorMap } from "@/lib/creed-data";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -108,9 +111,15 @@ export function CreateDemo() {
                   {typed || "\u00A0"}
                 </span>
               </div>
-              <div className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-md bg-[var(--creed-text-primary)] px-4 text-[13px] font-medium text-[var(--creed-button-primary-fg)]">
-                {step === total - 1 ? "Create my Creed" : "Continue"}
-                <ArrowRight className="h-3.5 w-3.5" />
+              <div className="mt-3 flex justify-end">
+                <Button
+                  style={{ borderRadius: "0.875rem" }}
+                  className="bg-[var(--creed-text-primary)] px-4 text-[var(--creed-button-primary-fg)] hover:bg-[var(--creed-button-primary-hover)]"
+                  tabIndex={-1}
+                >
+                  Continue
+                  <ArrowRightIcon className="h-4 w-4" size={16} />
+                </Button>
               </div>
             </motion.div>
           ) : (
@@ -146,51 +155,116 @@ const ALL_AGENTS_MASK = {
   maskSize: "contain",
 } as const;
 
+const CONNECT_PHASE_DURATIONS = [1200, 1800, 2800] as const;
+
 export function ConnectDemo() {
-  const [copied, setCopied] = useState(false);
+  const [phase, setPhase] = useState(0);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1150);
-    }, 2600);
-    return () => window.clearInterval(intervalId);
-  }, []);
+    const timeoutId = window.setTimeout(
+      () =>
+        setPhase(
+          (current) => (current + 1) % CONNECT_PHASE_DURATIONS.length,
+        ),
+      CONNECT_PHASE_DURATIONS[phase],
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [phase]);
 
   return (
     <div className="w-full">
-      <div className="flex w-full flex-col rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-5 text-left">
-        <div className="flex items-center gap-3">
-          {/* All-agents glyph recoloured by the cycling palette: the asset is a
-              monochrome svg, so we mask the cycling background to its shape. */}
-          <span aria-hidden className="creed-copy-cycle inline-block h-9 w-9 shrink-0" style={ALL_AGENTS_MASK} />
-          <div>
-            <div className="text-[15px] font-medium text-[var(--creed-text-primary)]">All agents</div>
-            <div className="mt-1 text-[13px] text-[var(--creed-text-secondary)]">One prompt connects them all.</div>
-          </div>
-        </div>
-        <p className="mt-4 text-[13px] leading-6 text-[var(--creed-text-secondary)]">
-          Paste it into any AI. It reads your Creed before every reply.
-        </p>
-        <div className="mt-4">
-          <AnimatedIconButton
-            type="button"
-            icon={CopyIcon}
-            showIcon={!copied}
-            className="creed-copy-cycle min-w-[116px] justify-center rounded-md px-4 text-white"
-            tabIndex={-1}
-          >
-            {copied ? (
-              <>
-                <AnimatedCheckmark className="h-4 w-4" size={16} />
-                Copied
-              </>
-            ) : (
-              "Copy prompt"
-            )}
-          </AnimatedIconButton>
-        </div>
-      </div>
+      <motion.div
+        layout
+        transition={{ layout: { duration: 0.42, ease: EASE } }}
+        className="relative w-full overflow-hidden rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] text-left"
+      >
+        <AnimatePresence mode="popLayout" initial={false}>
+          {phase <= 1 ? (
+            <motion.div
+              key="copy"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.26, ease: EASE }}
+              className="flex flex-col p-5"
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  aria-hidden
+                  className="creed-copy-cycle inline-block h-9 w-9 shrink-0"
+                  style={ALL_AGENTS_MASK}
+                />
+                <div>
+                  <div className="text-[15px] font-medium text-[var(--creed-text-primary)]">
+                    All agents
+                  </div>
+                  <div className="mt-1 text-[13px] text-[var(--creed-text-secondary)]">
+                    One prompt works with them all.
+                  </div>
+                </div>
+              </div>
+              <p className="mt-4 text-[13px] leading-6 text-[var(--creed-text-secondary)]">
+                Paste it into any AI. It returns a structured Markdown profile
+                built from what it already knows.
+              </p>
+              <div className="mt-4">
+                <AnimatedIconButton
+                  type="button"
+                  icon={CopyIcon}
+                  showIcon={phase === 0}
+                  className="creed-copy-cycle min-w-[116px] justify-center rounded-md px-4 text-white"
+                  tabIndex={-1}
+                  onClick={() => setPhase(1)}
+                >
+                  {phase === 1 ? (
+                    <>
+                      <AnimatedCheckmark className="h-4 w-4" size={16} />
+                      Copied
+                    </>
+                  ) : (
+                    "Copy prompt"
+                  )}
+                </AnimatedIconButton>
+              </div>
+            </motion.div>
+          ) : null}
+
+          {phase === 2 ? (
+            <motion.div
+              key="paste"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+              transition={{ duration: 0.28, ease: EASE }}
+              className="flex flex-col p-4"
+            >
+              <div className="text-[15px] font-medium text-[var(--creed-text-primary)]">
+                Paste your Creed
+              </div>
+              <div className="mt-1 text-[11px] text-[var(--creed-text-tertiary)]">
+                Paste the Markdown your assistant gave you.
+              </div>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3, delay: 0.22 }}
+                className="mt-3 flex-1 rounded-md bg-[var(--creed-surface-raised)] p-3 font-mono text-[10px] leading-[1.55] text-[var(--creed-text-secondary)]"
+              >
+                <div style={{ color: accentColorMap.identity }}>## Identity</div>
+                <div>Product builder working across design and AI.</div>
+                <div className="mt-1.5" style={{ color: accentColorMap.projects }}>
+                  ## Goals
+                </div>
+                <div>Ship the beta and reach 100 active teams.</div>
+                <div className="mt-1.5" style={{ color: accentColorMap.preferences }}>
+                  ## Preferences
+                </div>
+                <div>Lead with the answer and keep it practical.</div>
+              </motion.div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 }
@@ -216,6 +290,8 @@ const USAGE_COLORS = {
 export function UsageDemo() {
   const [active, setActive] = useState(0);
   const tooltipDay = USAGE_DAYS[active];
+  const tooltipOffset = active <= 3 ? 1.375 : -9.375;
+  const tooltipLeft = `clamp(0px, calc(${((active + 0.5) / USAGE_DAYS.length) * 100}% + ${tooltipOffset}rem), calc(100% - 8rem))`;
   const tooltipRows = [
     { label: "Analysis", value: tooltipDay.analysis, color: USAGE_COLORS.analysis },
     { label: "Tab", value: tooltipDay.tab, color: USAGE_COLORS.tab },
@@ -233,18 +309,13 @@ export function UsageDemo() {
   return (
     <div className="w-full">
       <div className="rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-4 shadow-[0_8px_24px_rgba(28,28,26,0.04)]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-[13px] font-medium text-[var(--creed-text-secondary)]">
-              Credits spend
-            </div>
-            <div className="mt-1 text-[26px] font-medium tracking-[-0.04em] text-[var(--creed-text-primary)]">
-              $3.24
-            </div>
+        <div>
+          <div className="text-[13px] font-medium text-[var(--creed-text-secondary)]">
+            Credits spend
           </div>
-          <span className="rounded-md border border-[var(--creed-border)] px-2 py-1 text-[12px] text-[var(--creed-text-secondary)]">
-            30d
-          </span>
+          <div className="mt-1 text-[26px] font-medium tracking-[-0.04em] text-[var(--creed-text-primary)]">
+            $3.24
+          </div>
         </div>
 
         <div className="relative mt-5 flex h-[116px] items-end gap-2 border-b border-dashed border-[var(--creed-border)] pb-1">
@@ -290,20 +361,10 @@ export function UsageDemo() {
           })}
 
           <motion.div
-            key={active}
-            initial={{ opacity: 0, scale: 0.95, y: 3 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ duration: 0.15, ease: EASE }}
-            className={[
-              "pointer-events-none absolute bottom-4 z-10 grid min-w-[8rem] items-start gap-1.5 rounded-sm border border-[var(--creed-border)] bg-[var(--creed-surface)] px-2.5 py-2 text-[12px] shadow-[0_12px_32px_rgba(28,28,26,0.12)]",
-              active <= 3 ? "origin-bottom-left" : "origin-bottom-right",
-            ].join(" ")}
-            style={{
-              left:
-                active <= 3
-                  ? `clamp(0px, calc(${((active + 0.5) / USAGE_DAYS.length) * 100}% + 1.375rem), calc(100% - 8rem))`
-                  : `clamp(0px, calc(${((active + 0.5) / USAGE_DAYS.length) * 100}% - 9.375rem), calc(100% - 8rem))`,
-            }}
+            initial={false}
+            animate={{ left: tooltipLeft }}
+            transition={{ duration: 0.48, ease: EASE }}
+            className="pointer-events-none absolute bottom-4 z-10 grid min-w-[8rem] items-start gap-1.5 rounded-sm border border-[var(--creed-border)] bg-[var(--creed-surface)] px-2.5 py-2 text-[12px] shadow-[0_12px_32px_rgba(28,28,26,0.12)]"
           >
             <div className="font-medium text-[var(--creed-text-primary)]">
               {tooltipDay.label}

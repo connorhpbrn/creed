@@ -427,8 +427,10 @@ function DemoActivityRow({ entry }: { entry: DemoActivity }) {
           >
             <div className="-mx-3 border-t border-[var(--creed-border)]" />
             <div className="creed-diff-block -mx-3 px-4 py-2.5 leading-[1.6]">
-              {entry.removed > 0 ? <span className="creed-diff-remove">Earlier wording and stale detail. </span> : null}
-              <span className="creed-diff-add">Refined with specific, current context for {entry.sectionName}.</span>
+              {entry.removed > 0 ? (
+                <span className="creed-diff-remove">{entry.beforeText} </span>
+              ) : null}
+              <span className="creed-diff-add">{entry.afterText}</span>
             </div>
           </motion.div>
         ) : null}
@@ -491,6 +493,34 @@ function ActivityDrawer({ activity, onClose }: { activity: DemoActivity[]; onClo
 }
 
 // ----- main ----------------------------------------------------------------
+
+function proposalActivity(
+  proposal: Proposal,
+  status: "accepted" | "rejected",
+  apply?: { base: string; added: number },
+): DemoActivity {
+  const fallback =
+    status === "accepted"
+      ? `Updated ${proposal.sectionName}.`
+      : `Proposed ${proposal.sectionName} update.`;
+
+  return {
+    id: `act-${proposal.id}`,
+    sectionName: proposal.sectionName,
+    accent: proposal.accent,
+    actor: proposal.agentName,
+    actorType: "agent",
+    status,
+    timeLabel: "just now",
+    added: apply?.added ?? 0,
+    removed: 0,
+    beforeText: apply?.base ?? `Current ${proposal.sectionName}.`,
+    afterText:
+      proposal.draft.kind === "rich-text"
+        ? proposal.draft.contentMarkdown ?? fallback
+        : fallback,
+  };
+}
 
 export function CreedAppDemo() {
   const initialProfile = DEMO_PROFILES[0];
@@ -602,7 +632,7 @@ export function CreedAppDemo() {
       });
       setProposals((prev) => prev.filter((x) => x.id !== id));
       setActivity((prev) => [
-        { id: `act-${id}`, sectionName: p.sectionName, accent: p.accent, actor: p.agentName, actorType: "agent", status: "accepted", timeLabel: "just now", added: cfg.added, removed: 0 },
+        proposalActivity(p, "accepted", cfg),
         ...prev,
       ]);
       flashSaving();
@@ -617,7 +647,7 @@ export function CreedAppDemo() {
       if (!p) return;
       setProposals((prev) => prev.filter((x) => x.id !== id));
       setActivity((prev) => [
-        { id: `act-${id}`, sectionName: p.sectionName, accent: p.accent, actor: p.agentName, actorType: "agent", status: "rejected", timeLabel: "just now", added: cfg?.added ?? 0, removed: 0 },
+        proposalActivity(p, "rejected", cfg),
         ...prev,
       ]);
     },

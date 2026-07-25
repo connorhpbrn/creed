@@ -13,7 +13,11 @@ export type DemoActivity = {
   timeLabel: string;
   added: number;
   removed: number;
+  beforeText: string;
+  afterText: string;
 };
+
+type DemoActivitySeed = Omit<DemoActivity, "beforeText" | "afterText">;
 
 export type DemoProposalApply = Record<
   string,
@@ -542,6 +546,85 @@ const elonProposals = [
   proposal("elon-p-constraints", "elon-constraints", "Constraints", "boundaries", "Grok", "Three recent requirements disappeared when nobody could name their owner.", "Do not accept a requirement without finding the person and reason behind it.\nDo not add automation to a process that should first be deleted.\nEscalate safety-critical ambiguity with evidence, not optimism.\nIf a requirement has no named owner, treat it as a candidate for deletion.", "4h ago"),
 ];
 
+const ACTIVITY_DIFF_COPY: Record<string, { beforeText: string; afterText: string }> = {
+  "steve-a1": {
+    beforeText: "Make the visible product beautiful.",
+    afterText: "The inside should be as considered as the outside, even when the customer never sees it.",
+  },
+  "steve-a2": {
+    beforeText: "Explain the product clearly on stage.",
+    afterText: "Build every launch around one clear story and one memorable demonstration.",
+  },
+  "steve-a3": {
+    beforeText: "More options can show progress.",
+    afterText: "Do not confuse more features with a better product.",
+  },
+  "marc-a1": {
+    beforeText: "Prioritise large technical markets.",
+    afterText: "Prioritise markets where technical progress can unlock abundance or entirely new behaviour.",
+  },
+  "marc-a2": {
+    beforeText: "Interrogate every ordinary outcome.",
+    afterText: "Go to work, do a good job, come home. Start the company.",
+  },
+  "marc-a3": {
+    beforeText: "Make useful introductions across the portfolio.",
+    afterText: "Connect portfolio leaders to people who have already survived the next stage.",
+  },
+  "marc-a4": {
+    beforeText: "Read current market commentary.",
+    afterText: "Study technical histories of platform transitions before they become consensus.",
+  },
+  "travis-a1": {
+    beforeText: "Track marketplace growth globally.",
+    afterText: "Measure local liquidity and cancellation causes at every handoff.",
+  },
+  "travis-a2": {
+    beforeText: "Expand into the largest available cities.",
+    afterText: "Rank cities by order density, site economics, and operational repeatability.",
+  },
+  "travis-a3": {
+    beforeText: "Escalate markets that fall behind plan.",
+    afterText: "Escalate site-level failures with the raw metrics and decision owner attached.",
+  },
+  "jason-a1": {
+    beforeText: "Track every promising founder.",
+    afterText: "Track promising companies early enough to see the founder's rate of change.",
+  },
+  "jason-a2": {
+    beforeText: "Open with the strongest topic.",
+    afterText: "Open with the sharpest disagreement and end with one falsifiable prediction.",
+  },
+  "jason-a3": {
+    beforeText: "Clear founder follow-ups regularly.",
+    afterText: "Reserve Friday afternoon for closing every open founder loop.",
+  },
+  "jason-a4": {
+    beforeText: "Keep a joke ready for the cold open.",
+    afterText: "Whenever Chamath says first principles, start a timer until he mentions a market he owns.",
+  },
+  "jason-a5": {
+    beforeText: "Connect founders with useful operators.",
+    afterText: "Prioritise enterprise sales leaders who enjoy creating the first repeatable motion.",
+  },
+  "elon-a1": {
+    beforeText: "Optimise each process before scaling it.",
+    afterText: "Delete the part or process before attempting to optimise it.",
+  },
+  "elon-a2": {
+    beforeText: "Review progress across every company.",
+    afterText: "Start with the single constraint currently limiting each mission.",
+  },
+  "elon-a3": {
+    beforeText: "Track total factory output every day.",
+    afterText: "Begin every production review at the current bottleneck station.",
+  },
+  "elon-a4": {
+    beforeText: "Challenge requirements that slow execution.",
+    afterText: "If a requirement has no named owner, treat it as a candidate for deletion.",
+  },
+};
+
 const profile = (
   name: string,
   image: string,
@@ -552,7 +635,7 @@ const profile = (
   summary: string,
   strength: string,
   gap: string,
-  activity: DemoActivity[]
+  activity: DemoActivitySeed[]
 ): DemoProfile => ({
   name,
   image,
@@ -560,7 +643,13 @@ const profile = (
   proposals,
   proposalApply,
   quality: quality(name.toLowerCase(), sections, scores, summary, strength, gap),
-  activity,
+  activity: activity.map((entry) => ({
+    ...entry,
+    ...(ACTIVITY_DIFF_COPY[entry.id] ?? {
+      beforeText: `Earlier ${entry.sectionName} wording.`,
+      afterText: `Updated ${entry.sectionName} with specific, current context.`,
+    }),
+  })),
 });
 
 export const DEMO_PROFILES = [

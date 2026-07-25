@@ -15,6 +15,7 @@ import {
   UsageDemo,
 } from "@/components/marketing/how-it-works-demos";
 import {
+  ActivityDemo,
   ReadDemo,
   ScoreDemo,
   UpdateDemo,
@@ -27,6 +28,8 @@ import { useOnboardingResume } from "@/components/marketing/use-onboarding-resum
 import { useAnimatedIconControls } from "@/components/creed/animated-icon-controls";
 import { ArrowRightIcon } from "@/components/ui/arrow-right";
 import { CommandIcon } from "@/components/ui/command";
+import { GaugeIcon } from "@/components/ui/gauge";
+import { TextCursorInputIcon } from "@/components/ui/text-cursor-input";
 import { useRoadmap } from "@/components/marketing/use-roadmap";
 import { ROADMAP_STATUS_STYLE } from "@/components/marketing/roadmap-status";
 import type { RoadmapColumn, RoadmapTask } from "@/lib/marketing/roadmap";
@@ -314,6 +317,7 @@ function PlateCard({
   number,
   numberColor,
   title,
+  titleIcon,
   body,
   square = false,
   children,
@@ -323,6 +327,7 @@ function PlateCard({
   number?: string;
   numberColor?: string;
   title: string;
+  titleIcon?: ReactNode;
   body: string;
   square?: boolean;
   children: ReactNode;
@@ -347,7 +352,16 @@ function PlateCard({
         <div className="relative min-w-0 w-full">{children}</div>
       </div>
       <div className="mt-4 px-1 md:mt-5">
-        <h3 className="t-step text-[var(--creed-text-primary)]">
+        <h3 className="t-step flex items-center gap-2 text-[var(--creed-text-primary)]">
+          {titleIcon ? (
+            <span
+              aria-hidden
+              className="inline-flex shrink-0 items-center"
+              style={{ color: plateColor }}
+            >
+              {titleIcon}
+            </span>
+          ) : null}
           {number ? (
             <span
               className="mr-2 font-semibold"
@@ -395,11 +409,11 @@ function HowCreedWorksSection() {
           <UpdateDemo />
         </LoopRow>
         <LoopRow
-          title="And it sharpens over time"
-          body="Creed scores every section for signal, what's specific and what's thin, so your profile keeps getting sharper without you auditing it."
+          title="And every change is visible"
+          body="Open Activity to see what changed, who changed it, and whether it was accepted, rejected, or edited directly."
           plate="var(--plate-create)"
         >
-          <ScoreDemo />
+          <ActivityDemo />
         </LoopRow>
       </div>
     </section>
@@ -610,8 +624,10 @@ function PanelFeatureDemo() {
 // is pressed (the keycap depresses), the in-app ring spinner runs while the
 // suggestion is in flight, the whole ghost appears at once, and a second Tab
 // press solidifies it. No caret, no word-by-word streaming, no colour change.
-const TAB_DEMO_PREFIX = "Keep replies short and";
-const TAB_DEMO_GHOST = " lead with the answer, not the setup.";
+const TAB_DEMO_PREFIX =
+  "Keep replies short, practical, and easy to scan.";
+const TAB_DEMO_GHOST =
+  " Lead with the answer, then surface the key tradeoff and next action.";
 
 type TabDemoPhase =
   | "typing"
@@ -719,6 +735,7 @@ function AiFeaturesSection() {
           plateColor="#2563EB"
           plateClassName="min-h-[272px]"
           title="Analysis"
+          titleIcon={<GaugeIcon size={21} />}
           body="Score every section for signal, weak spots, and what to sharpen next."
           square
         >
@@ -727,6 +744,7 @@ function AiFeaturesSection() {
         <PlateCard
           plateColor="#EC4899"
           title="Panel"
+          titleIcon={<CommandIcon size={21} />}
           body="Search, ask, and let Creed draft reversible edits without leaving the file."
           square
         >
@@ -735,6 +753,7 @@ function AiFeaturesSection() {
         <PlateCard
           plateColor="#22C55E"
           title="Tab"
+          titleIcon={<TextCursorInputIcon size={21} />}
           body="Press Tab and it finishes the thought in your voice, drawn from your whole file."
           square
         >

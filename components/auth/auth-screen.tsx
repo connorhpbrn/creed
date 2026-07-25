@@ -283,7 +283,7 @@ export function AuthScreen({
         <>
           <AnimatedPageTitle
             text={t.heading}
-            className="text-[30px] font-medium leading-tight tracking-[-0.02em] md:text-[34px]"
+            className="text-center text-[2rem]! md:text-[2.65rem]!"
           />
 
           <div className="mt-8 flex flex-col gap-3">

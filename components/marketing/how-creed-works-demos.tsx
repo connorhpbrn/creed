@@ -7,16 +7,24 @@
 //                profile.
 //  - UpdateDemo: a proposal card (agent + "proposed" + diff stats + Reject /
 //                Accept) starts collapsed, expands its diff, then is accepted.
-//  - ScoreDemo:  a section is auto-scored; the ring fills, tags resolve, then the
-//                quality notes open one at a time (accordion) like in the app.
+//  - ActivityDemo: the file's activity side panel opens, reveals attributed
+//                  changes, expands a diff, then filters to accepted edits.
+// ScoreDemo also lives here for the separate Analysis feature card.
 // Built from the REAL app primitives (diff helpers, QualityRing, the .ProseMirror
 // section styles) fed client-only mock data. Each demo pauses off-screen and
 // parks on a resting frame under reduced motion. No backend.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowUp, Check, ChevronDown } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, History, X } from "lucide-react";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
+import {
+  ACTIVITY_FILTERS,
+  ACTIVITY_STATUS_LABELS,
+  ActivityFilterPill,
+  getActivityFilterTone,
+  getActivityStatusStyles,
+} from "@/components/creed/activity-ui";
 import {
   DiffBadge,
   computeDiffParts,
@@ -344,7 +352,10 @@ function MiniProposalDiff({
           itemClassName="h-5 w-5"
           maxVisible={1}
         />
-        <span className="hidden text-[var(--creed-text-tertiary)] sm:inline">proposed</span>
+        <span className="hidden items-center gap-1 sm:inline-flex">
+          <span className="text-[var(--creed-text-primary)]">{agentName}</span>
+          <span className="text-[var(--creed-text-tertiary)]">proposed</span>
+        </span>
         <span className="text-[var(--creed-text-tertiary)]">&middot;</span>
         <span className="inline-flex items-center gap-1">
           <DiffBadge tone="added" count={stats.added} size="md" />
@@ -397,13 +408,18 @@ function MiniProposalDiff({
 
 export function UpdateDemo() {
   const { ref, step, setStep } = useLoopSequence(UPDATE_STEPS, 1);
-  const accent = accentColorMap.workflows;
+  const accent = accentColorMap.projects;
   const accepted = step >= 2;
   const expanded = step === 1;
 
   return (
-    <div ref={ref} className="w-full">
-      <DemoCard className="min-h-[220px]">
+    <motion.div
+      ref={ref}
+      layout
+      transition={{ layout: { duration: 0.38, ease: EASE } }}
+      className="w-full"
+    >
+      <DemoCard>
         <div className="flex items-center gap-2.5">
           <span
             className="h-7 w-[3px] shrink-0 rounded-full"
@@ -412,21 +428,6 @@ export function UpdateDemo() {
           <span className="text-[15px] font-medium" style={{ color: accent }}>
             Routines
           </span>
-          <AnimatePresence>
-            {accepted ? (
-              <motion.span
-                key="accepted"
-                initial={{ opacity: 0, scale: 0.92 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25, ease: EASE }}
-                className="ml-auto inline-flex items-center gap-1 rounded-[6px] bg-[#ECFDF5] px-1.5 py-0.5 text-[10px] font-medium text-[#047857] dark:bg-[#052e1a]/55 dark:text-[#4ade80]"
-              >
-                Accepted
-                <Check className="h-3 w-3" />
-              </motion.span>
-            ) : null}
-          </AnimatePresence>
         </div>
 
         <div
@@ -434,7 +435,7 @@ export function UpdateDemo() {
           style={
             {
               "--section-accent-bar": accent,
-              "--section-accent-tint": accentTintMap.workflows,
+              "--section-accent-tint": accentTintMap.projects,
             } as React.CSSProperties
           }
           dangerouslySetInnerHTML={{
@@ -446,21 +447,268 @@ export function UpdateDemo() {
           {!accepted ? (
             <motion.div
               key="diff"
-              initial={{ opacity: 0, height: 0, marginTop: 0 }}
-              animate={{ opacity: 1, height: "auto", marginTop: 14 }}
-              exit={{ opacity: 0, height: 0, marginTop: 0 }}
-              transition={{ duration: 0.3, ease: EASE }}
-              className="overflow-hidden"
+              initial={{ opacity: 0, gridTemplateRows: "0fr", marginTop: 0 }}
+              animate={{ opacity: 1, gridTemplateRows: "1fr", marginTop: 14 }}
+              exit={{ opacity: 0, gridTemplateRows: "0fr", marginTop: 0 }}
+              transition={{ duration: 0.38, ease: EASE }}
+              className="grid"
             >
-              <MiniProposalDiff
-                base={ROUTINES_BASE_PLAIN}
-                proposed={ROUTINES_APPLIED_PLAIN}
-                agentName="Codex"
-                expanded={expanded}
-                onAccept={() => setStep(2)}
-                onReject={() => setStep(0)}
-              />
+              <div className="min-h-0 overflow-hidden">
+                <MiniProposalDiff
+                  base={ROUTINES_BASE_PLAIN}
+                  proposed={ROUTINES_APPLIED_PLAIN}
+                  agentName="Claude"
+                  expanded={expanded}
+                  onAccept={() => setStep(2)}
+                  onReject={() => setStep(0)}
+                />
+              </div>
             </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </DemoCard>
+    </motion.div>
+  );
+}
+
+// ----- beat 3: activity ----------------------------------------------------
+
+const ACTIVITY_STEPS = [1200, 700, 1700, 2200, 1700, 800] as const;
+
+type ActivityDemoStatus = "accepted" | "rejected" | "direct";
+
+type ActivityDemoEntry = {
+  id: string;
+  section: string;
+  agent: string;
+  status: ActivityDemoStatus;
+  added: number;
+  removed: number;
+  time: string;
+};
+
+const ACTIVITY_ENTRIES: ActivityDemoEntry[] = [
+  {
+    id: "goals",
+    section: "Goals",
+    agent: "Claude",
+    status: "accepted",
+    added: 9,
+    removed: 3,
+    time: "2m",
+  },
+  {
+    id: "work",
+    section: "Work",
+    agent: "Codex",
+    status: "direct",
+    added: 6,
+    removed: 0,
+    time: "18m",
+  },
+  {
+    id: "preferences",
+    section: "Preferences",
+    agent: "ChatGPT",
+    status: "rejected",
+    added: 4,
+    removed: 2,
+    time: "1h",
+  },
+];
+
+function ActivityDemoRow({
+  entry,
+  open,
+}: {
+  entry: ActivityDemoEntry;
+  open: boolean;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)]">
+      <div className="flex items-start gap-2.5 p-2.5">
+        <AgentIconStack
+          agents={[entry.agent]}
+          variant="inline"
+          itemClassName="h-4 w-4"
+          maxVisible={1}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-[12px] font-medium text-[var(--creed-text-primary)]">
+              {entry.section}
+            </span>
+            <span
+              className={cn(
+                "rounded-[6px] px-1.5 py-0.5 text-[9px] font-medium",
+                getActivityStatusStyles(entry.status),
+              )}
+            >
+              {ACTIVITY_STATUS_LABELS[entry.status]}
+            </span>
+            <ChevronDown
+              className={cn(
+                "h-3 w-3 text-[var(--creed-text-tertiary)] transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                open ? "rotate-0" : "-rotate-90",
+              )}
+            />
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 text-[10px] text-[var(--creed-text-secondary)]">
+            <span>{entry.agent}</span>
+            <span className="text-[var(--creed-text-tertiary)]">·</span>
+            <DiffBadge tone="added" count={entry.added} />
+            <DiffBadge tone="removed" count={entry.removed} />
+          </div>
+        </div>
+        <span className="text-[10px] text-[var(--creed-text-tertiary)]">
+          {entry.time}
+        </span>
+      </div>
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: EASE }}
+            className="overflow-hidden border-t border-[var(--creed-border)]"
+          >
+            <div className="creed-diff-block px-3 py-2 text-[10px] leading-[1.5]">
+              <span className="creed-diff-remove">Grow the product quickly. </span>
+              <span className="creed-diff-add">Reach 100 active teams before expanding the roadmap.</span>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+export function ActivityDemo() {
+  const { ref, step, setStep } = useLoopSequence(ACTIVITY_STEPS, 3);
+  const panelOpen = step >= 1 && step <= 4;
+  const rowsVisible = step >= 2 && step <= 4;
+  const acceptedOnly = step === 4;
+  const visibleEntries = acceptedOnly
+    ? ACTIVITY_ENTRIES.filter((entry) => entry.status === "accepted")
+    : ACTIVITY_ENTRIES;
+
+  return (
+    <div ref={ref} className="w-full">
+      <DemoCard className="relative h-[352px] overflow-hidden p-0">
+        <div className="flex h-11 items-center border-b border-[var(--creed-border)] px-3">
+          <span className="text-[13px] font-medium text-[var(--creed-text-primary)]">
+            Chamath / Creed
+          </span>
+          <button
+            type="button"
+            onClick={() => setStep(panelOpen ? 5 : 1)}
+            className={cn(
+              "ml-auto inline-flex h-7 items-center gap-1.5 rounded-md border border-[var(--creed-border)] px-2 text-[11px] font-medium text-[var(--creed-text-secondary)] transition-all duration-200",
+              panelOpen &&
+                "translate-y-px bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)]",
+            )}
+          >
+            <History className="h-3.5 w-3.5" />
+            Activity
+          </button>
+        </div>
+
+        <div className="p-4">
+          <div className="flex items-center gap-2">
+            <span className="h-6 w-[3px] rounded-full bg-[#F97316]" />
+            <span className="text-[14px] font-medium text-[#F97316]">Goals</span>
+          </div>
+          <div className="mt-4 space-y-2.5">
+            <div className="h-2.5 w-[88%] rounded-full bg-[var(--creed-surface-raised)]" />
+            <div className="h-2.5 w-[72%] rounded-full bg-[var(--creed-surface-raised)]" />
+            <div className="h-2.5 w-[81%] rounded-full bg-[var(--creed-surface-raised)]" />
+          </div>
+          <div className="mt-7 flex items-center gap-2">
+            <span className="h-6 w-[3px] rounded-full bg-[#EC4899]" />
+            <span className="text-[14px] font-medium text-[#EC4899]">Work</span>
+          </div>
+          <div className="mt-4 space-y-2.5">
+            <div className="h-2.5 w-[78%] rounded-full bg-[var(--creed-surface-raised)]" />
+            <div className="h-2.5 w-[90%] rounded-full bg-[var(--creed-surface-raised)]" />
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {panelOpen ? (
+            <motion.aside
+              initial={{ x: "100%", opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: "100%", opacity: 0 }}
+              transition={{ duration: 0.3, ease: EASE }}
+              className="absolute inset-y-0 right-0 w-[78%] border-l border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[-14px_0_36px_rgba(28,28,26,0.12)]"
+            >
+              <div className="flex h-full flex-col p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-[13px] font-medium text-[var(--creed-text-primary)]">
+                      Activity
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-[var(--creed-text-tertiary)]">
+                      Agent changes to this Creed.
+                    </div>
+                  </div>
+                  <X className="h-3.5 w-3.5 text-[var(--creed-text-tertiary)]" />
+                </div>
+
+                <div className="mt-3 flex gap-1">
+                  {ACTIVITY_FILTERS.map((filter) => (
+                    <div
+                      key={filter.value}
+                      className="[&_button]:rounded-[8px] [&_button]:border-[1.25px] [&_button]:px-1.5 [&_button]:py-1 [&_button]:text-[9px] [&_button]:shadow-none!"
+                    >
+                      <ActivityFilterPill
+                        active={
+                          acceptedOnly
+                            ? filter.value === "accepted"
+                            : filter.value === "all"
+                        }
+                        tone={getActivityFilterTone(filter.value)}
+                        onClick={() =>
+                          setStep(filter.value === "accepted" ? 4 : 2)
+                        }
+                      >
+                        {filter.label}
+                      </ActivityFilterPill>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 text-[10px] font-medium text-[var(--creed-text-tertiary)]">
+                  Recent
+                </div>
+                <div className="mt-2 space-y-2">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    {rowsVisible
+                      ? visibleEntries.map((entry, index) => (
+                          <motion.div
+                            layout
+                            key={entry.id}
+                            initial={{ opacity: 0, y: 7 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -5 }}
+                            transition={{
+                              duration: 0.24,
+                              delay: index * 0.055,
+                              ease: EASE,
+                            }}
+                          >
+                            <ActivityDemoRow
+                              entry={entry}
+                              open={step === 3 && entry.status === "accepted"}
+                            />
+                          </motion.div>
+                        ))
+                      : null}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </motion.aside>
           ) : null}
         </AnimatePresence>
       </DemoCard>
@@ -468,7 +716,7 @@ export function UpdateDemo() {
   );
 }
 
-// ----- beat 3: refine ------------------------------------------------------
+// ----- analysis feature demo ----------------------------------------------
 
 // 0 loading, 1 resolved (tags in, no note open), 2-4 open each note in turn.
 const SCORE_STEPS = [1300, 1500, 1900, 1900, 2400] as const;
@@ -611,7 +859,7 @@ export function ScoreDemo() {
 
   return (
     <div ref={ref} className="w-full">
-      <DemoCard className="min-h-[220px]">
+      <DemoCard>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <span
