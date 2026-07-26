@@ -578,9 +578,9 @@
   font-size: inherit;
 }
 
-/* Syntax highlighting (lowlight / highlight.js classes). The token palette
-   reads as a calm "GitHub-light" style so colour stays subtle in long blocks;
-   the .dark block below adapts each hue for the dark canvas. */
+/* Syntax highlighting (lowlight / highlight.js classes). Same hues as the
+   GitHub-style palette, pushed more saturated so CLI snippets on /bench and
+   /learn read clearly on both light and dark canvases. */
 .creed-code-block .hljs-comment,
 .creed-code-block .hljs-quote {
   color: #6a737d;
@@ -591,7 +591,7 @@
 .creed-code-block .hljs-literal,
 .creed-code-block .hljs-section,
 .creed-code-block .hljs-link {
-  color: #d73a49;
+  color: #e11d48;
 }
 .creed-code-block .hljs-string,
 .creed-code-block .hljs-attr,
@@ -599,38 +599,38 @@
 .creed-code-block .hljs-template-variable,
 .creed-code-block .hljs-meta-string,
 .creed-code-block .hljs-regexp {
-  color: #032f62;
+  color: #1d4ed8;
 }
 .creed-code-block .hljs-number,
 .creed-code-block .hljs-symbol,
 .creed-code-block .hljs-bullet,
 .creed-code-block .hljs-meta {
-  color: #005cc5;
+  color: #2563eb;
 }
 .creed-code-block .hljs-title,
 .creed-code-block .hljs-name,
 .creed-code-block .hljs-class .hljs-title,
 .creed-code-block .hljs-type {
-  color: #6f42c1;
+  color: #7c3aed;
 }
 .creed-code-block .hljs-built_in,
 .creed-code-block .hljs-builtin-name {
-  color: #005cc5;
+  color: #2563eb;
 }
 .creed-code-block .hljs-variable,
 .creed-code-block .hljs-template-variable,
 .creed-code-block .hljs-attribute {
-  color: #e36209;
+  color: #ea580c;
 }
 .creed-code-block .hljs-tag {
-  color: #22863a;
+  color: #16a34a;
 }
 .creed-code-block .hljs-deletion {
   color: #b31d28;
   background: #ffeef0;
 }
 .creed-code-block .hljs-addition {
-  color: #22863a;
+  color: #16a34a;
   background: #f0fff4;
 }
 .creed-code-block .hljs-emphasis { font-style: italic; }
@@ -638,14 +638,14 @@
 
 .dark .creed-code-block .hljs-comment,
 .dark .creed-code-block .hljs-quote {
-  color: #7a7a72;
+  color: #8b8b82;
 }
 .dark .creed-code-block .hljs-keyword,
 .dark .creed-code-block .hljs-selector-tag,
 .dark .creed-code-block .hljs-literal,
 .dark .creed-code-block .hljs-section,
 .dark .creed-code-block .hljs-link {
-  color: #ff7b72;
+  color: #fb7185;
 }
 .dark .creed-code-block .hljs-string,
 .dark .creed-code-block .hljs-attr,
@@ -653,7 +653,7 @@
 .dark .creed-code-block .hljs-template-variable,
 .dark .creed-code-block .hljs-meta-string,
 .dark .creed-code-block .hljs-regexp {
-  color: #a5d6ff;
+  color: #38bdf8;
 }
 .dark .creed-code-block .hljs-number,
 .dark .creed-code-block .hljs-symbol,
@@ -661,27 +661,27 @@
 .dark .creed-code-block .hljs-meta,
 .dark .creed-code-block .hljs-built_in,
 .dark .creed-code-block .hljs-builtin-name {
-  color: #79c0ff;
+  color: #60a5fa;
 }
 .dark .creed-code-block .hljs-title,
 .dark .creed-code-block .hljs-name,
 .dark .creed-code-block .hljs-class .hljs-title,
 .dark .creed-code-block .hljs-type {
-  color: #d2a8ff;
+  color: #c084fc;
 }
 .dark .creed-code-block .hljs-variable,
 .dark .creed-code-block .hljs-attribute {
-  color: #ffa657;
+  color: #fb923c;
 }
 .dark .creed-code-block .hljs-tag {
-  color: #7ee787;
+  color: #4ade80;
 }
 .dark .creed-code-block .hljs-deletion {
   color: #ffdcd7;
   background: rgba(248, 81, 73, 0.15);
 }
 .dark .creed-code-block .hljs-addition {
-  color: #aff5b4;
+  color: #86efac;
   background: rgba(46, 160, 67, 0.15);
 }
 

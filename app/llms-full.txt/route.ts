@@ -186,11 +186,11 @@ context that should shape everyday help. The same ten sections fit all of them,
 because the thing they share is simple: they want AI that starts every
 conversation already knowing them, instead of starting from zero.
 
-${faqBlock("Frequently asked questions", homeFaqItems)}
+${faqBlock("Common questions", homeFaqItems)}
 
 ${faqBlock("About personal context files", contextFileFaqItems)}
 
-${faqBlock("Pricing questions", pricingFaqItems)}
+${faqBlock("Common questions", pricingFaqItems)}
 
 ## Guides
 

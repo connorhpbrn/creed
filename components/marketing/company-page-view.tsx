@@ -80,10 +80,10 @@ export function CompanyPageView() {
               See Company pricing
             </Link>
             <Link
-              href="/learn/team-context-file"
+              href="/docs"
               className="inline-flex h-10 items-center justify-center rounded-md border border-[var(--creed-border)] px-5 text-[14px] font-medium text-[var(--creed-text-primary)] transition-colors hover:bg-[var(--creed-surface)]"
             >
-              What is a team context file?
+              Read the docs
             </Link>
           </div>
         </header>
@@ -184,7 +184,7 @@ export function CompanyPageView() {
         </section>
 
         <FaqSection
-          heading="Company plan questions"
+          heading="Common questions"
           items={companyFaqItems}
           className="border-t border-[var(--creed-border)] py-12"
         />

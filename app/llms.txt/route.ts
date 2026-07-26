@@ -25,7 +25,7 @@ Full plain-text content: ${base}/llms-full.txt
 
 ## About
 
-- [What is a personal context file?](${base}/learn/what-is-a-personal-context-file): The category explained - what goes in the file, how agents keep it current, and how it differs from a chatbot's memory.
+- [Personal context file](${base}/learn/personal-context-file): What goes in the file, how agents keep it current, and how it differs from chatbot memory.
 - [Examples](${base}/examples): Concrete moments where one shared file changes the answer, across everyday life, health, boundaries, building, writing, research, and ownership.
 - [Home](${base}/home): What Creed is and how it works.
 - [Pricing](${base}/pricing): Plans and access.

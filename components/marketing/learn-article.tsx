@@ -1,21 +1,60 @@
 import Link from "next/link";
+import { Check, X } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { AnimatedPageTitle } from "@/components/marketing/animated-page-title";
+import { CodeCommand } from "@/components/marketing/code-command";
+import { LearnArticleHeader } from "@/components/marketing/learn-article-header";
+import { LearnContextPerfChart } from "@/components/marketing/learn-context-perf-chart";
+import { LearnTaxCompoundChart } from "@/components/marketing/learn-tax-compound-chart";
 import {
   MarketingFooter,
   MarketingHeroBanner,
 } from "@/components/marketing/site-chrome";
 import { FaqSection } from "@/components/marketing/faq-section";
 import type { Article, ArticleBlock } from "@/lib/marketing/learn/types";
+import { accentColorMap } from "@/lib/creed-data";
 
-// Server-rendered article view for /learn/[slug]. Everything ships in the
-// initial HTML: the lead answer, headings, tables, code, FAQ, and related
-// links. No client component wraps the content, so answer engines and no-JS
-// crawlers read the whole page.
+// Server-rendered article view for /learn/[slug]. Body, tables, FAQ, and
+// related links ship in the initial HTML. Charts and the header icon are
+// small client islands.
 
-// Every article's Related list ends with the same product CTA. It lives here,
-// not in each article's data, so retargeting it is a one-line change.
 const PRODUCT_CTA = { label: "See how Creed works", href: "/home" };
+
+function TableCell({ cell, isFirst }: { cell: string; isFirst: boolean }) {
+  if (cell === "check") {
+    return (
+      <td className="px-4 py-3">
+        <Check
+          aria-label="Yes"
+          className="h-4 w-4 text-[var(--creed-success)]"
+          strokeWidth={2.5}
+        />
+      </td>
+    );
+  }
+  if (cell === "cross") {
+    return (
+      <td className="px-4 py-3">
+        <X
+          aria-label="No"
+          className="h-4 w-4"
+          style={{ color: accentColorMap.boundaries }}
+          strokeWidth={2.5}
+        />
+      </td>
+    );
+  }
+  return (
+    <td
+      className={
+        isFirst
+          ? "px-4 py-3 font-medium text-[var(--creed-text-primary)]"
+          : "px-4 py-3 text-[var(--creed-text-secondary)]"
+      }
+    >
+      {cell}
+    </td>
+  );
+}
 
 function Block({ block }: { block: ArticleBlock }) {
   switch (block.type) {
@@ -43,9 +82,38 @@ function Block({ block }: { block: ArticleBlock }) {
           {block.items.map((item, i) => (
             <li
               key={i}
-              className="relative pl-5 text-[16px] leading-7 text-[var(--creed-text-secondary)] before:absolute before:left-0 before:top-[10px] before:h-2 before:w-2 before:rounded-[3px] before:bg-[var(--creed-accent)]"
+              className="relative pl-5 text-[16px] leading-7 text-[var(--creed-text-secondary)]"
             >
+              <span
+                aria-hidden
+                className="absolute left-0 top-[10px] h-2 w-2 rounded-[3px]"
+                style={{
+                  backgroundColor: block.accent ?? "var(--creed-accent)",
+                }}
+              />
               {item}
+            </li>
+          ))}
+        </ul>
+      );
+    case "labeled-list":
+      return (
+        <ul className="mt-5 space-y-2.5">
+          {block.items.map((item) => (
+            <li
+              key={item.label}
+              className="relative pl-5 text-[16px] leading-7 text-[var(--creed-text-secondary)]"
+            >
+              <span
+                aria-hidden
+                className="absolute left-0 top-[10px] h-2 w-2 rounded-[3px]"
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="font-medium" style={{ color: item.color }}>
+                {item.label}
+              </span>
+              {": "}
+              {item.text}
             </li>
           ))}
         </ul>
@@ -95,16 +163,7 @@ function Block({ block }: { block: ArticleBlock }) {
                     className="border-b border-[var(--creed-border)] last:border-0"
                   >
                     {row.map((cell, c) => (
-                      <td
-                        key={c}
-                        className={
-                          c === 0
-                            ? "px-4 py-3 font-medium text-[var(--creed-text-primary)]"
-                            : "px-4 py-3 text-[var(--creed-text-secondary)]"
-                        }
-                      >
-                        {cell}
-                      </td>
+                      <TableCell key={c} cell={cell} isFirst={c === 0} />
                     ))}
                   </tr>
                 ))}
@@ -115,9 +174,19 @@ function Block({ block }: { block: ArticleBlock }) {
       );
     case "code":
       return (
-        <pre className="mt-6 overflow-x-auto rounded-xl bg-[var(--creed-surface)] p-5 font-mono text-[13px] leading-6 text-[var(--creed-text-primary)]">
-          <code>{block.code}</code>
-        </pre>
+        <CodeCommand copyText={block.code} className="mt-6">
+          {block.parts
+            ? block.parts.map((part, i) =>
+                part.className ? (
+                  <span key={i} className={part.className}>
+                    {part.text}
+                  </span>
+                ) : (
+                  <span key={i}>{part.text}</span>
+                ),
+              )
+            : block.code}
+        </CodeCommand>
       );
     case "quote":
       return (
@@ -125,46 +194,30 @@ function Block({ block }: { block: ArticleBlock }) {
           {block.text}
         </blockquote>
       );
+    case "context-perf-chart":
+      return <LearnContextPerfChart />;
+    case "tax-compound-chart":
+      return <LearnTaxCompoundChart />;
   }
 }
 
 export function LearnArticle({ article }: { article: Article }) {
-  const leadParagraphs = article.lead.split("\n\n");
-
   return (
     <div className="min-h-screen bg-[var(--creed-background)] text-[var(--creed-text-primary)]">
       <MarketingHeroBanner configured={isSupabaseConfigured()} scrolled={false} />
 
       <main className="mx-auto max-w-3xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
         <article>
-          <AnimatedPageTitle text={article.title} />
+          <LearnArticleHeader title={article.title} slug={article.slug} />
 
-          <div className="mt-6">
-            {leadParagraphs.map((para, i) => (
-              <p
-                key={i}
-                className={
-                  "text-[17px] leading-8 text-[var(--creed-text-primary)]" +
-                  (i > 0 ? " mt-4" : "")
-                }
-              >
-                {para}
-              </p>
-            ))}
-          </div>
-
-          <div>
+          <div className="mt-10 [&>:first-child]:mt-0">
             {article.body.map((block, i) => (
               <Block key={i} block={block} />
             ))}
           </div>
 
           {article.faq.length > 0 ? (
-            <FaqSection
-              heading="Frequently asked questions"
-              items={article.faq}
-              className="mt-14"
-            />
+            <FaqSection items={article.faq} className="mt-14" />
           ) : null}
 
           <section className="mt-14">
@@ -184,7 +237,6 @@ export function LearnArticle({ article }: { article: Article }) {
               ))}
             </ul>
           </section>
-
         </article>
       </main>
 

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
   MarketingFooter,
@@ -7,13 +6,28 @@ import {
 } from "@/components/marketing/site-chrome";
 import { AnimatedPageTitle } from "@/components/marketing/animated-page-title";
 import { JsonLd } from "@/components/marketing/json-ld";
-import { articlesByCluster } from "@/lib/marketing/learn";
+import { LearnArticleCard } from "@/components/marketing/learn-article-card";
+import { learnArticles } from "@/lib/marketing/learn";
 import { breadcrumbSchema, graph, webPageSchema } from "@/lib/seo/structured-data";
+import { ConnectIcon } from "@/components/ui/connect";
+import { FileTextIcon } from "@/components/ui/file-text";
+import { GitCompareArrowsIcon } from "@/components/ui/git-compare-arrows";
+import { RefreshCwIcon } from "@/components/ui/refresh-cw";
 
 const PATH = "/learn";
 const TITLE = "Learn";
 const DESCRIPTION =
-  "Guides on personal context files: what they are, how to stop repeating yourself to AI, how to share context across ChatGPT, Claude, and Cursor, and how Creed compares to the memory tools.";
+  "Personal context files: what they are, the re-explaining tax, how memory compares, and how to connect your tools.";
+
+// Client icon components passed as props to LearnArticleCard (supported RSC
+// pattern). Do not call helpers from learn-icons.tsx here - that module is
+// client-only and invoking it from this server page throws at runtime.
+const ARTICLE_ICONS = {
+  "personal-context-file": FileTextIcon,
+  "re-explaining-tax": RefreshCwIcon,
+  "memory-vs-context-file": GitCompareArrowsIcon,
+  "connect-your-tools": ConnectIcon,
+} as const;
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -22,8 +36,6 @@ export const metadata: Metadata = {
 };
 
 export default function LearnIndexPage() {
-  const groups = articlesByCluster();
-
   return (
     <>
       <JsonLd
@@ -38,45 +50,28 @@ export default function LearnIndexPage() {
       <div className="min-h-screen bg-[var(--creed-background)] text-[var(--creed-text-primary)]">
         <MarketingHeroBanner configured={isSupabaseConfigured()} scrolled={false} />
 
-        <main className="mx-auto max-w-4xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
+        <main className="mx-auto max-w-3xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
           <header className="border-b border-[var(--creed-border)] pb-8">
             <AnimatedPageTitle text="Learn" />
-            <p className="mt-4 max-w-2xl text-[18px] leading-8 text-[var(--creed-text-secondary)]">
-              How to keep one context file every AI reads before it answers. The
-              category, the common problems, honest comparisons, and how to
-              connect your tools.
-            </p>
           </header>
 
-          <div className="mt-12 flex flex-col gap-14">
-            {groups.map((group) => (
-              <section key={group.cluster}>
-                <h2 className="text-[22px] font-medium tracking-[-0.01em] text-[var(--creed-text-primary)] md:text-[24px]">
-                  {group.title}
-                </h2>
-                <p className="mt-2 text-[15px] text-[var(--creed-text-tertiary)]">
-                  {group.blurb}
-                </p>
-                <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-                  {group.articles.map((article) => (
-                    <li key={article.slug}>
-                      <Link
-                        href={`/learn/${article.slug}`}
-                        className="flex h-full flex-col rounded-xl bg-[var(--creed-surface)] p-5 transition-colors hover:bg-[var(--creed-surface-raised)]"
-                      >
-                        <span className="line-clamp-2 text-[16px] font-medium leading-6 text-[var(--creed-text-primary)]">
-                          {article.title}
-                        </span>
-                        <span className="mt-2 line-clamp-3 text-[14px] leading-6 text-[var(--creed-text-secondary)]">
-                          {article.description}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
+          <ul className="mt-10 grid gap-3 sm:grid-cols-2">
+            {learnArticles.map((article) => {
+              const Icon =
+                ARTICLE_ICONS[article.slug as keyof typeof ARTICLE_ICONS] ??
+                FileTextIcon;
+              return (
+                <li key={article.slug}>
+                  <LearnArticleCard
+                    href={`/learn/${article.slug}`}
+                    title={article.title}
+                    description={article.description}
+                    icon={Icon}
+                  />
+                </li>
+              );
+            })}
+          </ul>
         </main>
 
         <MarketingFooter />

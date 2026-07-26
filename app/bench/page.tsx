@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { AnimatedPageTitle } from "@/components/marketing/animated-page-title";
+import { CodeCommand } from "@/components/marketing/code-command";
 import { CreedBenchChart } from "@/components/marketing/creed-bench-chart";
 import {
   MarketingFooter,
@@ -23,12 +24,14 @@ export const metadata: Metadata = {
   alternates: { canonical: PATH },
 };
 
-function BenchCommand({ children }: { children: ReactNode }) {
-  return (
-    <pre className="creed-code-block w-fit max-w-full overflow-x-auto rounded-[12px] bg-[var(--creed-surface-raised)] px-[0.95rem] py-[0.7rem] font-mono text-[13px] leading-[1.5] text-[var(--creed-text-primary)]">
-      <code>{children}</code>
-    </pre>
-  );
+function BenchCommand({
+  copyText,
+  children,
+}: {
+  copyText: string;
+  children: ReactNode;
+}) {
+  return <CodeCommand copyText={copyText}>{children}</CodeCommand>;
 }
 
 function BenchTable({
@@ -134,7 +137,7 @@ export default function BenchPage() {
                 by stuffing context into a prompt and hoping for the best.
               </p>
               <p>Try a model with one medium-effort pass over the full suite:</p>
-              <BenchCommand>
+              <BenchCommand copyText="npm run bench -- openai/gpt-5.6-sol">
                 <span className="hljs-built_in">npm</span> run{" "}
                 <span className="hljs-title">bench</span>{" "}
                 <span className="hljs-attribute">--</span>{" "}
@@ -173,7 +176,7 @@ export default function BenchPage() {
                 rows={workflowRows}
               />
               <p>Inspect the same list from the CLI:</p>
-              <BenchCommand>
+              <BenchCommand copyText="npm run bench -- --list">
                 <span className="hljs-built_in">npm</span> run{" "}
                 <span className="hljs-title">bench</span>{" "}
                 <span className="hljs-attribute">--</span>{" "}
@@ -187,7 +190,7 @@ export default function BenchPage() {
                 one-shot trajectories are not enough on their own.
               </p>
               <p>Iterate on one task while building or debugging a grader:</p>
-              <BenchCommand>
+              <BenchCommand copyText="npm run bench -- openai/gpt-5.6-sol --task append-durable-preference">
                 <span className="hljs-built_in">npm</span> run{" "}
                 <span className="hljs-title">bench</span>{" "}
                 <span className="hljs-attribute">--</span>{" "}
@@ -206,7 +209,7 @@ export default function BenchPage() {
                 Publish a complete official result: all {BENCH_TASKS.length}{" "}
                 tasks, three trials each, at low, medium, and high effort.
               </p>
-              <BenchCommand>
+              <BenchCommand copyText="npm run bench -- openai/gpt-5.6-sol --official --yes">
                 <span className="hljs-built_in">npm</span> run{" "}
                 <span className="hljs-title">bench</span>{" "}
                 <span className="hljs-attribute">--</span>{" "}

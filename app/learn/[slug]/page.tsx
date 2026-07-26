@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { LearnArticle } from "@/components/marketing/learn-article";
 import { JsonLd } from "@/components/marketing/json-ld";
 import { getArticle, learnArticles } from "@/lib/marketing/learn";
-import { CLUSTER_META } from "@/lib/marketing/learn/types";
 import {
   articleSchema,
   breadcrumbSchema,
@@ -66,7 +65,6 @@ export default async function LearnArticlePage({
           breadcrumbSchema(path, [
             { name: "Creed", path: "/home" },
             { name: "Learn", path: "/learn" },
-            { name: CLUSTER_META[article.cluster].title, path: "/learn" },
             { name: article.title, path },
           ]),
           ...(article.faq.length > 0 ? [faqPageSchema(article.faq)] : [])
