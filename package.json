@@ -8,6 +8,10 @@
     "start": "NODE_OPTIONS=--max-http-header-size=65536 next start",
     "lint": "eslint",
     "test": "node --test --experimental-strip-types 'tests/**/*.test.ts'",
+    "bench": "node --experimental-strip-types bench/cli.ts",
+    "bench:generate": "node --experimental-strip-types bench/cli.ts --generate",
+    "bench:prune": "node --experimental-strip-types bench/cli.ts --prune",
+    "bench:regrade": "node --experimental-strip-types bench/cli.ts --regrade",
     "indexnow": "node --experimental-strip-types scripts/indexnow-ping.ts"
   },
   "dependencies": {

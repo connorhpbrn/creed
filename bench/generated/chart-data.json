@@ -1,0 +1,113 @@
+[
+  {
+    "modelId": "anthropic/claude-opus-5",
+    "model": "Claude Opus 5",
+    "provider": "Amazon Bedrock",
+    "color": "#EA580C",
+    "benchmarkVersion": "1.0.1",
+    "completedAt": "2026-07-26T12:50:22.509Z",
+    "points": [
+      {
+        "effort": "low",
+        "averageCostUsd": 0.0613,
+        "runCostUsd": 14.65308,
+        "score": 58.3,
+        "passPower3": 58.3,
+        "tokens": 11135,
+        "runTokens": 2610584
+      },
+      {
+        "effort": "medium",
+        "averageCostUsd": 0.06509,
+        "runCostUsd": 14.65308,
+        "score": 58.3,
+        "passPower3": 54.2,
+        "tokens": 11663,
+        "runTokens": 2610584
+      },
+      {
+        "effort": "high",
+        "averageCostUsd": 0.07712,
+        "runCostUsd": 14.65308,
+        "score": 54.2,
+        "passPower3": 50,
+        "tokens": 13460,
+        "runTokens": 2610584
+      }
+    ]
+  },
+  {
+    "modelId": "openai/gpt-5.6-sol",
+    "model": "GPT 5.6 Sol",
+    "provider": "OpenAI",
+    "color": "#2563EB",
+    "benchmarkVersion": "1.0.1",
+    "completedAt": "2026-07-26T12:50:22.578Z",
+    "points": [
+      {
+        "effort": "low",
+        "averageCostUsd": 0.01331,
+        "runCostUsd": 3.17956,
+        "score": 50,
+        "passPower3": 50,
+        "tokens": 6789,
+        "runTokens": 1508178
+      },
+      {
+        "effort": "medium",
+        "averageCostUsd": 0.01494,
+        "runCostUsd": 3.17956,
+        "score": 66.7,
+        "passPower3": 45.8,
+        "tokens": 7002,
+        "runTokens": 1508178
+      },
+      {
+        "effort": "high",
+        "averageCostUsd": 0.01591,
+        "runCostUsd": 3.17956,
+        "score": 58.3,
+        "passPower3": 45.8,
+        "tokens": 7156,
+        "runTokens": 1508178
+      }
+    ]
+  },
+  {
+    "modelId": "x-ai/grok-4.5",
+    "model": "Grok 4.5",
+    "provider": "xAI",
+    "color": "#EAB308",
+    "benchmarkVersion": "1.0.1",
+    "completedAt": "2026-07-26T12:50:22.630Z",
+    "points": [
+      {
+        "effort": "low",
+        "averageCostUsd": 0.00659,
+        "runCostUsd": 1.55736,
+        "score": 54.2,
+        "passPower3": 50,
+        "tokens": 9131,
+        "runTokens": 2025321
+      },
+      {
+        "effort": "medium",
+        "averageCostUsd": 0.00729,
+        "runCostUsd": 1.55736,
+        "score": 54.2,
+        "passPower3": 50,
+        "tokens": 9384,
+        "runTokens": 2025321
+      },
+      {
+        "effort": "high",
+        "averageCostUsd": 0.00775,
+        "runCostUsd": 1.55736,
+        "score": 54.2,
+        "passPower3": 50,
+        "tokens": 9614,
+        "runTokens": 2025321
+      }
+    ]
+  }
+]
