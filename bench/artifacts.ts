@@ -25,14 +25,14 @@ const gunzipAsync = promisify(gunzip);
 const LOCAL_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Landing / Creed accent palette (saturated, not pastel).
-const COLORS = ["#2563EB", "#EA580C", "#EAB308", "#EC4899", "#059669", "#7C3AED"];
+const COLORS = ["#2563EB", "#EA580C", "#EAB308", "#EC4899", "#22C55E", "#7C3AED"];
 
 const MODEL_COLORS: Record<string, string> = {
   "openai/gpt-5.6-sol": "#2563EB",
   "anthropic/claude-opus-5": "#EA580C",
   "x-ai/grok-4.5": "#EAB308",
   "moonshotai/kimi-k3": "#EC4899",
-  "z-ai/glm-5.2": "#059669",
+  "z-ai/glm-5.2": "#22C55E",
 };
 
 export type CheckpointConfiguration = {
