@@ -85,6 +85,11 @@ but a few things are non-negotiable:
 For deeper notes, see the comment block at the top of each file or
 `AGENTS.md`.
 
+## Changelog
+
+Only major user-facing ships get a public changelog entry. See
+[`CHANGELOG.md`](./CHANGELOG.md). Tiny polishes do not.
+
 ## Tests
 
 There are no unit tests yet. If you write one, put it next to the

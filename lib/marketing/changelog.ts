@@ -1,7 +1,6 @@
 // Curated changelog for the public site. Hand-written, user-facing entries for
-// meaningful ships, newest first. This is not a raw commit log; keep each entry
-// readable and honest, and add one when something real ships. Freshness here is
-// a signal to both search and AI answer engines that Creed is actively built.
+// meaningful ships, newest first. See CHANGELOG.md for when to add an entry.
+// This is not a raw commit log.
 
 export type ChangelogEntry = {
   // ISO date (YYYY-MM-DD), used for ordering and the visible date.
@@ -12,6 +11,17 @@ export type ChangelogEntry = {
 };
 
 export const changelog: ChangelogEntry[] = [
+  {
+    date: "2026-07-26",
+    title: "Creed Bench",
+    body: "A public leaderboard that measures how well frontier models use Creed through its real MCP tools. Pass@1 is plotted against average cost per task, with the full task suite and methodology on /bench.",
+    highlights: [
+      "Official runs cover 24 tasks across single-tool, multi-tool, and adversarial families.",
+      "Each model is scored at low, medium, and high effort, three trials each.",
+      "Results stay local as traces; only the generated chart ships with the site.",
+      "Open the chart and task tables at /bench.",
+    ],
+  },
   {
     date: "2026-07-14",
     title: "Creed CLI",
