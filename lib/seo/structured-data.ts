@@ -136,39 +136,6 @@ export function webPageSchema({
   };
 }
 
-// An Article node for a /learn guide. Authored and published by the Creed
-// organization; datePublished/dateModified drive the freshness signal that AI
-// engines weight, so keep dateModified in step with the article's registry.
-export function articleSchema({
-  path,
-  headline,
-  description,
-  datePublished,
-  dateModified,
-}: {
-  path: string;
-  headline: string;
-  description: string;
-  datePublished: string;
-  dateModified: string;
-}) {
-  const url = `${base()}${path}`;
-
-  return {
-    "@type": "Article",
-    "@id": `${url}#article`,
-    url,
-    headline,
-    description,
-    datePublished,
-    dateModified,
-    isPartOf: { "@id": websiteId() },
-    author: { "@id": organizationId() },
-    publisher: { "@id": organizationId() },
-    image: `${base()}/opengraph-image.jpg`,
-  };
-}
-
 export function breadcrumbSchema(
   path: string,
   trail: { name: string; path: string }[]

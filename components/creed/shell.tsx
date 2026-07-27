@@ -52,6 +52,7 @@ import { useCreed } from "@/components/creed/creed-provider";
 import { preloadSettingsData } from "@/components/creed/settings-preload";
 import { preloadMcpHealth } from "@/components/creed/mcp-health-preload";
 import { ShortcutKey } from "@/components/creed/shortcut-key";
+import { FileSectionNavButton } from "@/components/creed/file-presentation";
 
 const FILE_NAV_INTENT_KEY = "creed:file-nav-intent";
 const SIDEBAR_COLLAPSED_KEY = "creed:sidebar-collapsed";
@@ -474,73 +475,17 @@ export function CreedShell({
                 const pendingCount = pendingProposalCountBySection.get(section.id) ?? 0;
                 const isActive = activeSectionId === section.id && pathname === "/file";
                 const pendingDelete = pendingDeleteSectionIds.has(section.id);
-                const content = (
-                  <>
-                    <span
-                      className={cn(
-                        "h-2.5 w-2.5 shrink-0 rounded-[3px]",
-                        !collapsed && "lg:h-1.5 lg:w-1.5 lg:rounded-[2px]"
-                      )}
-                      style={{
-                        // Pending-delete dot turns red so the row reads as
-                        // a coherent "this is being removed" signal rather
-                        // than the original accent next to a red wash.
-                        backgroundColor: pendingDelete
-                          ? "#DC2626"
-                          : accentColorMap[section.accent],
-                      }}
-                    />
-                    <span
-                      className={cn(
-                        "hidden truncate",
-                        !collapsed && "lg:inline",
-                        pendingDelete && "line-through"
-                      )}
-                    >
-                      {section.name}
-                    </span>
-                    {pendingCount > 0 ? (
-                      <span
-                        className={cn(
-                          "ml-auto hidden h-[18px] min-w-[18px] items-center justify-center rounded-[5px] bg-[var(--creed-accent)] px-1.5 text-[10px] font-medium leading-none text-white tabular-nums",
-                          !collapsed && "lg:inline-flex"
-                        )}
-                        aria-label={`${pendingCount} pending proposal${pendingCount === 1 ? "" : "s"}`}
-                      >
-                        {pendingCount}
-                      </span>
-                    ) : null}
-                  </>
-                );
-
                 return (
-                  <button
+                  <FileSectionNavButton
                     key={section.id}
-                    type="button"
+                    name={section.name}
+                    accent={accentColorMap[section.accent]}
+                    active={isActive}
+                    pendingCount={pendingCount}
+                    pendingDelete={pendingDelete}
+                    collapsed={collapsed}
                     onClick={() => handleSectionClick(section.id)}
-                    className={cn(
-                      "flex h-8 w-8 mx-auto items-center justify-center rounded-sm text-left text-[14px] font-medium text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
-                      SIDEBAR_PRESS_CLASS,
-                      !collapsed &&
-                        "lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
-                      isActive &&
-                        "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)] hover:bg-[var(--creed-surface-raised)]",
-                      // Pending delete: subtle red wash and red text so the
-                      // row reads as "this section is on its way out" but
-                      // still navigable until the user accepts/rejects.
-                      pendingDelete &&
-                        "bg-[#FEF2F2] text-[#B91C1C] hover:bg-[#FDE2E2] hover:text-[#991B1B] dark:bg-[#3F1212]/35 dark:text-[#F87171] dark:hover:bg-[#3F1212]/55 dark:hover:text-[#F87171]",
-                      // When the user is currently viewing a pending-delete
-                      // section, lock in the hover variant so the active
-                      // state reads the same way it does on every other
-                      // tab in this sidebar.
-                      pendingDelete && isActive &&
-                        "bg-[#FDE2E2] text-[#991B1B] dark:bg-[#3F1212]/55"
-                    )}
-                    aria-label={section.name}
-                  >
-                    {content}
-                  </button>
+                  />
                 );
               })}
 

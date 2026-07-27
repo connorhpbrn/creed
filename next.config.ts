@@ -91,123 +91,17 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/context",
-        destination: "/learn/personal-context-file",
-        permanent: true,
-      },
-      // Learn library cut to four guides; old slugs redirect to the closest keep.
-      {
-        source: "/learn/what-is-a-personal-context-file",
-        destination: "/learn/personal-context-file",
+        destination: "/docs",
         permanent: true,
       },
       {
-        source: "/learn/stop-repeating-yourself-to-ai",
-        destination: "/learn/re-explaining-tax",
+        source: "/learn/:path*",
+        destination: "/docs",
         permanent: true,
       },
       {
-        source: "/learn/creed-vs-chatgpt-memory",
-        destination: "/learn/memory-vs-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/creed-vs-claude-memory",
-        destination: "/learn/memory-vs-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/creed-vs-mem0",
-        destination: "/learn/memory-vs-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/memory-mcp-servers-compared",
-        destination: "/learn/memory-vs-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/browser-extension-vs-mcp-context",
-        destination: "/learn/memory-vs-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/rewind-limitless-alternatives",
-        destination: "/learn/memory-vs-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/connect-creed-to-cursor",
-        destination: "/learn/connect-your-tools",
-        permanent: true,
-      },
-      {
-        source: "/learn/connect-creed-to-claude-code",
-        destination: "/learn/connect-your-tools",
-        permanent: true,
-      },
-      {
-        source: "/learn/connect-creed-to-chatgpt",
-        destination: "/learn/connect-your-tools",
-        permanent: true,
-      },
-      {
-        source: "/learn/why-chatgpt-forgets-you",
-        destination: "/learn/re-explaining-tax",
-        permanent: true,
-      },
-      {
-        source: "/learn/chatgpt-custom-instructions-limit",
-        destination: "/learn/re-explaining-tax",
-        permanent: true,
-      },
-      {
-        source: "/learn/share-context-between-chatgpt-and-claude",
-        destination: "/learn/re-explaining-tax",
-        permanent: true,
-      },
-      {
-        source: "/learn/sync-ai-memory-across-tools",
-        destination: "/learn/re-explaining-tax",
-        permanent: true,
-      },
-      {
-        source: "/learn/export-chatgpt-memory",
-        destination: "/learn/re-explaining-tax",
-        permanent: true,
-      },
-      {
-        source: "/learn/personal-context-file-template",
-        destination: "/learn/personal-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/claude-md-for-your-life",
-        destination: "/learn/personal-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/personal-claude-md-template",
-        destination: "/learn/personal-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/about-me-md",
-        destination: "/learn/personal-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/tab-autocomplete",
-        destination: "/learn/personal-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/team-context-file",
-        destination: "/learn/personal-context-file",
-        permanent: true,
-      },
-      {
-        source: "/learn/team-claude-md",
-        destination: "/learn/personal-context-file",
+        source: "/examples",
+        destination: "/home",
         permanent: true,
       },
     ];

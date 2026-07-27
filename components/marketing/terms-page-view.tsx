@@ -163,7 +163,6 @@ const sections: TermsSection[] = [
     title: "15. Contact",
     paragraphs: [
       "If you have questions about these Terms, contact:",
-      "Connor Hepburn / Creed",
     ],
     note: contactEmail,
   },
@@ -218,18 +217,18 @@ export function TermsPageView() {
               </div>
 
               {section.bullets ? (
-                <ul className="creed-bullets mt-5 space-y-3 text-[15px] leading-8 text-[var(--creed-text-secondary)] [--creed-bullet:#2563EB] md:text-[16px]">
+                <ol className="mt-5 list-decimal space-y-3 pl-5 text-[15px] leading-8 text-[var(--creed-text-secondary)] marker:font-medium marker:text-[var(--creed-accent)] md:text-[16px]">
                   {section.bullets.map((item) => (
-                    <li key={item}>{item}</li>
+                    <li key={item} className="pl-1 first-letter:uppercase">{item}</li>
                   ))}
-                </ul>
+                </ol>
               ) : null}
 
               {section.note ? (
                 section.id === "contact" ? (
                   <a
                     href={`mailto:${section.note}`}
-                    className="mt-5 inline-block font-medium text-[15px] leading-8 text-[var(--creed-text-primary)] transition-colors hover:text-[var(--creed-text-secondary)] md:text-[16px]"
+                    className="mt-5 inline-block font-medium text-[15px] leading-8 text-[var(--creed-accent)] transition-colors hover:text-[var(--creed-accent-hover)] md:text-[16px]"
                   >
                     {section.note}
                   </a>

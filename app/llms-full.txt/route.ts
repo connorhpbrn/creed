@@ -7,11 +7,10 @@ import {
   pricingFaqItems,
   type FaqItem,
 } from "@/lib/marketing/faq";
-import { learnArticles } from "@/lib/marketing/learn";
 
 // Serves /llms-full.txt - the full plain-text content of Creed's most citable
 // pages in one document. Generated from the same content modules the site
-// renders from (FAQ arrays, pricing facts, the learn registry) so it can never
+// renders from (FAQ arrays and pricing facts) so it can never
 // drift. The audience that actually fetches this is coding agents (Claude Code,
 // Cursor); keep it accurate rather than elaborate.
 export const dynamic = "force-static";
@@ -30,10 +29,6 @@ export function GET() {
     const seats = p.seats ? ` ${p.seats}` : "";
     return `- ${p.name}: ${p.price} ${p.cadence}. ${p.summary} ${p.usage}${seats}`;
   }).join("\n");
-
-  const guides = learnArticles
-    .map((a) => `- ${a.title} (${base}/learn/${a.slug}): ${a.description}`)
-    .join("\n");
 
   const body = `# Creed
 
@@ -192,9 +187,6 @@ ${faqBlock("About personal context files", contextFileFaqItems)}
 
 ${faqBlock("Common questions", pricingFaqItems)}
 
-## Guides
-
-${guides}
 `;
 
   return new Response(body, {

@@ -1,6 +1,6 @@
 "use client";
 
-// Shared CLI / one-liner command block used on /bench and /learn. Same
+// Shared CLI / one-liner command block used on /bench. Same
 // creed-code-block chrome as the editor, with a far-right copy control.
 
 import { useState, type ReactNode } from "react";

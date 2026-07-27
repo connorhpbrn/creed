@@ -6,12 +6,13 @@ import {
   useState,
   type CSSProperties,
   type Dispatch,
+  type ReactNode,
   type SetStateAction,
 } from "react";
 import { SceneryImage } from "@/components/marketing/scenery-image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronLeft, Star } from "lucide-react";
+import { ChevronDown, ChevronLeft, LoaderCircle, Star } from "lucide-react";
 import { MenuIcon } from "@/components/ui/menu";
 import { CreedWordmark } from "@/components/creed/brand";
 import { SystemStatusPill } from "@/components/marketing/system-status";
@@ -23,7 +24,6 @@ import { CREED_TAGLINE } from "@/lib/marketing/brand";
 import { cn } from "@/lib/utils";
 
 import {
-  CONTACT_MAILTO,
   DISCORD_URL,
   GITHUB_URL,
   HPBRN_URL,
@@ -41,7 +41,6 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { label: "Pricing", href: "/pricing" },
       { label: "Company", href: "/company" },
-      { label: "Examples", href: "/examples" },
       { label: "Roadmap", href: "/roadmap" },
     ],
   },
@@ -49,7 +48,6 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Resources",
     items: [
       { label: "Docs", href: "/docs" },
-      { label: "Learn", href: "/learn" },
       { label: "Bench", href: "/bench" },
       { label: "Changelog", href: "/changelog" },
     ],
@@ -60,7 +58,6 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { label: "Privacy", href: "/privacy" },
       { label: "Terms", href: "/terms" },
       { label: "Stack", href: "/stack" },
-      { label: "Contact", href: CONTACT_MAILTO },
     ],
   },
 ];
@@ -157,7 +154,7 @@ export function MarketingHeader({
   }, [mobileMenuOpen]);
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-0 z-50 px-3 pt-3 md:px-4 md:pt-4">
+    <div className="pointer-events-none fixed inset-x-0 top-0 z-50 isolate px-3 pt-3 md:px-4 md:pt-4">
       <div
         className={cn(
           "pointer-events-auto relative mx-auto w-full transition-[max-width] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
@@ -363,6 +360,19 @@ function GitHubMark({ className }: { className?: string }) {
   );
 }
 
+function DiscordMark({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M20.317 4.369a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.891.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.331c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+    </svg>
+  );
+}
+
 function formatStarCount(stars: number | null): string {
   if (stars === null) return "";
   if (stars >= 1000) {
@@ -560,6 +570,17 @@ function HeaderAuthActions({
   setMobileMenuOpen: Dispatch<SetStateAction<boolean>>;
 }) {
   const enterArrow = useAnimatedIconControls(80, undefined, 420);
+  const [continuePending, setContinuePending] = useState(false);
+  const continuePendingTimerRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (continuePendingTimerRef.current !== null) {
+        window.clearTimeout(continuePendingTimerRef.current);
+      }
+    },
+    [],
+  );
 
   // Mobile-menu trigger is shared across all states so the navigation links
   // remain reachable. No hover effect (mobile): the icon morphs hamburger <->
@@ -596,6 +617,23 @@ function HeaderAuthActions({
       <div className="flex items-center gap-2">
         <Link
           href="/file"
+          aria-busy={continuePending}
+          onClick={(event) => {
+            if (
+              event.button === 0 &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.shiftKey &&
+              !event.altKey
+            ) {
+              if (continuePendingTimerRef.current !== null) {
+                window.clearTimeout(continuePendingTimerRef.current);
+              }
+              continuePendingTimerRef.current = window.setTimeout(() => {
+                setContinuePending(true);
+              }, 180);
+            }
+          }}
           className={cn(
             "hidden h-9 items-center gap-1.5 rounded-md px-3.5 text-[14px] font-medium transition-colors duration-200 md:inline-flex",
             scrolled
@@ -606,11 +644,15 @@ function HeaderAuthActions({
           onMouseLeave={enterArrow.settle}
         >
           Continue
-          <ArrowRightIcon
-            ref={enterArrow.iconRef}
-            className="h-3.5 w-3.5"
-            size={14}
-          />
+          {continuePending ? (
+            <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <ArrowRightIcon
+              ref={enterArrow.iconRef}
+              className="h-3.5 w-3.5"
+              size={14}
+            />
+          )}
         </Link>
         <GitHubStarButton scrolled={scrolled} className="hidden md:inline-flex" />
         {mobileLinksTrigger}
@@ -765,27 +807,21 @@ export function MarketingFooter() {
             hpbrn
           </Link>
         </div>
-        {/* Social icons: left-to-right order is hpbrn, Discord, GitHub,
-            Instagram, X. Icons are local SVG masks so colour stays inherited. */}
+        {/* Social icons: Discord and GitHub use the same full inline marks as
+            the product UI; Instagram and X remain local SVG masks. */}
         <div className="flex items-center gap-4 text-[var(--creed-text-tertiary)]">
-          <SocialIconLink
-            href={HPBRN_URL}
-            label="hpbrn"
-            src="/assets/icons/hpbrn.svg"
-            className="h-[19px] w-[19px]"
-          />
-          <SocialIconLink
+          <InlineSocialIconLink
             href={DISCORD_URL ?? "https://discord.com"}
             label="Discord"
-            src="/assets/icons/discord.svg"
-            className="h-[20px] w-[20px]"
-          />
-          <SocialIconLink
+          >
+            <DiscordMark className="h-5 w-5" />
+          </InlineSocialIconLink>
+          <InlineSocialIconLink
             href={GITHUB_URL}
             label="GitHub"
-            src="/assets/icons/github.svg"
-            className="h-[19px] w-[19px]"
-          />
+          >
+            <GitHubMark className="h-[17px] w-[17px]" />
+          </InlineSocialIconLink>
           <SocialIconLink
             href={INSTAGRAM_URL}
             label="Instagram"
@@ -801,6 +837,32 @@ export function MarketingFooter() {
         </div>
       </div>
     </footer>
+  );
+}
+
+function InlineSocialIconLink({
+  href,
+  label,
+  children,
+}: {
+  href: string | null;
+  label: string;
+  children: ReactNode;
+}) {
+  if (!href) {
+    return null;
+  }
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={label}
+      className="inline-flex h-5 w-5 items-center justify-center transition-colors hover:text-[var(--creed-accent)]"
+    >
+      {children}
+    </a>
   );
 }
 
@@ -825,7 +887,7 @@ function SocialIconLink({
       target="_blank"
       rel="noreferrer"
       aria-label={label}
-      className="inline-flex items-center justify-center transition-colors hover:text-[var(--creed-accent)]"
+      className="inline-flex h-5 w-5 items-center justify-center transition-colors hover:text-[var(--creed-accent)]"
     >
       <span
         aria-hidden="true"

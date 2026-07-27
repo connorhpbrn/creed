@@ -10,6 +10,8 @@ const SCENERY_WIDTHS: Record<string, number> = {
   "light-finale.png": 1642,
   "dark-hero.png": 1672,
   "light-hero.png": 1672,
+  "dark-nope.png": 1642,
+  "light-nope.png": 1642,
 };
 
 // A landing backdrop image (hero / auth panel) that self-heals while art is

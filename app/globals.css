@@ -82,6 +82,8 @@
   --plate-create: #ff6fc1;
   --plate-connect: #84d678;
   --plate-improve: #7fbcff;
+  --plate-yellow: #f5c84c;
+  --plate-red: #f56b6b;
 
   /* Numeric stat / status colours. Brightened so `+57 -304`-style stats stay
      legible everywhere; the dark-mode block below picks even brighter shades. */
@@ -174,6 +176,8 @@
   --plate-create: #d62b8f;
   --plate-connect: #4bc03b;
   --plate-improve: #3a86e8;
+  --plate-yellow: #e0a400;
+  --plate-red: #e54848;
 
   --creed-success: #4ade80;
   --creed-danger: #f87171;
@@ -579,8 +583,8 @@
 }
 
 /* Syntax highlighting (lowlight / highlight.js classes). Same hues as the
-   GitHub-style palette, pushed more saturated so CLI snippets on /bench and
-   /learn read clearly on both light and dark canvases. */
+   GitHub-style palette, pushed more saturated so CLI snippets on /bench read
+   clearly on both light and dark canvases. */
 .creed-code-block .hljs-comment,
 .creed-code-block .hljs-quote {
   color: #6a737d;

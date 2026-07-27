@@ -189,7 +189,7 @@ function BillingToggle({
   ];
 
   return (
-    <div className="relative inline-flex items-center rounded-sm bg-[var(--creed-surface)] p-1">
+    <div className="relative isolate inline-flex items-center rounded-sm bg-[var(--creed-surface)] p-1">
       {options.map((option) => {
         const active = cycle === option.value;
         return (

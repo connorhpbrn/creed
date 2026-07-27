@@ -177,7 +177,7 @@ const WHY_USE_IT_STATS = [
     decimals: 1,
     label: "people use standalone AI tools",
     body: "Each tool starts cold unless your context travels with you.",
-    accent: "#2563EB",
+    accent: "var(--plate-proposal)",
   },
   {
     value: 420_000_000,
@@ -187,7 +187,7 @@ const WHY_USE_IT_STATS = [
     decimals: 0,
     label: "estimated multi-tool AI users",
     body: "A simple 35 percent estimate across monthly AI users.",
-    accent: "#F97316",
+    accent: "var(--plate-direct)",
   },
   {
     value: 2_100_000_000_000,
@@ -197,7 +197,7 @@ const WHY_USE_IT_STATS = [
     decimals: 1,
     label: "context tokens left behind",
     body: "Multi-tool users leaving 5,000 useful context tokens behind.",
-    accent: "#EC4899",
+    accent: "var(--plate-create)",
   },
 ] as const;
 
@@ -732,7 +732,7 @@ function AiFeaturesSection() {
 
       <div className="mx-auto mt-14 grid max-w-6xl items-stretch gap-5 lg:grid-cols-3">
         <PlateCard
-          plateColor="#2563EB"
+          plateColor="var(--plate-proposal)"
           plateClassName="min-h-[272px]"
           title="Analysis"
           titleIcon={<GaugeIcon size={21} />}
@@ -742,7 +742,7 @@ function AiFeaturesSection() {
           <ScoreDemo />
         </PlateCard>
         <PlateCard
-          plateColor="#EC4899"
+          plateColor="var(--plate-create)"
           title="Panel"
           titleIcon={<CommandIcon size={21} />}
           body="Search, ask, and let Creed draft reversible edits without leaving the file."
@@ -751,7 +751,7 @@ function AiFeaturesSection() {
           <PanelFeatureDemo />
         </PlateCard>
         <PlateCard
-          plateColor="#22C55E"
+          plateColor="var(--plate-connect)"
           title="Tab"
           titleIcon={<TextCursorInputIcon size={21} />}
           body="Press Tab and it finishes the thought in your voice, drawn from your whole file."
@@ -775,9 +775,9 @@ function HowItWorksSection() {
 
       <div className="mx-auto mt-14 grid max-w-6xl items-start gap-5 lg:grid-cols-3">
         <PlateCard
-          plateColor="#FBBF24"
+          plateColor="var(--plate-yellow, #FBBF24)"
           number="1"
-          numberColor="#FBBF24"
+          numberColor="var(--plate-yellow, #FBBF24)"
           title="Describe yourself"
           body="Answer a few quick questions and Creed drafts your starter profile."
           square
@@ -785,9 +785,9 @@ function HowItWorksSection() {
           <CreateDemo />
         </PlateCard>
         <PlateCard
-          plateColor="#F97316"
+          plateColor="var(--plate-direct)"
           number="2"
-          numberColor="#F97316"
+          numberColor="var(--plate-direct)"
           title="Extract your context"
           body="Pull the context you've already built across your tools into one profile."
           square
@@ -795,9 +795,9 @@ function HowItWorksSection() {
           <ConnectDemo />
         </PlateCard>
         <PlateCard
-          plateColor="#EF4444"
+          plateColor="var(--plate-red, #EF4444)"
           number="3"
-          numberColor="#EF4444"
+          numberColor="var(--plate-red, #EF4444)"
           title="Monitor usage"
           body="See where your AI allowance goes across Analysis, Tab, and Panel."
           square

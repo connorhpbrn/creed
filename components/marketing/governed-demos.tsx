@@ -98,8 +98,8 @@ const SEED: Array<{ proposal: Proposal; base: string }> = [
   },
 ];
 
-// Demo-only proposal diff: same chrome as InlineProposalDiff. Desktop shows
-// the proposal-state label; mobile retains only its dot separator.
+// Demo-only proposal diff: same chrome as InlineProposalDiff. Desktop names
+// the proposing agent; mobile keeps the header compact with only the icon.
 function DemoProposalDiff({
   proposal,
   existingContent,
@@ -126,7 +126,9 @@ function DemoProposalDiff({
             )}
           />
           <AgentIconStack agents={[proposal.agentName]} variant="inline" itemClassName="h-5 w-5" maxVisible={1} />
-          <span className="hidden text-[var(--creed-text-tertiary)] sm:inline">proposed</span>
+          <span className="hidden text-[var(--creed-text-primary)] sm:inline">
+            {proposal.agentName}
+          </span>
           <span className="text-[var(--creed-text-tertiary)]">&middot;</span>
           <span className="inline-flex items-center gap-1">
             <DiffBadge tone="added" count={stats.added} size="md" />

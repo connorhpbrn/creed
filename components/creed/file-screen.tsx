@@ -116,6 +116,12 @@ import {
 } from "@/components/creed/inline-proposal-diff";
 import { ReviewPill } from "@/components/creed/review-pill";
 import {
+  FileActivityRailFrame,
+  FileStickyHeader,
+  FileStickyHeaderRow,
+  FileStickyReviewRow,
+} from "@/components/creed/file-presentation";
+import {
   useCreedShellFileActions,
   useCreedShellActiveSection,
 } from "@/components/creed/shell";
@@ -2279,11 +2285,8 @@ export function FileScreen() {
             className="h-full overflow-y-auto overscroll-contain creed-scrollbar"
           >
             <div className="mx-auto max-w-[920px] px-4 py-6 pb-28 md:px-12 md:py-10 md:pb-10 xl:px-16">
-              <div
-                data-file-sticky-header
-                className="sticky top-0 z-20 mb-8 -mx-4 bg-[color:var(--creed-surface)]/95 px-4 pb-5 pt-2 backdrop-blur-sm md:-mx-12 md:mb-12 md:px-12 md:pb-7 xl:-mx-16 xl:px-16"
-              >
-                <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+              <FileStickyHeader>
+                <FileStickyHeaderRow>
                   <div>
                     <CreedSwitcher />
                     <SaveStatus
@@ -2697,7 +2700,7 @@ export function FileScreen() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                </div>
+                </FileStickyHeaderRow>
 
                 {/* Review pill lives inside the sticky header block so both
                     pin to the top of the scroll viewport together. Visually
@@ -2706,7 +2709,7 @@ export function FileScreen() {
                     means the pill always rides directly under the header
                     while the user scrolls through the file. */}
                 {normalizedPendingProposals.length > 0 ? (
-                  <div className="mt-5 flex justify-start">
+                  <FileStickyReviewRow>
                     <ReviewPill
                       proposals={normalizedPendingProposals.map((proposal) => {
                         const target = state.sections.find(
@@ -2774,9 +2777,9 @@ export function FileScreen() {
                         });
                       }}
                     />
-                  </div>
+                  </FileStickyReviewRow>
                 ) : null}
-              </div>
+              </FileStickyHeader>
 
               {fileViewMode === "nexus" ? (
                 <NexusView
@@ -4291,25 +4294,7 @@ function ActivityRail({
   );
 
   return (
-    <motion.aside
-      initial={false}
-      animate={{
-        width: open ? 356 : 0,
-        opacity: open ? 1 : 0,
-        x: open ? 0 : 18,
-      }}
-      transition={{
-        duration: 0.34,
-        ease: [0.22, 1, 0.36, 1],
-      }}
-      className={cn(
-        "absolute inset-y-0 right-0 z-30 h-full overflow-hidden border-l border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[-18px_0_50px_rgba(28,28,26,0.12)] lg:static lg:h-full lg:shrink-0 lg:shadow-none",
-        open ? "pointer-events-auto" : "pointer-events-none",
-      )}
-      style={{
-        maxWidth: "min(82vw, 356px)",
-      }}
-    >
+    <FileActivityRailFrame open={open}>
       <div className="flex h-full w-full flex-col p-5 lg:w-[356px]">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -4412,7 +4397,7 @@ function ActivityRail({
           )}
         </ScrollArea>
       </div>
-    </motion.aside>
+    </FileActivityRailFrame>
   );
 }
 

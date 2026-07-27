@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
 import { getSiteUrl } from "@/lib/supabase/env";
-import { learnArticles } from "@/lib/marketing/learn";
 
 // Only marketing routes go in the sitemap - anything behind the
 // entitlement gate (/file, /onboarding, /connections, /settings) would
@@ -12,10 +11,8 @@ import { learnArticles } from "@/lib/marketing/learn";
 // both points crawlers at a redirect and splits ranking signals.
 const PUBLIC_PATHS = [
   { path: "/home", changeFrequency: "weekly" as const, priority: 1.0 },
-  { path: "/examples", changeFrequency: "monthly" as const, priority: 0.8 },
   { path: "/pricing", changeFrequency: "monthly" as const, priority: 0.9 },
   { path: "/company", changeFrequency: "monthly" as const, priority: 0.8 },
-  { path: "/learn", changeFrequency: "weekly" as const, priority: 0.8 },
   { path: "/roadmap", changeFrequency: "weekly" as const, priority: 0.6 },
   { path: "/changelog", changeFrequency: "weekly" as const, priority: 0.5 },
   { path: "/docs", changeFrequency: "monthly" as const, priority: 0.7 },
@@ -35,14 +32,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority,
   }));
 
-  // Every /learn guide, so answer engines and search crawlers discover the
-  // full content library, not just the index.
-  const learnEntries = learnArticles.map((article) => ({
-    url: `${base}/learn/${article.slug}`,
-    lastModified: new Date(article.dateModified),
-    changeFrequency: "monthly" as const,
-    priority: 0.7,
-  }));
-
-  return [...staticEntries, ...learnEntries];
+  return staticEntries;
 }

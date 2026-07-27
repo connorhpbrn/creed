@@ -63,7 +63,7 @@ function RoadmapColumnView({ column }: { column: RoadmapColumn }) {
     <section className="flex flex-col">
       <div className="mb-4 flex items-center gap-2.5">
         <RoadmapStatusPill id={column.id} label={column.label} />
-        <span className="text-[13px] tabular-nums text-[var(--creed-text-tertiary)]">
+        <span className="text-[13px] tabular-nums text-[var(--creed-text-primary)]">
           {column.tasks.length}
         </span>
       </div>

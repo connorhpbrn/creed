@@ -2,7 +2,7 @@
 
 // Caps how many sidebar groups can be open at once (default 3) so a long
 // "On this page" nav stays compact. Opening one past the limit closes the group
-// that was opened earliest. Shared by the /docs and /examples sidebars.
+// that was opened earliest. Used by the /docs sidebar.
 
 import { useCallback, useState } from "react";
 

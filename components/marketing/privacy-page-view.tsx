@@ -212,11 +212,11 @@ export function PrivacyPageView() {
               </div>
 
               {section.bullets ? (
-                <ul className="creed-bullets mt-5 space-y-3 text-[15px] leading-8 text-[var(--creed-text-secondary)] [--creed-bullet:#2563EB] md:text-[16px]">
+                <ol className="mt-5 list-decimal space-y-3 pl-5 text-[15px] leading-8 text-[var(--creed-text-secondary)] marker:font-medium marker:text-[var(--creed-accent)] md:text-[16px]">
                   {section.bullets.map((item) => (
-                    <li key={item}>{item}</li>
+                    <li key={item} className="pl-1 first-letter:uppercase">{item}</li>
                   ))}
-                </ul>
+                </ol>
               ) : null}
 
               {section.note ? (
@@ -229,7 +229,7 @@ export function PrivacyPageView() {
                 <div className="mt-6 flex flex-col gap-4 text-[15px] leading-8 text-[var(--creed-text-secondary)] md:flex-row md:items-center md:justify-between">
                   <a
                     href={`mailto:${contactEmail}`}
-                    className="font-medium text-[var(--creed-text-primary)] transition-colors hover:text-[var(--creed-text-secondary)]"
+                    className="font-medium text-[var(--creed-accent)] transition-colors hover:text-[var(--creed-accent-hover)]"
                   >
                     {contactEmail}
                   </a>
@@ -255,7 +255,7 @@ function PrivacyExternalLink({ href, label }: { href: string; label: string }) {
       rel="noreferrer"
       onMouseEnter={() => arrowRef.current?.startAnimation()}
       onMouseLeave={() => arrowRef.current?.stopAnimation()}
-      className="inline-flex items-center gap-2 transition-colors hover:text-[var(--creed-text-primary)]"
+      className="inline-flex items-center gap-2 text-[var(--creed-accent)] transition-colors hover:text-[var(--creed-accent-hover)]"
     >
       {label}
       <ArrowUpRightIcon ref={arrowRef} size={16} className="inline-flex h-4 w-4 items-center justify-center" />

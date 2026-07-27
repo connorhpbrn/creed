@@ -1,7 +1,6 @@
 import { getSiteUrl } from "@/lib/supabase/env";
 import { CREED_DESCRIPTION, CREED_TAGLINE } from "@/lib/marketing/brand";
 import { PRICING_ONE_LINER } from "@/lib/marketing/pricing";
-import { learnArticles } from "@/lib/marketing/learn";
 
 // Serves /llms.txt - the emerging convention that gives AI crawlers a clean,
 // plain-text map of the site's most citable pages and a one-paragraph summary
@@ -13,10 +12,6 @@ export const dynamic = "force-static";
 export function GET() {
   const base = getSiteUrl().replace(/\/$/, "");
 
-  const guides = learnArticles
-    .map((a) => `- [${a.title}](${base}/learn/${a.slug}): ${a.description}`)
-    .join("\n");
-
   const body = `# Creed
 
 > ${CREED_TAGLINE} ${CREED_DESCRIPTION.slice(CREED_TAGLINE.length).trim()}
@@ -25,8 +20,6 @@ Full plain-text content: ${base}/llms-full.txt
 
 ## About
 
-- [Personal context file](${base}/learn/personal-context-file): What goes in the file, how agents keep it current, and how it differs from chatbot memory.
-- [Examples](${base}/examples): Concrete moments where one shared file changes the answer, across everyday life, health, boundaries, building, writing, research, and ownership.
 - [Home](${base}/home): What Creed is and how it works.
 - [Pricing](${base}/pricing): Plans and access.
 - [Docs](${base}/docs): Setting up Creed, connecting agents, and keeping context useful over time.
@@ -44,9 +37,6 @@ Creed works for one person or a whole team. The Company plan adds one shared Com
 
 ${PRICING_ONE_LINER}
 
-## Guides
-
-${guides}
 `;
 
   return new Response(body, {

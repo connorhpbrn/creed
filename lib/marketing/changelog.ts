@@ -12,7 +12,7 @@ export type ChangelogEntry = {
 
 export const changelog: ChangelogEntry[] = [
   {
-    date: "2026-07-26",
+    date: "2026-07-27",
     title: "Creed Bench",
     body: "A public leaderboard that measures how well frontier models use Creed through its real MCP tools. Pass@1 is plotted against average cost per task, with the full task suite and methodology on /bench.",
     highlights: [
@@ -74,7 +74,7 @@ export const changelog: ChangelogEntry[] = [
   {
     date: "2026-06-24",
     title: "Interactive landing and examples",
-    body: "The landing page was rebuilt around interactive demos of how Creed works, with a new examples page showing concrete moments where one shared file changes the answer.",
+    body: "The landing page was rebuilt around interactive demos showing how Creed works and what changes when every agent reads the same context.",
   },
   {
     date: "2026-06-22",

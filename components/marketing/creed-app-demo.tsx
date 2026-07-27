@@ -25,6 +25,14 @@ import {
 } from "lucide-react";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
 import {
+  FileActivityRailFrame,
+  FileSectionNavButton,
+  FileSectionHeading,
+  FileStickyHeader,
+  FileStickyHeaderRow,
+  FileStickyReviewRow,
+} from "@/components/creed/file-presentation";
+import {
   ACTIVITY_FILTERS,
   ACTIVITY_STATUS_LABELS,
   ActivityFilterPill,
@@ -177,27 +185,14 @@ function NavRail({
           const isActive = s.id === activeSectionId;
           const pending = pendingCountBySection.get(s.id) ?? 0;
           return (
-            <button
+            <FileSectionNavButton
               key={s.id}
-              type="button"
+              name={s.name}
+              accent={accentColorMap[s.accent]}
+              active={isActive}
+              pendingCount={pending}
               onClick={() => onSelect(s.id)}
-              aria-label={s.name}
-              className={cn(
-                "mx-auto flex h-8 w-8 items-center justify-center rounded-sm text-left text-[14px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)] lg:mx-0 lg:h-auto lg:w-full lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
-                isActive && "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)] hover:bg-[var(--creed-surface-raised)]"
-              )}
-            >
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-[3px] lg:h-1.5 lg:w-1.5 lg:rounded-[2px]"
-                style={{ backgroundColor: accentColorMap[s.accent] }}
-              />
-              <span className="hidden truncate lg:inline">{s.name}</span>
-              {pending > 0 ? (
-                <span className="ml-auto hidden h-[18px] min-w-[18px] items-center justify-center rounded-[5px] bg-[var(--creed-accent)] px-1.5 text-[10px] font-medium leading-none tabular-nums text-white lg:inline-flex">
-                  {pending}
-                </span>
-              ) : null}
-            </button>
+            />
           );
         })}
         <button
@@ -290,78 +285,92 @@ function SectionCard({
   onReject: (id: string) => void;
 }) {
   const accent = accentColorMap[section.accent];
+  const [collapsed, setCollapsed] = useState(false);
   return (
     <section className="group relative">
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3">
-            <span className="inline-block h-9 w-[3px] rounded-full" style={{ backgroundColor: accent }} />
-            <div className="flex min-w-0 flex-wrap items-center gap-3">
-              <span className="text-[15px] font-medium leading-none md:text-[16px]" style={{ color: accent }}>
-                {section.name}
-              </span>
-              <SectionQualityPopover
-                quality={quality}
-                color={accent}
-                loading={qualityLoading}
-                sectionName={section.name}
-                actionAvailable
-                onAction={onRefreshQuality}
-              />
-              {globalLocked ? (
-                <Lock className="h-3.5 w-3.5 text-[var(--creed-text-tertiary)]" />
-              ) : null}
-            </div>
-          </div>
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="text-[var(--creed-text-secondary)] transition-colors duration-150 hover:text-[var(--creed-text-primary)] data-[state=open]:text-[var(--creed-text-primary)]"
-            >
-              <Ellipsis className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="border-[var(--creed-border)] bg-[var(--creed-surface)]">
-            <AnimatedMenuIconItem icon={SquarePenIcon} className="text-sm" onSelect={() => {}}>Rename</AnimatedMenuIconItem>
-            <AnimatedMenuIconItem icon={CopyIcon} className="text-sm" onSelect={() => {}}>Duplicate</AnimatedMenuIconItem>
-            <AnimatedMenuIconItem icon={ArchiveIcon} className="text-sm" onSelect={() => {}}>Archive</AnimatedMenuIconItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <div className="pointer-events-none select-none">
-        <RichTextEditor
-          sectionId={section.id}
-          content={section.content}
-          readOnly
-          accentColor={accent}
-          sectionTagTargets={sectionTagTargets}
-          onChange={ignoreEditorChange}
-        />
-      </div>
+      <FileSectionHeading
+        name={section.name}
+        accent={accent}
+        quality={
+          <SectionQualityPopover
+            quality={quality}
+            color={accent}
+            loading={qualityLoading}
+            sectionName={section.name}
+            actionAvailable
+            onAction={onRefreshQuality}
+          />
+        }
+        supplemental={
+          globalLocked ? (
+            <Lock className="h-3.5 w-3.5 text-[var(--creed-text-tertiary)]" />
+          ) : null
+        }
+        collapsible
+        collapsed={collapsed}
+        onToggleCollapsed={() => setCollapsed((value) => !value)}
+        controls={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-[var(--creed-text-secondary)] transition-colors duration-150 hover:text-[var(--creed-text-primary)] data-[state=open]:text-[var(--creed-text-primary)]"
+              >
+                <Ellipsis className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="border-[var(--creed-border)] bg-[var(--creed-surface)]">
+              <AnimatedMenuIconItem icon={SquarePenIcon} className="text-sm" onSelect={() => {}}>Rename</AnimatedMenuIconItem>
+              <AnimatedMenuIconItem icon={CopyIcon} className="text-sm" onSelect={() => {}}>Duplicate</AnimatedMenuIconItem>
+              <AnimatedMenuIconItem icon={ArchiveIcon} className="text-sm" onSelect={() => {}}>Archive</AnimatedMenuIconItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
+      />
 
       <AnimatePresence initial={false}>
-        {pendingProposals.map((p) => (
+        {!collapsed ? (
           <motion.div
-            key={p.id}
-            initial={{ opacity: 0, height: 0, marginTop: 0 }}
-            animate={{ opacity: 1, height: "auto", marginTop: 16 }}
-            exit={{ opacity: 0, height: 0, marginTop: 0 }}
-            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <InlineProposalDiff
-              proposal={p}
-              existingContent={diffBaseBySection[p.sectionId] ?? ""}
-              agentName={p.agentName}
-              onAccept={() => onAccept(p.id)}
-              onReject={() => onReject(p.id)}
-            />
+            <div className="pointer-events-none select-none">
+              <RichTextEditor
+                sectionId={section.id}
+                content={section.content}
+                readOnly
+                accentColor={accent}
+                sectionTagTargets={sectionTagTargets}
+                onChange={ignoreEditorChange}
+              />
+            </div>
+
+            <AnimatePresence initial={false}>
+              {pendingProposals.map((p) => (
+                <motion.div
+                  key={p.id}
+                  initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                  animate={{ opacity: 1, height: "auto", marginTop: 16 }}
+                  exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                  transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                  className="overflow-hidden"
+                >
+                  <InlineProposalDiff
+                    proposal={p}
+                    existingContent={diffBaseBySection[p.sectionId] ?? ""}
+                    agentName={p.agentName}
+                    onAccept={() => onAccept(p.id)}
+                    onReject={() => onReject(p.id)}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </motion.div>
-        ))}
+        ) : null}
       </AnimatePresence>
     </section>
   );
@@ -444,14 +453,7 @@ function ActivityDrawer({ activity, onClose }: { activity: DemoActivity[]; onClo
   const visibleActivity = filter === "all" ? activity : activity.filter((entry) => entry.status === filter);
 
   return (
-    <motion.aside
-      initial={{ width: 0, opacity: 0 }}
-      animate={{ width: 356, opacity: 1 }}
-      exit={{ width: 0, opacity: 0 }}
-      transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-      style={{ maxWidth: "min(82vw, 356px)" }}
-      className="absolute inset-y-0 right-0 z-[70] h-full overflow-hidden border-l border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[-18px_0_50px_rgba(28,28,26,0.12)] lg:static lg:z-auto lg:shadow-none"
-    >
+    <FileActivityRailFrame overlay>
       <div className="flex h-full w-full flex-col p-5 lg:w-[356px]">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -488,7 +490,7 @@ function ActivityDrawer({ activity, onClose }: { activity: DemoActivity[]; onClo
           ) : null}
         </div>
       </div>
-    </motion.aside>
+    </FileActivityRailFrame>
   );
 }
 
@@ -682,7 +684,7 @@ export function CreedAppDemo() {
   return (
     <div className="relative w-full min-w-0 max-w-full touch-pan-y overflow-x-hidden overscroll-x-none">
       <div className="relative min-w-0 max-w-full overflow-x-hidden overscroll-x-none">
-        <div className="mx-auto min-w-0 max-w-full touch-pan-y overflow-hidden overscroll-x-none rounded-lg border border-black/5 bg-[var(--creed-surface)] shadow-[0_18px_50px_-30px_rgba(0,0,0,0.32)] dark:border-white/10">
+        <div className="mx-auto min-w-0 max-w-full touch-pan-y overflow-hidden overscroll-x-none rounded-lg bg-[var(--creed-surface)] shadow-[0_18px_50px_-30px_rgba(0,0,0,0.32)]">
           <BrowserChrome />
 
           <div className="relative flex h-[540px] sm:h-[580px] lg:h-[620px]">
@@ -700,12 +702,11 @@ export function CreedAppDemo() {
               className="creed-scrollbar relative min-w-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-x-none bg-[var(--creed-surface)] [overflow-anchor:none]"
             >
               {/* sticky header (mirrors file-screen) */}
-              <div
+              <FileStickyHeader
                 ref={stickyHeaderRef}
-                data-file-sticky-header
-                className="sticky top-0 z-[60] mb-7 bg-[color:var(--creed-surface)]/95 pb-4 pt-3 backdrop-blur-sm [overflow-anchor:none]"
+                compact
               >
-                <div className="mx-auto flex max-w-[700px] flex-col gap-4 px-4 md:flex-row md:items-start md:justify-between md:px-7">
+                <FileStickyHeaderRow compact>
                   <div>
                     <div className="whitespace-nowrap text-[18px] font-medium tracking-[-0.02em] text-[var(--creed-text-primary)] md:text-[20px]">{profile.name} / Creed</div>
                     <div className="mt-2 flex items-center gap-2 text-sm text-[var(--creed-text-secondary)]">
@@ -807,10 +808,10 @@ export function CreedAppDemo() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                </div>
+                </FileStickyHeaderRow>
 
                 {reviewProposals.length > 0 ? (
-                  <div className="mx-auto mt-5 flex max-w-[700px] justify-start px-2 sm:px-4 md:px-7">
+                  <FileStickyReviewRow compact>
                     <ReviewPill
                       proposals={reviewProposals}
                       onAcceptAll={() => proposals.forEach((p) => acceptProposal(p.id))}
@@ -819,9 +820,9 @@ export function CreedAppDemo() {
                       onRejectOne={rejectProposal}
                       onJumpToProposal={(p) => jumpToSection(p.sectionId)}
                     />
-                  </div>
+                  </FileStickyReviewRow>
                 ) : null}
-              </div>
+              </FileStickyHeader>
 
               <div className="mx-auto max-w-[700px] space-y-9 px-4 pb-10 md:px-7">
                 {sections.map((s) => (
