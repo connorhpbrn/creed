@@ -37,7 +37,7 @@ export const PERMISSION_OPTIONS: Array<{
     icon: EyeOffIcon,
     color: "#DC2626",
   },
-  { value: "read-only", label: "Read-only", icon: EyeIcon, color: "#F59E0B" },
+  { value: "read-only", label: "Read-only", icon: EyeIcon, color: "#EAB308" },
   {
     value: "propose",
     label: "Propose (needs approval)",
@@ -138,7 +138,7 @@ export function SectionPermissionControl({
   return (
     <div
       className={cn(
-        "inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-[var(--creed-border)] bg-[var(--creed-surface)] p-0.5 transition-opacity duration-150",
+        "inline-flex shrink-0 items-center rounded-sm bg-background p-1 transition-opacity duration-150 dark:bg-input/30",
         // No shared level (sections differ): grey the control to read as
         // "mixed / not applied", but it stays clickable to set one level.
         value === null && "opacity-45",

@@ -47,6 +47,7 @@ export function SelectMenu<T extends string>({
           disabled={disabled}
           className={cn(
             "inline-flex h-9 items-center justify-between gap-2 rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[13px] text-[var(--creed-text-primary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] aria-expanded:bg-[var(--creed-surface-raised)] disabled:pointer-events-none disabled:opacity-60",
+            active?.avatar && "pl-1.5",
             className,
           )}
         >
@@ -75,7 +76,11 @@ export function SelectMenu<T extends string>({
               event.preventDefault();
               onChange(option.value);
             }}
-            className="flex items-center justify-between gap-3 text-[13px]"
+            className={cn(
+              "flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-[13px]",
+              option.value === value &&
+                "bg-[var(--creed-surface-selected)] font-medium",
+            )}
           >
             <span className="flex min-w-0 items-center gap-2 text-[var(--creed-text-primary)]">
               {option.avatar}

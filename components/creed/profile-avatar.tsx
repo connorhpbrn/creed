@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { LoaderCircle } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -9,19 +9,39 @@ import { cn } from "@/lib/utils";
 
 export type ProfileAvatarKind = "person" | "company";
 
+export function SettingsProfileLayout({
+  avatar,
+  nameField,
+  emailField,
+}: {
+  avatar: ReactNode;
+  nameField: ReactNode;
+  emailField: ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-x-4 gap-y-4 md:gap-x-5 md:gap-y-5">
+      {avatar}
+      <div className="contents">
+        <div className="min-w-0">{nameField}</div>
+        <div className="col-span-2 min-w-0">{emailField}</div>
+      </div>
+    </div>
+  );
+}
+
 const SIZE_CLASS = {
   sm: "h-6 w-6 rounded-[8px] after:rounded-[8px]",
   md: "h-9 w-9 rounded-sm after:rounded-sm",
   lg: "h-40 w-40 rounded-[26px] after:rounded-[26px]",
   responsive:
-    "h-[calc(1.25rem+0.5rem+2.75rem)] w-[calc(1.25rem+0.5rem+2.75rem)] rounded-[18px] after:rounded-[18px] md:h-[clamp(7rem,28vw,10rem)] md:w-[clamp(7rem,28vw,10rem)] md:rounded-[26px] md:after:rounded-[26px]",
+    "h-[4.5rem] w-[4.5rem] rounded-[18px] after:rounded-[18px]",
 } as const;
 
 const IMAGE_RADIUS = {
   sm: "rounded-[8px]",
   md: "rounded-sm",
   lg: "rounded-[26px]",
-  responsive: "rounded-[18px] md:rounded-[26px]",
+  responsive: "rounded-[18px]",
 } as const;
 
 export function ProfileAvatar({
@@ -71,7 +91,7 @@ export function ProfileAvatar({
           className={cn(
             "bg-transparent font-medium text-current",
             size === "lg" || size === "responsive"
-              ? "text-[2.15rem] leading-none tracking-[-0.06em] md:text-[clamp(3.5rem,12vw,4.5rem)]"
+              ? "text-[2.15rem] leading-none tracking-[-0.06em] md:text-[2.5rem]"
               : "text-[13px]",
           )}
         >
@@ -103,14 +123,14 @@ export function EditableProfileAvatar({
   const uploadIconRef = useRef<UploadIconHandle | null>(null);
 
   return (
-    <div className="relative h-[calc(1.25rem+0.5rem+2.75rem)] w-[calc(1.25rem+0.5rem+2.75rem)] shrink-0 md:h-[clamp(7rem,28vw,10rem)] md:w-[clamp(7rem,28vw,10rem)]">
+    <div className="relative h-[4.5rem] w-[4.5rem] shrink-0">
       <ProfileAvatar
         kind={kind}
         name={name}
         initials={initials}
         avatarUrl={avatarUrl}
         size="responsive"
-        className="h-[calc(1.25rem+0.5rem+2.75rem)] w-[calc(1.25rem+0.5rem+2.75rem)] md:h-[clamp(7rem,28vw,10rem)] md:w-[clamp(7rem,28vw,10rem)]"
+        className="h-[4.5rem] w-[4.5rem]"
       />
       <button
         type="button"
@@ -122,7 +142,7 @@ export function EditableProfileAvatar({
         onFocus={() => uploadIconRef.current?.startAnimation()}
         onBlur={() => uploadIconRef.current?.stopAnimation()}
         className={cn(
-          "group absolute inset-0 flex items-center justify-center rounded-[18px] transition-colors duration-150 md:rounded-[26px]",
+          "group absolute inset-0 flex items-center justify-center rounded-[18px] transition-colors duration-150",
           disabled
             ? "cursor-not-allowed"
             : cn(

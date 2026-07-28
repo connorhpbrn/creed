@@ -26,7 +26,7 @@ import {
   SEAT_PRICE_USD,
   type SeatCadence,
 } from "@/lib/seat-config";
-import { cn } from "@/lib/utils";
+import { PurchasePresetButton } from "@/components/creed/purchase-preset-button";
 
 type BuySeatsDialogProps = {
   open: boolean;
@@ -116,32 +116,16 @@ export function BuySeatsDialog({
             {SEAT_PRESETS.map((preset) => {
               const active = customValue === null && quantity === preset;
               return (
-                <button
+                <PurchasePresetButton
                   key={preset}
-                  type="button"
+                  active={active}
                   onClick={() => {
                     setQuantity(preset);
                     setCustom("");
                   }}
-                  className={cn(
-                    "h-9 rounded-lg border bg-[var(--creed-surface)] text-sm font-medium outline-none transition-colors focus:outline-none focus-visible:outline-none",
-                    !active &&
-                      "border-[var(--creed-border)] text-[var(--creed-text-secondary)] hover:border-[var(--creed-border-strong)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
-                  )}
-                  style={
-                    active
-                      ? {
-                          borderColor: "var(--creed-text-primary)",
-                          color: "var(--creed-text-primary)",
-                          background:
-                            "linear-gradient(135deg, color-mix(in srgb, var(--creed-text-primary) 10%, transparent) 0%, color-mix(in srgb, var(--creed-text-primary) 15%, transparent) 100%)",
-                          boxShadow: "0 0 0 1px var(--creed-text-primary) inset",
-                        }
-                      : undefined
-                  }
                 >
                   {`+${preset}`}
-                </button>
+                </PurchasePresetButton>
               );
             })}
           </div>

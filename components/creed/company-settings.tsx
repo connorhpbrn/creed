@@ -48,6 +48,7 @@ import { RichTextEditor } from "@/components/creed/rich-text-editor";
 import {
   EditableProfileAvatar,
   ProfileAvatar,
+  SettingsProfileLayout,
 } from "@/components/creed/profile-avatar";
 import { AnimatedIconButton } from "@/components/creed/animated-icon-action";
 import { useAnimatedIconControls } from "@/components/creed/animated-icon-controls";
@@ -1012,17 +1013,19 @@ export function CompanySettings() {
   // the greyed-out read-only treatment across the rest of settings.
   blocks.push(
     <Section key="profile" title="Profile">
-      <div className="grid grid-cols-[calc(1.25rem+0.5rem+2.75rem)_minmax(0,1fr)] items-start gap-x-4 gap-y-4 md:flex md:gap-5">
-        <EditableProfileAvatar
-          kind="company"
-          name={company.creedName}
-          avatarUrl={company.avatarUrl}
-          disabled={!isManager}
-          uploading={avatarUploading}
-          onFile={(file) => void uploadCompanyAvatar(file)}
-        />
-        <div className="contents md:block md:min-w-0 md:flex-1 md:space-y-3">
-          <div className="min-w-0">
+      <SettingsProfileLayout
+        avatar={
+          <EditableProfileAvatar
+            kind="company"
+            name={company.creedName}
+            avatarUrl={company.avatarUrl}
+            disabled={!isManager}
+            uploading={avatarUploading}
+            onFile={(file) => void uploadCompanyAvatar(file)}
+          />
+        }
+        nameField={
+          <>
             <label className={FIELD_LABEL}>Company name</label>
             <Input
               value={nameDraft}
@@ -1034,8 +1037,10 @@ export function CompanySettings() {
                 !isManager && "cursor-not-allowed opacity-60",
               )}
             />
-          </div>
-          <div className="col-span-2 min-w-0 md:col-span-1">
+          </>
+        }
+        emailField={
+          <>
             <label className={FIELD_LABEL}>Company email</label>
             <Input
               type="email"
@@ -1049,9 +1054,9 @@ export function CompanySettings() {
                 !isManager && "cursor-not-allowed opacity-60",
               )}
             />
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
     </Section>,
   );
 
@@ -1310,13 +1315,10 @@ export function CompanySettings() {
   // ── Agent edit behaviour (each member sets their own agent's access) ─────────
   blocks.push(
     <Section key="agent-edits" title="Agent edit behaviour">
-      <div className="flex items-center justify-between gap-5 md:items-start">
+      <div className="flex items-center justify-between gap-5">
         <div>
           <div className="text-[15px] font-medium text-[var(--creed-text-primary)]">
             All sections
-          </div>
-          <div className="mt-2 hidden max-w-xl text-[14px] leading-7 text-[var(--creed-text-secondary)] md:block">
-            What your connected agents may do across this company Creed.
           </div>
         </div>
         <SectionPermissionControl
@@ -1338,7 +1340,7 @@ export function CompanySettings() {
             className="group -my-2 flex w-full items-center justify-between py-2 text-left"
           >
             <span className="text-[14px] font-medium text-[var(--creed-text-primary)]">
-              Per-section
+              Per-section permissions
             </span>
             <ChevronDown
               className={cn(
@@ -1973,7 +1975,7 @@ export function CompanySettings() {
             />
           </div>
           <Button
-            className="rounded-md"
+            className="rounded-md bg-[var(--creed-accent)] text-white hover:bg-[var(--creed-accent-hover)] hover:text-white"
             disabled={!transferTargetId}
             onClick={() => setTransferOpen(true)}
           >

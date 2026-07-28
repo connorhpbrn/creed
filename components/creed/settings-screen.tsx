@@ -5,9 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
-  type ComponentType,
   type ReactNode,
-  type Ref,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
@@ -16,19 +14,11 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Link2,
   LoaderCircle,
-  Plug,
-  Unplug,
+  Unlink2,
 } from "lucide-react";
 import { DownloadIcon } from "@/components/ui/download";
-import { EyeIcon } from "@/components/ui/eye";
-import { EyeOffIcon } from "@/components/ui/eye-off";
-import { PenToolIcon } from "@/components/ui/pen-tool";
-import { ShieldCheckIcon } from "@/components/ui/shield-check";
-import {
-  useAnimatedIconControls,
-  type AnimatedIconHandle,
-} from "@/components/creed/animated-icon-controls";
 import { useRouter } from "next/navigation";
 import {
   DropdownMenu,
@@ -51,7 +41,6 @@ import {
   consumeSettingsPanelIntent,
   SETTINGS_PANEL_INTENT_EVENT,
 } from "@/lib/panel/settings-intent";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   ChartContainer,
   ChartTooltip,
@@ -99,7 +88,14 @@ import {
 } from "@/lib/creed-data";
 import { cn } from "@/lib/utils";
 import { RichTextEditor } from "@/components/creed/rich-text-editor";
-import { EditableProfileAvatar } from "@/components/creed/profile-avatar";
+import {
+  EditableProfileAvatar,
+  SettingsProfileLayout,
+} from "@/components/creed/profile-avatar";
+import {
+  GLOBAL_PERMISSION_OPTIONS,
+  SectionPermissionControl,
+} from "@/components/creed/section-permission-control";
 
 const GITHUB_AUTHORIZED_APPS_URL = "https://github.com/settings/connections/applications";
 
@@ -843,17 +839,19 @@ function PersonalSettingsScreen() {
               Profile
             </h2>
             <div className="mt-4 rounded-[var(--radius-xl)] border border-[var(--creed-border)] bg-[var(--creed-surface)] p-5">
-              <div className="grid grid-cols-[calc(1.25rem+0.5rem+2.75rem)_minmax(0,1fr)] items-start gap-x-4 gap-y-4 md:flex md:gap-5">
-                <EditableProfileAvatar
-                  kind="person"
-                  name={state.user.name}
-                  initials={state.user.avatarInitials}
-                  avatarUrl={state.user.avatarUrl}
-                  uploading={avatarUploading}
-                  onFile={(file) => void uploadPersonalAvatar(file)}
-                />
-                <div className="contents md:block md:min-w-0 md:flex-1 md:space-y-3">
-                  <div className="min-w-0">
+              <SettingsProfileLayout
+                avatar={
+                  <EditableProfileAvatar
+                    kind="person"
+                    name={state.user.name}
+                    initials={state.user.avatarInitials}
+                    avatarUrl={state.user.avatarUrl}
+                    uploading={avatarUploading}
+                    onFile={(file) => void uploadPersonalAvatar(file)}
+                  />
+                }
+                nameField={
+                  <>
                     <label className="mb-2 block text-[14px] font-medium leading-5 text-[var(--creed-text-secondary)]">
                       Name
                     </label>
@@ -863,8 +861,10 @@ function PersonalSettingsScreen() {
                       onBlur={() => void saveDisplayName()}
                       className="h-11 rounded-xl border-[var(--creed-border)] bg-[var(--creed-surface)] px-4 text-[15px]"
                     />
-                  </div>
-                  <div className="col-span-2 min-w-0 md:col-span-1">
+                  </>
+                }
+                emailField={
+                  <>
                     <label className="mb-2 block text-[14px] font-medium leading-5 text-[var(--creed-text-secondary)]">
                       Email
                     </label>
@@ -873,9 +873,9 @@ function PersonalSettingsScreen() {
                       readOnly
                       className="h-11 rounded-xl border-[var(--creed-border)] bg-[var(--creed-surface)] px-4 text-[15px] text-[var(--creed-text-secondary)]"
                     />
-                  </div>
-                </div>
-              </div>
+                  </>
+                }
+              />
             </div>
           </section>
 
@@ -886,13 +886,10 @@ function PersonalSettingsScreen() {
               Agent edit behaviour
             </h2>
             <div className="mt-4 rounded-[var(--radius-xl)] border border-[var(--creed-border)] bg-[var(--creed-surface)] p-5 pb-4">
-              <div className="flex items-center justify-between gap-5 md:items-start">
+              <div className="flex items-center justify-between gap-5">
                 <div>
                   <div className="text-[15px] font-medium text-[var(--creed-text-primary)]">
                     All sections
-                  </div>
-                  <div className="mt-2 hidden max-w-xl text-[14px] leading-7 text-[var(--creed-text-secondary)] md:block">
-                    Set every section at once, and the default for new ones.
                   </div>
                 </div>
                 <SectionPermissionControl
@@ -1544,7 +1541,7 @@ function PersonalSettingsScreen() {
           <p className="text-[14px] leading-7 text-[var(--creed-text-secondary)]">
             This deletes your account and everything linked to it. This cannot be undone.
           </p>
-          <div className="mt-2 flex items-center justify-between gap-3">
+          <DialogFooter className="flex-row items-center justify-between border-t-[var(--creed-border)] bg-[var(--creed-surface)] sm:justify-between">
             <Button variant="ghost" className="rounded-md" onClick={() => setDeleteOpen(false)}>
               Cancel
             </Button>
@@ -1562,7 +1559,7 @@ function PersonalSettingsScreen() {
                 "Confirm delete"
               )}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1624,7 +1621,7 @@ export function ConnectButton({
         <LoaderCircle className="h-4 w-4 animate-spin" />
       ) : (
         <>
-          <Plug className="h-4 w-4 md:hidden" />
+          <Link2 className="h-4 w-4 md:hidden" />
           <span className="hidden md:inline">Connect</span>
         </>
       )}
@@ -1652,7 +1649,7 @@ export function DisconnectButton({
         <LoaderCircle className="h-4 w-4 animate-spin" />
       ) : (
         <>
-          <Unplug className="h-4 w-4 md:hidden" />
+          <Unlink2 className="h-4 w-4 md:hidden" />
           <span className="hidden md:inline">Disconnect</span>
         </>
       )}
@@ -1903,123 +1900,5 @@ function GitHubMark({ className }: { className?: string }) {
     <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
       <path d="M12 .5C5.65.5.5 5.66.5 12.02c0 5.09 3.29 9.4 7.86 10.93.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.34-1.28-1.69-1.28-1.69-1.04-.71.08-.69.08-.69 1.15.08 1.75 1.18 1.75 1.18 1.02 1.76 2.68 1.25 3.34.96.1-.74.4-1.25.72-1.53-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.17 1.17a11 11 0 0 1 5.78 0c2.2-1.48 3.16-1.17 3.16-1.17.63 1.58.24 2.75.12 3.04.74.8 1.18 1.82 1.18 3.07 0 4.41-2.69 5.39-5.26 5.67.41.36.77 1.06.77 2.14 0 1.55-.01 2.79-.01 3.17 0 .31.21.68.8.56A11.53 11.53 0 0 0 23.5 12C23.5 5.66 18.35.5 12 .5Z" />
     </svg>
-  );
-}
-
-type AnimatedIconComponent = ComponentType<{
-  ref?: Ref<AnimatedIconHandle>;
-  size?: number;
-  className?: string;
-}>;
-
-const PERMISSION_OPTIONS: Array<{
-  value: AgentPermission;
-  label: string;
-  icon: AnimatedIconComponent;
-  color: string;
-}> = [
-  { value: "hidden", label: "Hidden from agent", icon: EyeOffIcon, color: "#DC2626" },
-  { value: "read-only", label: "Read-only", icon: EyeIcon, color: "#EAB308" },
-  { value: "propose", label: "Propose (needs approval)", icon: ShieldCheckIcon, color: "#16A34A" },
-  { value: "direct", label: "Direct edit", icon: PenToolIcon, color: "#2563EB" },
-];
-
-// The global control reuses the same control without the "hidden" option.
-const GLOBAL_PERMISSION_OPTIONS = PERMISSION_OPTIONS.filter((option) => option.value !== "hidden");
-
-// One segment. Hover plays the icon's animation through the shared controls
-// hook, exactly like AnimatedIconButton elsewhere on the site.
-function PermissionSegment({
-  option,
-  selected,
-  layoutGroup,
-  muted = false,
-  onSelect,
-}: {
-  option: (typeof PERMISSION_OPTIONS)[number];
-  selected: boolean;
-  layoutGroup: string;
-  muted?: boolean;
-  onSelect: () => void;
-}) {
-  const { iconRef, start, settle } = useAnimatedIconControls();
-  const Icon = option.icon;
-  return (
-    <SimpleTooltip label={option.label}>
-      <button
-        type="button"
-        aria-label={option.label}
-        aria-pressed={selected}
-        onClick={onSelect}
-        // When the control is greyed (mixed state) skip the hover animation so
-        // the icons read as inactive.
-        onMouseEnter={muted ? undefined : start}
-        onMouseLeave={muted ? undefined : settle}
-        className="group relative inline-flex h-7 w-7 items-center justify-center rounded-[7px] transition-colors duration-150"
-      >
-        {selected ? (
-          <motion.span
-            layoutId={`perm-highlight-${layoutGroup}`}
-            className="absolute inset-0 rounded-[7px]"
-            style={{ backgroundColor: option.color }}
-            transition={{ type: "spring", stiffness: 520, damping: 40 }}
-          />
-        ) : null}
-        <Icon
-          ref={iconRef}
-          size={14}
-          // pointer-events-none so the whole button is the click/hover target,
-          // not just the 14px glyph. The icon brightens on hover via group-hover
-          // (the button's hover), since its own :hover can't fire with pointer
-          // events disabled.
-          className={cn(
-            "pointer-events-none relative inline-flex h-3.5 w-3.5 items-center justify-center transition-colors duration-150",
-            selected
-              ? "text-white"
-              : muted
-                ? "text-[var(--creed-text-tertiary)]"
-                : "text-[var(--creed-text-tertiary)] group-hover:text-[var(--creed-text-primary)]"
-          )}
-        />
-      </button>
-    </SimpleTooltip>
-  );
-}
-
-// Compact icon-segmented control. The selected segment fills with its level
-// colour and the highlight slides between segments via a shared layoutId.
-// `layoutGroup` scopes that animation to one row so highlights don't fly
-// between sections.
-function SectionPermissionControl({
-  value,
-  onChange,
-  layoutGroup,
-  options = PERMISSION_OPTIONS,
-}: {
-  value: AgentPermission | null;
-  onChange: (permission: AgentPermission) => void;
-  layoutGroup: string;
-  options?: typeof PERMISSION_OPTIONS;
-}) {
-  return (
-    <div
-      className={cn(
-        "inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-[var(--creed-border)] bg-[var(--creed-surface)] p-0.5 transition-opacity duration-150",
-        // No shared level (sections differ): grey the control to read as
-        // "mixed / not applied", but it stays clickable to set one level.
-        value === null && "opacity-45"
-      )}
-    >
-      {options.map((option) => (
-        <PermissionSegment
-          key={option.value}
-          option={option}
-          selected={value === option.value}
-          layoutGroup={layoutGroup}
-          muted={value === null}
-          onSelect={() => onChange(option.value)}
-        />
-      ))}
-    </div>
   );
 }
