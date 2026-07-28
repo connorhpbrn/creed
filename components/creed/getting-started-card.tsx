@@ -114,8 +114,8 @@ export function GettingStartedCardView({
             <span className="flex-1 truncate text-[13px] font-medium leading-5 text-[var(--creed-text-primary)]">
               Get started
             </span>
-            {/* right-12 lines the counter's right edge up with the version
-                toast's Refresh label (action button at right-10 + px-2). */}
+            {/* right-12 keeps the counter clear of the trailing action control,
+                matching the spacing used by the version toast. */}
             <span className="absolute right-12 top-1/2 -translate-y-1/2 text-[12px] tabular-nums text-[var(--creed-text-tertiary)]">
               {doneCount}/{total}
             </span>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 const UPDATE_TOAST_ID = "creed-app-version-update";
@@ -22,17 +23,22 @@ export function showVersionUpdateToast() {
   toast.info("New version available", {
     id: UPDATE_TOAST_ID,
     duration: Infinity,
-    closeButton: true,
+    closeButton: false,
     action: {
-      label: "Refresh",
+      label: (
+        <>
+          <RefreshCw aria-hidden="true" />
+          <span className="sr-only">Refresh</span>
+        </>
+      ),
       onClick: () => {
         window.location.reload();
       },
     },
     classNames: {
-      toast: "!pr-24",
+      toast: "!pr-10",
       actionButton:
-        "!absolute !top-1/2 !right-10 !left-auto !-translate-y-1/2 !transform-none !h-7 !rounded-[8px] !bg-transparent !border-0 !px-2 !text-[12px] !font-medium !text-current !opacity-70 hover:!opacity-100 hover:!bg-current/[0.10] !transition-all",
+        "!absolute !top-1/2 !right-2.5 !left-auto !m-0 !flex !h-7 !w-7 !min-w-0 !-translate-y-1/2 !transform-none !items-center !justify-center !rounded-[8px] !border-0 !bg-transparent !p-0 !text-current !opacity-70 hover:!bg-current/[0.10] hover:!opacity-100 !transition-all [&_svg]:!h-4 [&_svg]:!w-4",
     },
   });
 }
