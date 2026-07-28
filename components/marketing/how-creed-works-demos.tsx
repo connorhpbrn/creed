@@ -575,7 +575,7 @@ function ActivityDemoRow({
             transition={{ duration: 0.22, ease: EASE }}
             className="overflow-hidden border-t border-[var(--creed-border)]"
           >
-            <div className="creed-diff-block px-3 py-2 text-[10px] leading-[1.5]">
+            <div className="creed-diff-block px-3 py-2 text-[12px]! leading-[1.55]!">
               <span className="creed-diff-remove">Grow the product quickly. </span>
               <span className="creed-diff-add">Reach 100 active teams before expanding the roadmap.</span>
             </div>

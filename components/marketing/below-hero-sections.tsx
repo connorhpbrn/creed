@@ -786,6 +786,7 @@ function HowItWorksSection() {
         </PlateCard>
         <PlateCard
           plateColor="var(--plate-direct)"
+          plateClassName="min-h-[280px]"
           number="2"
           numberColor="var(--plate-direct)"
           title="Extract your context"

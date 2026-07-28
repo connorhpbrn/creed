@@ -12,36 +12,43 @@ const stackRows = [
   {
     name: "Supabase",
     purpose: "Backend, database, and authentication infrastructure",
+    mobilePurpose: "Backend",
     website: "https://supabase.com",
   },
   {
     name: "Vercel",
     purpose: "Hosting and deployment infrastructure",
+    mobilePurpose: "Deployment",
     website: "https://vercel.com",
   },
   {
     name: "Stripe",
     purpose: "Payment processing and billing",
+    mobilePurpose: "Billing",
     website: "https://stripe.com",
   },
   {
     name: "OpenRouter",
     purpose: "AI model access for certain features",
+    mobilePurpose: "Model access",
     website: "https://openrouter.ai",
   },
   {
     name: "Resend",
     purpose: "Transactional email delivery",
+    mobilePurpose: "Email delivery",
     website: "https://resend.com",
   },
   {
     name: "GitHub",
     purpose: "Version control and optional Creed file sync",
+    mobilePurpose: "Version control",
     website: "https://github.com",
   },
   {
     name: "Median",
     purpose: "Processes feedback submitted via the in-app modal",
+    mobilePurpose: "Feedback",
     website: "https://median.sh",
   },
 ] as const;
@@ -96,7 +103,8 @@ export function StackPageView() {
                     {row.name}
                   </td>
                   <td className="px-1 py-5 text-[15px] leading-7 text-[var(--creed-text-secondary)] md:px-2 md:text-[16px]">
-                    {row.purpose}
+                    <span className="md:hidden">{row.mobilePurpose}</span>
+                    <span className="hidden md:inline">{row.purpose}</span>
                   </td>
                   <td className="px-1 py-5 md:px-2">
                     <StackLink href={row.website} label={row.website.replace(/^https?:\/\//, "")} />

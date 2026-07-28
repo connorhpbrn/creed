@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import type { ChangelogEntry } from "@/lib/marketing/changelog";
 
@@ -46,22 +47,15 @@ export function ChangelogAccordion({
               <h2 className="text-[22px] font-medium tracking-[-0.01em] text-[var(--creed-text-primary)] transition-opacity duration-200 group-hover:opacity-70 md:text-[24px]">
                 {entry.title}
               </h2>
-              <svg
+              <motion.span
                 aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                className={`size-5 shrink-0 text-[var(--creed-text-primary)] transition-[opacity,transform] duration-200 group-hover:opacity-70 ${
-                  isOpen ? "rotate-90" : ""
-                }`}
+                initial={false}
+                animate={{ rotate: isOpen ? 0 : -90 }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                className="inline-flex shrink-0 text-[var(--creed-text-primary)] transition-opacity duration-200 group-hover:opacity-70"
               >
-                <path
-                  d="m9 6 6 6-6 6"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+                <ChevronDown className="size-5" />
+              </motion.span>
             </button>
 
             <AnimatePresence initial={false}>
