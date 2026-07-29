@@ -147,6 +147,7 @@ export function CreedShell({
   const { signOut, state, exportMarkdown } = useCreed();
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const [billingOpen, setBillingOpen] = useState(false);
+  const [profilePressed, setProfilePressed] = useState(false);
   const searchIconRef = useRef<SearchIconHandle | null>(null);
   const agentRun = useSyncExternalStore(subscribeAgentRunner, getAgentRunnerSnapshot, getAgentRunnerServerSnapshot);
   const agentBusy = agentRun.status === "working" || agentRun.status === "applying";
@@ -549,10 +550,19 @@ export function CreedShell({
                       "h-auto w-full min-w-0 justify-center rounded-sm border-0 bg-transparent px-1 py-1 transition-colors hover:bg-[var(--creed-surface-raised)] aria-expanded:bg-[var(--creed-surface-raised)] dark:hover:bg-[var(--creed-surface-raised)]",
                       !collapsed && "lg:justify-between lg:bg-transparent lg:pl-[7px] lg:pr-2.5 lg:py-1.5"
                     )}
+                    onPointerDownCapture={(event) => {
+                      if (event.button !== 0) return;
+                      setProfilePressed(true);
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerUpCapture={() => setProfilePressed(false)}
+                    onPointerCancel={() => setProfilePressed(false)}
+                    onLostPointerCapture={() => setProfilePressed(false)}
                   >
                     <span
                       className={cn(
-                        "flex min-w-0 w-full items-center justify-center gap-2.5",
+                        "flex min-w-0 w-full transform-gpu items-center justify-center gap-2.5 transition-[transform,filter] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        profilePressed && "translate-y-px scale-[0.98] brightness-[0.96]",
                         !collapsed && "lg:justify-start"
                       )}
                     >

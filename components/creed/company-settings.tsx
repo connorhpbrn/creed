@@ -55,7 +55,7 @@ import { useAnimatedIconControls } from "@/components/creed/animated-icon-contro
 import { DownloadIcon } from "@/components/ui/download";
 import { SendIcon } from "@/components/ui/send";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronRight } from "lucide-react";
+import { ArchivedSectionHeading } from "@/components/creed/archived-section-heading";
 import {
   type RepoOption,
   type BranchOption,
@@ -1793,32 +1793,16 @@ export function CompanySettings() {
                   className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--creed-border)]"
                 >
                   <div className="flex items-center justify-between gap-4 px-4 py-3">
-                    <button
-                      type="button"
-                      aria-expanded={expanded}
-                      onClick={() =>
+                    <ArchivedSectionHeading
+                      name={section.name}
+                      accent={sectionAccent(section.accent)}
+                      expanded={expanded}
+                      onToggle={() =>
                         setExpandedArchived((cur) =>
                           cur === section.id ? null : section.id,
                         )
                       }
-                      className="group flex min-w-0 flex-1 items-center gap-2.5 text-left"
-                    >
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-[3px]"
-                        style={{
-                          backgroundColor: sectionAccent(section.accent),
-                        }}
-                      />
-                      <span className="truncate text-[14px] font-medium text-[var(--creed-text-primary)]">
-                        {section.name}
-                      </span>
-                      <ChevronRight
-                        className={cn(
-                          "h-4 w-4 shrink-0 text-[var(--creed-text-tertiary)] transition duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:text-[var(--creed-text-primary)]",
-                          expanded && "rotate-90",
-                        )}
-                      />
-                    </button>
+                    />
                     <div className="flex shrink-0 items-center gap-2">
                       <Button
                         variant="outline"
@@ -1853,7 +1837,7 @@ export function CompanySettings() {
                           duration: 0.24,
                           ease: [0.22, 1, 0.36, 1],
                         }}
-                        className="overflow-hidden"
+                        className="hidden overflow-hidden md:block"
                       >
                         <div className="border-t border-[var(--creed-border)] px-4 py-4">
                           <RichTextEditor
