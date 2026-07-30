@@ -173,7 +173,10 @@ export function CreedSwitcher() {
         </DropdownMenuTrigger>
         <ShortcutKey className="hidden md:inline-flex">C</ShortcutKey>
       </div>
-      <DropdownMenuContent align="start" className="min-w-[264px] border-[var(--creed-border)] bg-[var(--creed-surface)] p-1.5">
+      <DropdownMenuContent
+        align="start"
+        className="min-w-[220px] rounded-lg border-[var(--creed-border)] bg-[var(--creed-surface)] p-1"
+      >
         {creeds.map((creed) => {
           const label = creed.type === "personal" ? state.user.name : creed.name;
           const isActive = creed.id === shownActiveId;
@@ -184,9 +187,9 @@ export function CreedSwitcher() {
               onSelect={() => {
                 void switchTo(creed);
               }}
-              className="flex items-center justify-between gap-3 rounded-sm px-3 py-2.5 text-[14px]"
+              className="flex items-center justify-between gap-2.5 rounded-sm py-1.5 pl-1.5 pr-2.5 text-[13px]"
             >
-              <span className="flex min-w-0 items-center gap-2.5 text-[var(--creed-text-primary)]">
+              <span className="flex min-w-0 items-center gap-2 text-[var(--creed-text-primary)]">
                 <ProfileAvatar
                   kind={creed.type === "company" ? "company" : "person"}
                   name={label}
@@ -204,7 +207,7 @@ export function CreedSwitcher() {
                   Set up
                 </span>
               ) : isActive ? (
-                <Check className="h-4 w-4 shrink-0 text-white" strokeWidth={1.8} />
+                <Check className="h-3.5 w-3.5 shrink-0 text-white" strokeWidth={1.8} />
               ) : null}
             </DropdownMenuItem>
           );

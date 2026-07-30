@@ -60,7 +60,7 @@ export function FileSectionNavButton({
           !collapsed &&
             "lg:mx-0 lg:h-auto lg:min-h-0 lg:w-full lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
           active &&
-            "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)] hover:bg-[var(--creed-surface-raised)]",
+            "bg-[var(--creed-surface-raised)]! text-[var(--creed-text-primary)] hover:bg-[var(--creed-surface-raised)]!",
           pendingDelete &&
             "bg-[#FEF2F2] text-[#B91C1C] hover:bg-[#FDE2E2] hover:text-[#991B1B] dark:bg-[#3F1212]/35 dark:text-[#F87171] dark:hover:bg-[#3F1212]/55 dark:hover:text-[#F87171]",
           pendingDelete &&

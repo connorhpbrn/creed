@@ -33,7 +33,6 @@ import { toast } from "sonner";
 import { fireConfetti } from "@/lib/confetti";
 import { AnimatedCheckmark } from "@/components/ui/animated-checkmark";
 import { SectionHistorySheet } from "@/components/creed/section-history-sheet";
-import { AlignLeftIcon } from "@/components/ui/align-left";
 import { ArchiveIcon } from "@/components/ui/archive";
 import { Button } from "@/components/ui/button";
 import { CloudDownloadIcon } from "@/components/ui/cloud-download";
@@ -1089,7 +1088,7 @@ export function FileScreen() {
   const sectionsRef = useRef(state.sections);
   sectionsRef.current = state.sections;
   const versionIcon = useAnimatedIconControls();
-  const nexusIcon = useAnimatedIconControls();
+  const nexusIcon = useAnimatedIconControls(80, undefined, 800);
   const activityIcon = useAnimatedIconControls();
   // `exportMarkdown` is identity-stable now (the provider hands out proxy
   // actions), so the content dependency must be explicit: rebuild only when
@@ -2147,6 +2146,11 @@ export function FileScreen() {
   }, [normalizedPendingProposals, state.sections]);
 
   useEffect(() => {
+    if (fileViewMode !== "editor") {
+      setActiveShellSection(null);
+      return;
+    }
+
     const container = editorScrollRef.current;
     if (!container) return;
 
@@ -2213,6 +2217,7 @@ export function FileScreen() {
       setActiveShellSection(null);
     };
   }, [
+    fileViewMode,
     setActiveShellSection,
     state.sections.length,
     pendingNewSectionProposalCount,
@@ -2479,11 +2484,7 @@ export function FileScreen() {
                     <Button
                       variant="outline"
                       size="icon-sm"
-                      aria-label={
-                        fileViewMode === "nexus"
-                          ? "Show Tabula view"
-                          : "Show Nexus view"
-                      }
+                      aria-label="Nexus"
                       aria-pressed={fileViewMode === "nexus"}
                       style={{
                         borderRadius: 13,
@@ -2495,7 +2496,7 @@ export function FileScreen() {
                       className={cn(
                         "border-[var(--creed-border)] bg-[var(--creed-surface)] md:hidden",
                         fileViewMode === "nexus" &&
-                          "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)]",
+                          "bg-[var(--creed-surface-raised)]! text-[var(--creed-text-primary)] hover:bg-[var(--creed-surface-raised)]! dark:bg-input/50! dark:hover:bg-input/50!",
                       )}
                       onMouseEnter={nexusIcon.start}
                       onMouseLeave={nexusIcon.settle}
@@ -2505,19 +2506,11 @@ export function FileScreen() {
                         );
                       }}
                     >
-                      {fileViewMode === "nexus" ? (
-                        <AlignLeftIcon
-                          ref={nexusIcon.iconRef}
-                          size={14}
-                          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none"
-                        />
-                      ) : (
-                        <WaypointsIcon
-                          ref={nexusIcon.iconRef}
-                          size={14}
-                          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none"
-                        />
-                      )}
+                      <WaypointsIcon
+                        ref={nexusIcon.iconRef}
+                        size={14}
+                        className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none"
+                      />
                     </Button>
                     <Button
                       variant="outline"
@@ -2527,7 +2520,7 @@ export function FileScreen() {
                       className={cn(
                         "hidden border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[12px] md:inline-flex md:px-3.5 md:text-sm",
                         fileViewMode === "nexus" &&
-                          "bg-[var(--creed-surface-raised)] text-[var(--creed-text-primary)]",
+                          "bg-[var(--creed-surface-raised)]! text-[var(--creed-text-primary)] hover:bg-[var(--creed-surface-raised)]! dark:bg-input/50! dark:hover:bg-input/50!",
                       )}
                       onMouseEnter={nexusIcon.start}
                       onMouseLeave={nexusIcon.settle}
@@ -2537,20 +2530,12 @@ export function FileScreen() {
                         );
                       }}
                     >
-                      {fileViewMode === "nexus" ? (
-                        <AlignLeftIcon
-                          ref={nexusIcon.iconRef}
-                          size={14}
-                          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none"
-                        />
-                      ) : (
-                        <WaypointsIcon
-                          ref={nexusIcon.iconRef}
-                          size={14}
-                          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none"
-                        />
-                      )}
-                      {fileViewMode === "nexus" ? "Tabula" : "Nexus"}
+                      <WaypointsIcon
+                        ref={nexusIcon.iconRef}
+                        size={14}
+                        className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none"
+                      />
+                      Nexus
                     </Button>
 
                     {/* Desktop: labelled pill. Mobile: icon-only circle that
@@ -2568,7 +2553,8 @@ export function FileScreen() {
                       }}
                       className={cn(
                         "border-[var(--creed-border)] bg-[var(--creed-surface)] md:hidden",
-                        activityOpen && "bg-[var(--creed-surface-raised)]",
+                        activityOpen &&
+                          "bg-[var(--creed-surface-raised)]! hover:bg-[var(--creed-surface-raised)]! dark:bg-input/50! dark:hover:bg-input/50!",
                       )}
                       onMouseEnter={activityIcon.start}
                       onMouseLeave={activityIcon.settle}
@@ -2588,7 +2574,8 @@ export function FileScreen() {
                       style={{ borderRadius: 13, height: 32, minHeight: 32 }}
                       className={cn(
                         "hidden border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[12px] md:inline-flex md:px-3.5 md:text-sm",
-                        activityOpen && "bg-[var(--creed-surface-raised)]",
+                        activityOpen &&
+                          "bg-[var(--creed-surface-raised)]! hover:bg-[var(--creed-surface-raised)]! dark:bg-input/50! dark:hover:bg-input/50!",
                       )}
                       onMouseEnter={activityIcon.start}
                       onMouseLeave={activityIcon.settle}
