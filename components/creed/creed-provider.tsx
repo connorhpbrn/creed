@@ -45,7 +45,11 @@ import {
   type Proposal,
   type ProposalDraft,
 } from "@/lib/creed-data";
-import { normalizeRichTextInput, richTextContentEquivalent } from "@/lib/rich-text";
+import {
+  normalizeRichTextInput,
+  removeSectionReferencesFromSections,
+  richTextContentEquivalent,
+} from "@/lib/rich-text";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { toast } from "sonner";
@@ -1898,14 +1902,19 @@ export function CreedProvider({
       const creedId = latestStateRef.current.creedId;
       // Optimistically drop it locally, then permanently delete it via the
       // company API (owner/admin only; the server re-checks the role).
-      commitState((current) =>
-        nextMutationTick({
+      commitState((current) => {
+        const target = current.sections.find(
+          (section) => section.id === sectionId,
+        );
+        if (!target) return current;
+        return nextMutationTick({
           ...current,
-          sections: current.sections.filter(
-            (section) => section.id !== sectionId,
+          sections: removeSectionReferencesFromSections(
+            current.sections,
+            target,
           ),
-        }),
-      );
+        });
+      });
       if (creedId) {
         void (async () => {
           const response = await fetch(
@@ -1927,11 +1936,16 @@ export function CreedProvider({
       }
       return;
     }
-    commitState((current) =>
-      nextMutationTick({
+    commitState((current) => {
+      const target = current.sections.find(
+        (section) => section.id === sectionId,
+      );
+      if (!target) return current;
+      return nextMutationTick({
         ...current,
-        sections: current.sections.filter(
-          (section) => section.id !== sectionId,
+        sections: removeSectionReferencesFromSections(
+          current.sections,
+          target,
         ),
         proposals: current.proposals.filter(
           (proposal) => proposal.sectionId !== sectionId,
@@ -1939,8 +1953,8 @@ export function CreedProvider({
         activity: current.activity.filter(
           (entry) => entry.sectionId !== sectionId,
         ),
-      }),
-    );
+      });
+    });
   }
 
   // Archive keeps the section in state (so it survives persistence) but flags it
@@ -2336,9 +2350,12 @@ export function CreedProvider({
           // from the in-flight remainingProposals set so they don't hang
           // around after the batch lands.
           const targetId = proposal.sectionId;
-          nextSections = nextSections.filter(
-            (section) => section.id !== targetId,
+          const target = nextSections.find(
+            (section) => section.id === targetId,
           );
+          nextSections = target
+            ? removeSectionReferencesFromSections(nextSections, target)
+            : nextSections;
           for (let i = remainingProposals.length - 1; i >= 0; i -= 1) {
             if (remainingProposals[i].sectionId === targetId) {
               remainingProposals.splice(i, 1);
@@ -2686,11 +2703,19 @@ export function CreedProvider({
       Boolean(state.settings.versionControl.repoOwner) &&
       Boolean(state.settings.versionControl.repoName) &&
       Boolean(state.settings.versionControl.branch);
+    const importedIds = new Set(sections.map((section) => section.id));
+    const cleanedSections = state.sections
+      .filter((section) => !importedIds.has(section.id))
+      .reduce(
+        (current, deletedSection) =>
+          removeSectionReferencesFromSections(current, deletedSection),
+        sections,
+      );
 
     const nextState = nextMutationTick({
       ...state,
       lastSavedAt: Date.now(),
-      sections,
+      sections: cleanedSections,
       proposals: [],
       settings: {
         ...state.settings,
@@ -2701,7 +2726,7 @@ export function CreedProvider({
         },
       },
       sectionRevisions: Object.fromEntries(
-        sections.map((section) => [section.id, 1]),
+        cleanedSections.map((section) => [section.id, 1]),
       ),
     });
 

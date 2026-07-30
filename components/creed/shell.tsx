@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, Plus, X } from "lucide-react";
+import { Reorder } from "framer-motion";
 import { AnimatedMenuIconItem } from "@/components/creed/animated-icon-action";
 import { FeedbackMenuItem } from "@/components/creed/feedback-menu";
 import { BookTextIcon } from "@/components/ui/book-text";
@@ -144,7 +145,7 @@ export function CreedShell({
 }: ShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { signOut, state, exportMarkdown } = useCreed();
+  const { signOut, state, exportMarkdown, reorderSections } = useCreed();
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const [billingOpen, setBillingOpen] = useState(false);
   const [profilePressed, setProfilePressed] = useState(false);
@@ -190,6 +191,71 @@ export function CreedShell({
   }, []);
   const fileActionsRef = useRef<ShellFileActions>({});
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const visibleSidebarSections = useMemo(
+    () => sections.filter((section) => !section.archived),
+    [sections],
+  );
+  const canonicalSidebarOrder = useMemo(
+    () => visibleSidebarSections.map((section) => section.id),
+    [visibleSidebarSections],
+  );
+  const canonicalSidebarOrderRef = useRef(canonicalSidebarOrder);
+  canonicalSidebarOrderRef.current = canonicalSidebarOrder;
+  const [sidebarOrder, setSidebarOrder] = useState<string[] | null>(null);
+  const sidebarOrderRef = useRef<string[] | null>(null);
+  const [sidebarReorderActive, setSidebarReorderActive] = useState(false);
+  const [sidebarDraggingId, setSidebarDraggingId] = useState<string | null>(null);
+  const orderedSidebarSections = useMemo(() => {
+    if (!sidebarOrder) return visibleSidebarSections;
+    const sectionsById = new Map(
+      visibleSidebarSections.map((section) => [section.id, section]),
+    );
+    return sidebarOrder
+      .map((id) => sectionsById.get(id))
+      .filter((section): section is CreedSection => Boolean(section));
+  }, [sidebarOrder, visibleSidebarSections]);
+  const canReorderSidebar =
+    state.creedType !== "company" ||
+    state.company?.myRole === "owner" ||
+    state.company?.myRole === "admin";
+
+  const beginSidebarReorder = useCallback((sectionId: string) => {
+    const initialOrder = canonicalSidebarOrderRef.current;
+    sidebarOrderRef.current = initialOrder;
+    setSidebarOrder(initialOrder);
+    setSidebarReorderActive(true);
+    setSidebarDraggingId(sectionId);
+  }, []);
+
+  const previewSidebarReorder = useCallback((nextOrder: string[]) => {
+    sidebarOrderRef.current = nextOrder;
+    setSidebarOrder(nextOrder);
+  }, []);
+
+  const finishSidebarReorder = useCallback(() => {
+    const finalOrder = sidebarOrderRef.current;
+    sidebarOrderRef.current = null;
+    setSidebarOrder(null);
+    setSidebarReorderActive(false);
+    setSidebarDraggingId(null);
+    if (
+      finalOrder &&
+      finalOrder.join("|") !== canonicalSidebarOrderRef.current.join("|")
+    ) {
+      reorderSections(finalOrder);
+    }
+  }, [reorderSections]);
+
+  useEffect(() => {
+    if (!sidebarReorderActive) return;
+    const finish = () => finishSidebarReorder();
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+    return () => {
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+    };
+  }, [finishSidebarReorder, sidebarReorderActive]);
   const registerFileActions = useCallback((actions: ShellFileActions) => {
     fileActionsRef.current = actions;
 
@@ -468,27 +534,43 @@ export function CreedShell({
             </div>
             <div
               className={cn(
-                "mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto creed-scrollbar",
+                "mt-2 min-h-0 flex-1 overflow-y-auto creed-scrollbar",
                 !collapsed && "lg:mt-4 lg:pr-1"
               )}
             >
-              {sections.filter((section) => !section.archived).map((section) => {
+              <Reorder.Group
+                axis="y"
+                values={sidebarOrder ?? canonicalSidebarOrder}
+                onReorder={previewSidebarReorder}
+                className="flex flex-col gap-1"
+              >
+              {orderedSidebarSections.map((section, reorderPosition) => {
                 const pendingCount = pendingProposalCountBySection.get(section.id) ?? 0;
                 const isActive = activeSectionId === section.id && pathname === "/file";
                 const pendingDelete = pendingDeleteSectionIds.has(section.id);
                 return (
                   <FileSectionNavButton
                     key={section.id}
+                    sectionId={section.id}
                     name={section.name}
                     accent={accentColorMap[section.accent]}
                     active={isActive}
                     pendingCount={pendingCount}
                     pendingDelete={pendingDelete}
                     collapsed={collapsed}
+                    reorderPosition={reorderPosition}
+                    canDrag={canReorderSidebar}
+                    dragging={sidebarDraggingId === section.id}
+                    onDragStateChange={(dragging) =>
+                      dragging
+                        ? beginSidebarReorder(section.id)
+                        : finishSidebarReorder()
+                    }
                     onClick={() => handleSectionClick(section.id)}
                   />
                 );
               })}
+              </Reorder.Group>
 
               {/* Phantom rows for pending new-section proposals. Visually a
                   preview of what the sidebar would look like if the user
@@ -529,14 +611,16 @@ export function CreedShell({
                 type="button"
                 onClick={handleAddSectionClick}
                 className={cn(
-                  "flex h-8 w-8 mx-auto items-center justify-center rounded-sm text-left text-[14px] text-[var(--creed-text-tertiary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+                  "mt-1 flex h-8 w-8 mx-auto items-center justify-center rounded-sm text-left text-[14px] text-[var(--creed-text-tertiary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
                   SIDEBAR_PRESS_CLASS,
-                  !collapsed && "lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-2 lg:px-2 lg:py-2"
+                  !collapsed && "lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2"
                 )}
                 aria-label="Add section"
               >
-                <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
-                <span className={cn("hidden", !collapsed && "lg:inline")}> Add section</span>
+                <span className={cn("flex shrink-0 items-center justify-center", !collapsed && "lg:w-1.5")}>
+                  <Plus className="h-3.5 w-3.5 max-w-none shrink-0" strokeWidth={1.8} />
+                </span>
+                <span className={cn("hidden", !collapsed && "lg:inline")}>Add section</span>
               </button>
             </div>
 

@@ -154,6 +154,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const FILE_NAV_INTENT_KEY = "creed:file-nav-intent";
+const COLLAPSED_SECTIONS_STORAGE_PREFIX = "creed:collapsed-sections:";
 const QUALITY_FINGERPRINT_IGNORED_KEYS = new Set([
   "lastEditedAt",
   "lastEditedBy",
@@ -792,6 +793,98 @@ export function FileScreen() {
     () => state.sections.filter((section) => !section.archived),
     [state.sections],
   );
+  const collapsedSectionsStorageKey = `${COLLAPSED_SECTIONS_STORAGE_PREFIX}${state.creedId ?? state.creedType}`;
+  const [collapsedSectionIds, setCollapsedSectionIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(collapsedSectionsStorageKey);
+      const parsed: unknown = stored ? JSON.parse(stored) : [];
+      setCollapsedSectionIds(
+        new Set(
+          Array.isArray(parsed)
+            ? parsed.filter((value): value is string => typeof value === "string")
+            : [],
+        ),
+      );
+    } catch {
+      setCollapsedSectionIds(new Set());
+    }
+  }, [collapsedSectionsStorageKey]);
+  const setSectionCollapsed = useCallback(
+    (sectionId: string, collapsed: boolean) => {
+      setCollapsedSectionIds((current) => {
+        if (current.has(sectionId) === collapsed) return current;
+        const next = new Set(current);
+        if (collapsed) {
+          next.add(sectionId);
+        } else {
+          next.delete(sectionId);
+        }
+        try {
+          window.localStorage.setItem(
+            collapsedSectionsStorageKey,
+            JSON.stringify([...next]),
+          );
+        } catch {}
+        return next;
+      });
+    },
+    [collapsedSectionsStorageKey],
+  );
+  const canonicalVisibleOrder = useMemo(
+    () => visibleSections.map((section) => section.id),
+    [visibleSections],
+  );
+  const canonicalVisibleOrderRef = useRef(canonicalVisibleOrder);
+  canonicalVisibleOrderRef.current = canonicalVisibleOrder;
+  const [reorderOrder, setReorderOrder] = useState<string[] | null>(null);
+  const reorderOrderRef = useRef<string[] | null>(null);
+  const [reorderActive, setReorderActive] = useState(false);
+  const [reorderDraggingId, setReorderDraggingId] = useState<string | null>(
+    null,
+  );
+  const orderedVisibleSections = useMemo(() => {
+    if (!reorderOrder) return visibleSections;
+    const sectionsById = new Map(
+      visibleSections.map((section) => [section.id, section]),
+    );
+    const ordered = reorderOrder
+      .map((id) => sectionsById.get(id))
+      .filter((section): section is CreedSection => Boolean(section));
+    const orderedIds = new Set(reorderOrder);
+    return [
+      ...ordered,
+      ...visibleSections.filter((section) => !orderedIds.has(section.id)),
+    ];
+  }, [reorderOrder, visibleSections]);
+  const beginReorder = useCallback((sectionId: string) => {
+    const initialOrder = canonicalVisibleOrderRef.current;
+    reorderOrderRef.current = initialOrder;
+    setReorderOrder(initialOrder);
+    setReorderActive(true);
+    setReorderDraggingId(sectionId);
+  }, []);
+
+  const previewReorder = useCallback((nextOrder: string[]) => {
+    reorderOrderRef.current = nextOrder;
+    setReorderOrder(nextOrder);
+  }, []);
+
+  const finishReorder = useCallback(() => {
+    const finalOrder = reorderOrderRef.current;
+    reorderOrderRef.current = null;
+    setReorderOrder(null);
+    setReorderActive(false);
+    setReorderDraggingId(null);
+    if (
+      finalOrder &&
+      finalOrder.join("|") !== canonicalVisibleOrderRef.current.join("|")
+    ) {
+      reorderSections(finalOrder);
+    }
+  }, [reorderSections]);
   // json-stable: names/accents change rarely, so the identity survives
   // keystrokes and the memoized section cards don't see a new prop.
   const visibleSectionTagTargets = useJsonStable(
@@ -959,8 +1052,6 @@ export function FileScreen() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const editorScrollRef = useRef<HTMLDivElement | null>(null);
   const composerAreaRef = useRef<HTMLDivElement | null>(null);
-  const composerCardRef = useRef<HTMLDivElement | null>(null);
-  const cancelComposerRevealRef = useRef<() => void>(() => {});
   const qualityBaselineLoadedRef = useRef(false);
   // Tracks which Creed the quality state belongs to, so a Creed switch can drop
   // the previous Creed's report (the runner store is module-global).
@@ -1094,22 +1185,18 @@ export function FileScreen() {
     },
     [],
   );
-  // True only while a section drag is in progress; gates the Reorder layout
-  // animation so framer doesn't measure every section on every height change
-  // (see the layout prop on Reorder.Item).
-  const [reorderActive, setReorderActive] = useState(false);
   useEffect(() => {
     if (!reorderActive) return;
     // Safety net: a pointerdown on the drag handle that never becomes a drag
     // doesn't fire onDragEnd, so the pointer release clears the flag.
-    const clear = () => setReorderActive(false);
+    const clear = () => finishReorder();
     window.addEventListener("pointerup", clear);
     window.addEventListener("pointercancel", clear);
     return () => {
       window.removeEventListener("pointerup", clear);
       window.removeEventListener("pointercancel", clear);
     };
-  }, [reorderActive]);
+  }, [finishReorder, reorderActive]);
 
   // Stable dispatch table for the memoized section cards: identity never
   // changes (safe to hold in a memoized card across skipped renders), while
@@ -1146,7 +1233,10 @@ export function FileScreen() {
       toast.success(`Archived "${name}"`);
     },
     addSectionAfter: (sectionId: string) => openComposerAndReveal(sectionId),
-    dragActiveChange: (active: boolean) => setReorderActive(active),
+    setCollapsed: (sectionId: string, collapsed: boolean) =>
+      setSectionCollapsed(sectionId, collapsed),
+    dragActiveChange: (active: boolean, sectionId: string) =>
+      active ? beginReorder(sectionId) : finishReorder(),
   };
   const sectionHandlersRef = useRef(sectionHandlersImpl);
   sectionHandlersRef.current = sectionHandlersImpl;
@@ -1591,75 +1681,15 @@ export function FileScreen() {
 
   const openComposerAndReveal = useCallback(
     (afterSectionId?: string) => {
-      cancelComposerRevealRef.current();
       setFileViewMode("editor");
-
-      if (composerOpen) {
-        openComposer(afterSectionId);
-        setComposerRevealed(true);
-        window.requestAnimationFrame(() => {
-          scrollComposerIntoView("smooth");
-        });
-        return;
-      }
-
-      // Mount the full card invisibly before measuring the destination. This
-      // gives the scroll container its final height up front, so one smooth
-      // scroll can land correctly without a corrective jump after expansion.
-      setComposerRevealed(false);
       openComposer(afterSectionId);
-
-      let attempts = 0;
-      const tryScroll = () => {
-        const container = editorScrollRef.current;
-        const composerCard = composerCardRef.current;
-
-        if (container && composerCard) {
-          const targetTop = getFileElementScrollTop(container, composerCard);
-          const needsScroll = Math.abs(container.scrollTop - targetTop) > 2;
-          let finished = false;
-          let fallbackId = 0;
-          let revealId = 0;
-          const cleanup = () => {
-            window.clearTimeout(fallbackId);
-            window.clearTimeout(revealId);
-            container.removeEventListener("scrollend", finish);
-          };
-          const finish = () => {
-            if (finished) return;
-            finished = true;
-            cleanup();
-            revealId = window.setTimeout(() => {
-              setComposerRevealed(true);
-              cancelComposerRevealRef.current = () => {};
-            }, 80);
-          };
-          cancelComposerRevealRef.current = cleanup;
-
-          if (needsScroll) {
-            container.addEventListener("scrollend", finish, { once: true });
-            fallbackId = window.setTimeout(finish, 600);
-            container.scrollTo({ top: targetTop, behavior: "smooth" });
-          } else {
-            finish();
-          }
-          return;
-        }
-
-        attempts += 1;
-        if (attempts < 24) {
-          window.requestAnimationFrame(tryScroll);
-        }
-      };
-
-      window.requestAnimationFrame(tryScroll);
+      setComposerRevealed(true);
+      window.requestAnimationFrame(() => {
+        scrollComposerIntoView("smooth");
+      });
     },
-    [composerOpen, openComposer, scrollComposerIntoView],
+    [openComposer, scrollComposerIntoView],
   );
-
-  useEffect(() => {
-    return () => cancelComposerRevealRef.current();
-  }, []);
 
   function submitComposer() {
     const trimmedName = composerName.trim();
@@ -1939,6 +1969,9 @@ export function FileScreen() {
   const revealEditorTarget = useCallback(
     (target: FileRevealTarget, behavior: ScrollBehavior = "smooth") => {
       setFileViewMode("editor");
+      if (target.type === "section") {
+        setSectionCollapsed(target.id, false);
+      }
 
       if (revealFrameRef.current !== null) {
         window.cancelAnimationFrame(revealFrameRef.current);
@@ -1983,7 +2016,7 @@ export function FileScreen() {
 
       revealFrameRef.current = window.requestAnimationFrame(tryReveal);
     },
-    [setActiveShellSection],
+    [setActiveShellSection, setSectionCollapsed],
   );
 
   useEffect(() => {
@@ -2793,11 +2826,11 @@ export function FileScreen() {
                 <>
                   <Reorder.Group
                     axis="y"
-                    values={visibleSections.map((section) => section.id)}
-                    onReorder={reorderSections}
-                    className="space-y-10 md:space-y-16"
+                    values={reorderOrder ?? canonicalVisibleOrder}
+                    onReorder={previewReorder}
+                    className="flex flex-col gap-8 md:gap-12"
                   >
-                    {visibleSections.map((section) => {
+                    {orderedVisibleSections.map((section, reorderPosition) => {
                       const quality = sectionQualityById.get(section.id);
                       const analyzedFingerprint =
                         analyzedSectionFingerprints[section.id];
@@ -2860,7 +2893,9 @@ export function FileScreen() {
                           canReview={canReview}
                           readOnlyMember={readOnlyMember}
                           canDrag={canReorderSections}
-                          dragActive={reorderActive}
+                          reorderPosition={reorderPosition}
+                          isDragging={reorderDraggingId === section.id}
+                          collapsed={collapsedSectionIds.has(section.id)}
                           reopenDraft={
                             reopenDraft?.sectionId === section.id
                               ? reopenDraft.content
@@ -2933,7 +2968,6 @@ export function FileScreen() {
                     <div ref={composerAreaRef} className="mt-10 md:mt-16">
                       {composerOpen ? (
                         <motion.div
-                          ref={composerCardRef}
                           initial={false}
                           animate={
                             composerRevealed
@@ -3374,7 +3408,8 @@ type SectionCardHandlers = {
   requestDelete: (sectionId: string, name: string) => void;
   archive: (sectionId: string, name: string) => void;
   addSectionAfter: (sectionId: string) => void;
-  dragActiveChange: (active: boolean) => void;
+  setCollapsed: (sectionId: string, collapsed: boolean) => void;
+  dragActiveChange: (active: boolean, sectionId: string) => void;
 };
 
 // Memo boundary for the section list. Every prop here is either a primitive,
@@ -3392,7 +3427,9 @@ const SectionCardBound = memo(function SectionCardBound({
   canReview,
   readOnlyMember,
   canDrag,
-  dragActive,
+  reorderPosition,
+  isDragging,
+  collapsed,
   reopenDraft,
   globalLocked,
   quality,
@@ -3412,7 +3449,9 @@ const SectionCardBound = memo(function SectionCardBound({
   canReview: boolean;
   readOnlyMember: boolean;
   canDrag: boolean;
-  dragActive: boolean;
+  reorderPosition: number;
+  isDragging: boolean;
+  collapsed: boolean;
   reopenDraft: string | null;
   globalLocked: boolean;
   quality?: CreedQualityReport["sections"][number];
@@ -3434,8 +3473,15 @@ const SectionCardBound = memo(function SectionCardBound({
       canReview={canReview}
       readOnlyMember={readOnlyMember}
       canDrag={canDrag}
-      dragActive={dragActive}
-      onDragActiveChange={handlers.dragActiveChange}
+      reorderPosition={reorderPosition}
+      isDragging={isDragging}
+      collapsed={collapsed}
+      onCollapsedChange={(nextCollapsed) =>
+        handlers.setCollapsed(section.id, nextCollapsed)
+      }
+      onDragActiveChange={(active) =>
+        handlers.dragActiveChange(active, section.id)
+      }
       reopenDraft={reopenDraft}
       onReopenConsumed={handlers.reopenConsumed}
       onSubmitProposal={(content) =>
@@ -3484,7 +3530,10 @@ function SectionCard({
   canReview = true,
   readOnlyMember = false,
   canDrag = true,
-  dragActive = false,
+  reorderPosition,
+  isDragging,
+  collapsed,
+  onCollapsedChange,
   onDragActiveChange,
   reopenDraft = null,
   onReopenConsumed,
@@ -3524,11 +3573,12 @@ function SectionCard({
   // Whether this viewer may reorder sections (owner/admin, or personal). When
   // false the drag handle is hidden and there's no icon left of the name.
   canDrag?: boolean;
-  // True only while a drag is in progress. Gates the Reorder layout
-  // animation: with layout always on, framer re-measures every section in
-  // the group whenever any of them changes height (i.e. on every keystroke),
-  // which is the dominant jank with many sections.
-  dragActive?: boolean;
+  // Motion measures this item only when its position changes. Unaffected rich
+  // editors keep stable props while another section crosses the list.
+  reorderPosition: number;
+  isDragging: boolean;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
   onDragActiveChange?: (active: boolean) => void;
   // When the ReviewPill's "Edit" fires for a proposal on this section, its draft
   // content arrives here to be loaded back into the local editor draft.
@@ -3562,7 +3612,6 @@ function SectionCard({
   // changes so a draft never leaks across sections.
   const [proposalDraft, setProposalDraft] = useState<string | null>(null);
   const [submittingProposal, setSubmittingProposal] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     setProposalDraft(null);
   }, [section.id]);
@@ -3605,17 +3654,23 @@ function SectionCard({
       value={section.id}
       dragListener={false}
       dragControls={dragControls}
-      // Reorder.Item defaults layout to true (and types it `true |
-      // "position"`), but an explicit false is honoured at runtime and is
-      // the only way to switch the projection measurement off. Without
-      // this, framer measures every section in the group whenever any of
-      // them changes height - i.e. on every keystroke.
-      layout={(dragActive || false) as true}
+      layout="position"
+      layoutDependency={reorderPosition}
+      dragElastic={0}
+      dragMomentum={false}
+      animate={{ opacity: isDragging ? 0.64 : 1 }}
+      transition={{
+        layout: {
+          duration: 0.22,
+          ease: [0.22, 1, 0.36, 1],
+        },
+        opacity: { duration: 0.14 },
+      }}
       onDragEnd={() => onDragActiveChange?.(false)}
       data-section-id={section.id}
       data-theme-snapshot-section
       id={section.id}
-      className="scroll-mt-24"
+      className="relative scroll-mt-24"
     >
       <section className="group relative">
         {/* Only reorderers (owner/admin, or the personal user) get the drag
@@ -3626,24 +3681,40 @@ function SectionCard({
             type="button"
             onPointerDown={(event) => {
               onDragActiveChange?.(true);
-              dragControls.start(event);
+              dragControls.start(event, { distanceThreshold: 4 });
             }}
-            className="group/drag absolute -left-7 top-1 hidden rounded-full p-1 text-[var(--creed-text-secondary)] transition-colors duration-150 hover:text-[var(--creed-text-primary)] xl:flex"
+            className="group/drag absolute -left-7 top-1 hidden touch-none rounded-full p-1 text-[var(--creed-text-secondary)] transition-colors duration-150 hover:text-[var(--creed-text-primary)] xl:flex"
           >
             <GripVerticalIcon className="h-4 w-4" size={16} />
           </button>
         ) : null}
 
-        <div className="mb-6 flex items-start justify-between gap-4">
+        <div
+          onClick={(event) => {
+            if (
+              event.target instanceof Element &&
+              event.target.closest(
+                "button, a, input, textarea, select, [role='button'], [contenteditable='true']",
+              )
+            ) {
+              return;
+            }
+            onCollapsedChange(!collapsed);
+          }}
+          className={cn(
+            "group/header flex cursor-pointer items-start justify-between gap-4 transition-[margin] duration-[280ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+            collapsed ? "mb-0" : "mb-6",
+          )}
+        >
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3">
               <span
-                className="inline-block h-9 w-[3px] rounded-full"
+                className="inline-block h-9 w-1 rounded-[1.25px]"
                 style={{ backgroundColor: accent }}
               />
               <div className="flex min-w-0 flex-wrap items-center gap-2.5">
                 <span
-                  className="text-[15px] font-medium leading-none md:text-[16px]"
+                  className="text-[1.22rem] font-medium leading-none md:text-[1.45rem]"
                   style={{ color: accent }}
                 >
                   {section.name}
@@ -3675,8 +3746,8 @@ function SectionCard({
                       : `Collapse ${section.name}`
                   }
                   aria-expanded={!collapsed}
-                  onClick={() => setCollapsed((value) => !value)}
-                  className="-ml-2 inline-flex h-9 w-10 shrink-0 items-center justify-center pl-2 text-[var(--creed-text-secondary)] transition-colors duration-150 hover:text-[var(--creed-text-primary)]"
+                  onClick={() => onCollapsedChange(!collapsed)}
+                  className="-ml-2 inline-flex h-9 w-10 shrink-0 items-center justify-center pl-2 text-[var(--creed-text-secondary)] transition-colors duration-150 hover:text-[var(--creed-text-primary)] group-hover/header:text-[var(--creed-text-primary)]"
                 >
                   <ChevronDown
                     className={cn(

@@ -258,6 +258,89 @@ export function normalizeHtmlWhitespace(html: string): string {
     .trim();
 }
 
+function normalizeSectionReference(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^#/, "")
+    .replace(/[\s_-]+/g, "");
+}
+
+function readHtmlAttribute(attributes: string, name: string): string | null {
+  const match = attributes.match(
+    new RegExp(
+      `(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))`,
+      "i",
+    ),
+  );
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
+const INLINE_TAG_SPAN_PATTERN = /<span\b([^>]*)>([\s\S]*?)<\/span>/gi;
+const REMOVED_SECTION_REFERENCE = "__CREED_REMOVED_SECTION_REFERENCE__";
+
+/**
+ * Remove every rich-text section-reference mark that targets a permanently
+ * deleted section. Current marks store the section id in `data-tag`; legacy
+ * imports can store the display name, so both are matched using the editor's
+ * separator-tolerant normalization. Plain hashtags are deliberately untouched.
+ */
+export function removeSectionReferences(
+  html: string,
+  target: { id: string; name: string },
+): string {
+  if (!html.includes("creed-inline-tag")) return html;
+
+  const targetValues = new Set(
+    [target.id, target.name]
+      .map(normalizeSectionReference)
+      .filter(Boolean),
+  );
+  let removed = false;
+  const marked = html.replace(
+    INLINE_TAG_SPAN_PATTERN,
+    (span, attributes: string, body: string) => {
+      const className = readHtmlAttribute(attributes, "class") ?? "";
+      if (!className.split(/\s+/).includes("creed-inline-tag")) return span;
+
+      const rawValue =
+        readHtmlAttribute(attributes, "data-tag") ??
+        body.replace(/<[^>]+>/g, "");
+      if (!targetValues.has(normalizeSectionReference(rawValue))) return span;
+
+      removed = true;
+      return REMOVED_SECTION_REFERENCE;
+    },
+  );
+  if (!removed) return html;
+
+  const escapedMarker = REMOVED_SECTION_REFERENCE.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&",
+  );
+  const emptyBlockPattern = new RegExp(
+    `<p([^>]*)>(?:(?:\\s|&nbsp;|<br\\s*\\/?>)*${escapedMarker})+(?:\\s|&nbsp;|<br\\s*\\/?>)*<\\/p>`,
+    "gi",
+  );
+  const withoutEmptyBlocks = marked.replace(emptyBlockPattern, "");
+  return withoutEmptyBlocks.replace(
+    new RegExp(`[ \\t]*${escapedMarker}[ \\t]*`, "g"),
+    (match) =>
+      /^[ \t]/.test(match) && /[ \t]$/.test(match) ? " " : "",
+  );
+}
+
+export function removeSectionReferencesFromSections<
+  T extends { id: string; content: string },
+>(sections: T[], target: { id: string; name: string }): T[] {
+  return sections
+    .filter((section) => section.id !== target.id)
+    .map((section) => {
+      const content = removeSectionReferences(section.content, target);
+      return content === section.content ? section : { ...section, content };
+    });
+}
+
 // True when two rich-text bodies differ only in insignificant whitespace (a
 // stray space, an &nbsp;, or whitespace between tags). Lets a save or proposal
 // that added no real content - e.g. just hitting the spacebar - be treated as a

@@ -24,7 +24,12 @@ import {
   recordConnectionUsage,
 } from "@/lib/creed-backend";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { markdownToRichHtml, normalizeRichTextInput, richTextContentEquivalent } from "@/lib/rich-text";
+import {
+  markdownToRichHtml,
+  normalizeRichTextInput,
+  removeSectionReferencesFromSections,
+  richTextContentEquivalent,
+} from "@/lib/rich-text";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
 
@@ -423,7 +428,10 @@ export async function POST(request: Request) {
       return targetDenied;
     }
 
-    nextSections = result.state.sections.filter((section) => section.id !== target.id);
+    nextSections = removeSectionReferencesFromSections(
+      result.state.sections,
+      target,
+    );
     revisedSectionId = target.id;
     activityEntry = {
       id: `activity-direct-${Date.now()}`,

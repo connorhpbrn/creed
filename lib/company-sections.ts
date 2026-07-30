@@ -22,6 +22,7 @@ import { actorLabel } from "@/lib/creed-attribution";
 import { getDisplayName } from "@/lib/user-name";
 import {
   normalizeRichTextInput,
+  removeSectionReferences,
   richTextContentEquivalent,
 } from "@/lib/rich-text";
 
@@ -344,8 +345,70 @@ async function renumberSections(
 async function deleteSectionRows(
   creedId: string,
   sectionId: string,
+  targetName: string,
+  actor: Actor,
+  cause: WriteCause,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const db = admin();
+  const now = new Date().toISOString();
+  const { data: rows, error: loadError } = (await db
+    .from("creed_sections")
+    .select("section_id, kind, name, accent, payload, revision")
+    .eq("creed_id", creedId)
+    .is("deleted_at", null)) as {
+    data: SectionRow[] | null;
+    error?: { message: string } | null;
+  };
+  if (loadError) return { ok: false, error: loadError.message };
+
+  for (const row of rows ?? []) {
+    if (row.section_id === sectionId) continue;
+    const before = row.payload.content ?? "";
+    const content = removeSectionReferences(before, {
+      id: sectionId,
+      name: targetName,
+    });
+    if (content === before) continue;
+
+    const revision = row.revision + 1;
+    const { error } = await db
+      .from("creed_sections")
+      .update({
+        payload: { ...row.payload, content },
+        revision,
+        last_edited_by: actor.label,
+        last_edited_type: actor.actorType,
+        last_edited_at: now,
+        updated_at: now,
+      })
+      .eq("creed_id", creedId)
+      .eq("section_id", row.section_id);
+    if (error) return { ok: false, error: error.message };
+
+    try {
+      await writeVersion({
+        creedId,
+        sectionId: row.section_id,
+        revision,
+        name: row.name,
+        accent: row.accent,
+        content,
+        actorUserId: actor.userId,
+        actorType: actor.actorType,
+        agentName: actor.agentName,
+        cause,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not version section-reference cleanup.",
+      };
+    }
+  }
+
   const cleanupTargets = [
     "creed_section_versions",
     "creed_member_section_permissions",
@@ -489,7 +552,13 @@ async function applyDraft(params: {
   if (!current) return { ok: false, code: "not_found", error: "Section not found." };
 
   if (draft.kind === "delete-section") {
-    const deleted = await deleteSectionRows(creedId, sectionId);
+    const deleted = await deleteSectionRows(
+      creedId,
+      sectionId,
+      current.name,
+      actor,
+      cause,
+    );
     if (!deleted.ok) return { ok: false, code: "failed", error: "Could not delete the section." };
     return {
       ok: true,
@@ -1770,7 +1839,13 @@ export async function deleteCompanySection(params: {
     return { ok: false, code: "not_found", error: "Section not found." };
   }
 
-  const deleted = await deleteSectionRows(creedId, sectionId);
+  const deleted = await deleteSectionRows(
+    creedId,
+    sectionId,
+    current.name,
+    describeActor(user, null),
+    "manual",
+  );
   if (!deleted.ok)
     return { ok: false, code: "failed", error: "Could not delete the section." };
   await writeActivity({

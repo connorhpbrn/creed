@@ -390,7 +390,7 @@
   min-height: 56px;
   font-family: var(--font-geist-sans), sans-serif;
   color: var(--creed-text-primary);
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.75;
   outline: none;
 }
@@ -417,27 +417,32 @@
 }
 
 .ProseMirror h2 {
-  font-size: 1.7rem;
+  font-size: 1.7em;
   line-height: 1.18;
 }
 
 .ProseMirror h3 {
-  font-size: 1.35rem;
+  font-size: 1.35em;
   line-height: 1.22;
 }
 
 .ProseMirror h4 {
-  font-size: 1.15rem;
+  font-size: 1.15em;
   line-height: 1.35;
 }
 
 .ProseMirror ul,
 .ProseMirror ol {
   font-family: var(--font-geist-sans), sans-serif;
-  font-size: 14px;
+  font-size: 0.875em;
   line-height: 1.75;
   padding-left: 1.45rem;
   color: var(--creed-text-primary);
+}
+
+.ProseMirror li > ul,
+.ProseMirror li > ol {
+  font-size: inherit;
 }
 
 .ProseMirror .creed-list {
@@ -502,7 +507,7 @@
 .ProseMirror .creed-list-item > p {
   margin: 0;
   font-family: var(--font-geist-sans), sans-serif;
-  font-size: 14px;
+  font-size: inherit;
   line-height: 1.75;
 }
 
@@ -547,7 +552,7 @@
 .ProseMirror .creed-callout p {
   margin: 0;
   font-family: var(--font-geist-sans), sans-serif;
-  font-size: 14px;
+  font-size: 0.875em;
   line-height: 1.75;
 }
 
