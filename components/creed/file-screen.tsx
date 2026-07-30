@@ -610,60 +610,88 @@ function SectionChangeRow({ change }: { change: SectionChange }) {
 function SectionChangeList({
   changes,
   heading,
-  show,
+  loading,
   renderKey,
 }: {
   changes: SectionChange[];
   heading: string;
-  show: boolean;
+  loading: boolean;
   renderKey: number;
 }) {
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      {show ? (
-        <motion.div
-          key={renderKey}
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-          className="rounded-[var(--radius-lg)] border border-[var(--creed-border)] bg-[var(--creed-surface)]"
-        >
-          <div className="border-b border-[var(--creed-border)] px-4 py-3 text-[13px] font-medium text-[var(--creed-text-secondary)]">
-            {heading}
-          </div>
-          <div className="max-h-[280px] overflow-y-auto px-4 py-3">
-            <motion.div
-              className="space-y-2"
-              initial="hidden"
-              animate="visible"
-              variants={{
-                hidden: {},
-                visible: {
-                  transition: { staggerChildren: 0.08, delayChildren: 0.16 },
-                },
-              }}
+    <motion.div
+      layout
+      transition={{
+        layout: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
+      }}
+      className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--creed-border)] bg-[var(--creed-surface)]"
+    >
+      <div
+        className={cn(
+          "flex items-center gap-2 px-4 py-3 text-[13px] font-medium text-[var(--creed-text-secondary)] transition-colors duration-200",
+          !loading && "border-b border-[var(--creed-border)]",
+        )}
+      >
+        {heading}
+        <AnimatePresence initial={false}>
+          {loading ? (
+            <motion.span
+              initial={{ opacity: 0, scale: 0.75 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.75 }}
+              transition={{ duration: 0.18 }}
+              className="inline-flex"
             >
-              {changes.map((change) => (
-                <motion.div
-                  key={`${change.kind}-${change.id}`}
-                  variants={{
-                    hidden: { opacity: 0, y: 10 },
-                    visible: {
-                      opacity: 1,
-                      y: 0,
-                      transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] },
-                    },
-                  }}
-                >
-                  <SectionChangeRow change={change} />
-                </motion.div>
-              ))}
-            </motion.div>
-          </div>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+            </motion.span>
+          ) : null}
+        </AnimatePresence>
+      </div>
+      <AnimatePresence initial={false}>
+        {!loading ? (
+          <motion.div
+            key={renderKey}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <div className="max-h-[280px] overflow-y-auto px-4 py-3">
+              <motion.div
+                className="space-y-2"
+                initial="hidden"
+                animate="visible"
+                variants={{
+                  hidden: {},
+                  visible: {
+                    transition: { staggerChildren: 0.08, delayChildren: 0.16 },
+                  },
+                }}
+              >
+                {changes.map((change) => (
+                  <motion.div
+                    key={`${change.kind}-${change.id}`}
+                    variants={{
+                      hidden: { opacity: 0, y: 10 },
+                      visible: {
+                        opacity: 1,
+                        y: 0,
+                        transition: {
+                          duration: 0.28,
+                          ease: [0.22, 1, 0.36, 1],
+                        },
+                      },
+                    }}
+                  >
+                    <SectionChangeRow change={change} />
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -999,13 +1027,11 @@ export function FileScreen() {
     null,
   );
   const [pullPreviewRenderKey, setPullPreviewRenderKey] = useState(0);
-  const [showPullPreview, setShowPullPreview] = useState(false);
   const [pushPreview, setPushPreview] = useState<{
     sections: CreedSection[];
     warnings: string[];
   } | null>(null);
   const [pushPreviewRenderKey, setPushPreviewRenderKey] = useState(0);
-  const [showPushPreview, setShowPushPreview] = useState(false);
   const [pushPreviewBusy, setPushPreviewBusy] = useState(false);
   const [selectedVersionAction, setSelectedVersionAction] = useState<
     "push" | "pull"
@@ -2199,50 +2225,6 @@ export function FileScreen() {
   }, [router, state.sections.length]);
 
   useEffect(() => {
-    if (!pullDialogOpen || !pullPreview) {
-      setShowPullPreview(false);
-      return;
-    }
-
-    setShowPullPreview(false);
-    let secondFrame = 0;
-    const firstFrame = requestAnimationFrame(() => {
-      secondFrame = requestAnimationFrame(() => {
-        setShowPullPreview(true);
-      });
-    });
-
-    return () => {
-      cancelAnimationFrame(firstFrame);
-      if (secondFrame) {
-        cancelAnimationFrame(secondFrame);
-      }
-    };
-  }, [pullDialogOpen, pullPreview, pullPreviewRenderKey]);
-
-  useEffect(() => {
-    if (!pushDialogOpen || !pushPreview) {
-      setShowPushPreview(false);
-      return;
-    }
-
-    setShowPushPreview(false);
-    let secondFrame = 0;
-    const firstFrame = requestAnimationFrame(() => {
-      secondFrame = requestAnimationFrame(() => {
-        setShowPushPreview(true);
-      });
-    });
-
-    return () => {
-      cancelAnimationFrame(firstFrame);
-      if (secondFrame) {
-        cancelAnimationFrame(secondFrame);
-      }
-    };
-  }, [pushDialogOpen, pushPreview, pushPreviewRenderKey]);
-
-  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -3118,22 +3100,20 @@ export function FileScreen() {
               </div>
             ) : null}
 
-            {pushPreviewBusy && !pushPreview ? (
-              <div className="py-2 text-[14px] text-[var(--creed-text-secondary)]">
-                Checking what will change...
-              </div>
-            ) : pushPreview ? (
-              <SectionChangeList
-                changes={computeSectionChanges(
-                  pushPreview.sections,
-                  visibleSections,
-                  visibleSections,
-                )}
-                heading="Outgoing changes"
-                show={showPushPreview}
-                renderKey={pushPreviewRenderKey}
-              />
-            ) : null}
+            <SectionChangeList
+              changes={
+                pushPreview
+                  ? computeSectionChanges(
+                      pushPreview.sections,
+                      visibleSections,
+                      visibleSections,
+                    )
+                  : []
+              }
+              heading="Outgoing changes"
+              loading={pushPreviewBusy && !pushPreview}
+              renderKey={pushPreviewRenderKey}
+            />
 
             <div>
               <label className="mb-2 block text-[12px] font-medium text-[var(--creed-text-secondary)]">
@@ -3178,30 +3158,27 @@ export function FileScreen() {
               replaces your local file.
             </DialogDescription>
           </DialogHeader>
-          {pullBusy && !pullPreview ? (
-            <div className="py-6 text-[14px] text-[var(--creed-text-secondary)]">
-              Loading GitHub preview...
-            </div>
-          ) : pullPreview ? (
-            <div className="space-y-4">
-              {pullPreview.warnings.length > 0 ? (
-                <div className="rounded-[var(--radius-lg)] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-4 text-[14px] leading-7 text-[#92400E] dark:border-[#fbbf24]/40 dark:bg-[#451a03]/40 dark:text-[#fbbf24]">
-                  {pullPreview.warnings.join(" ")}
-                </div>
-              ) : null}
-
-              <SectionChangeList
-                changes={computeSectionChanges(
-                  visibleSections,
-                  pullPreview.sections,
-                  visibleSections,
-                )}
-                heading="Incoming changes"
-                show={showPullPreview}
-                renderKey={pullPreviewRenderKey}
-              />
-            </div>
-          ) : null}
+          <div className="space-y-4">
+            {pullPreview?.warnings.length ? (
+              <div className="rounded-[var(--radius-lg)] border border-[#FDE68A] bg-[#FFFBEB] px-4 py-4 text-[14px] leading-7 text-[#92400E] dark:border-[#fbbf24]/40 dark:bg-[#451a03]/40 dark:text-[#fbbf24]">
+                {pullPreview.warnings.join(" ")}
+              </div>
+            ) : null}
+            <SectionChangeList
+              changes={
+                pullPreview
+                  ? computeSectionChanges(
+                      visibleSections,
+                      pullPreview.sections,
+                      visibleSections,
+                    )
+                  : []
+              }
+              heading="Incoming changes"
+              loading={pullBusy && !pullPreview}
+              renderKey={pullPreviewRenderKey}
+            />
+          </div>
           <DialogFooter className="justify-between border-t-[var(--creed-border)] bg-[var(--creed-surface)] sm:justify-between">
             <Button
               variant="ghost"
