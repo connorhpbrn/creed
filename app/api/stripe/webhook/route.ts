@@ -15,6 +15,7 @@ import {
   applyLifetimeSeatPurchase,
 } from "@/lib/company-billing";
 import { log } from "@/lib/observability";
+import { refundCreditTopup } from "@/lib/ai/credits";
 
 // Stripe webhook receiver.
 //
@@ -43,16 +44,13 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const webhookSecret = getStripeWebhookSecret();
   if (!webhookSecret) {
-    // Loud log so the missing config can't hide - Stripe retries 5xx
-    // responses aggressively (capped at three days), so returning 503
-    // would flood our logs and Stripe's dashboard with red. Instead we
-    // ack with 200 + `applied: false` and rely on this `error`-level
-    // line + the success-page belt-and-braces upsert to keep the system
-    // self-healing once the env var is set.
     log.error("stripe_webhook_secret_missing", {
-      hint: "Set STRIPE_WEBHOOK_SECRET. The webhook is silently no-op without it.",
+      hint: "Set STRIPE_WEBHOOK_SECRET. Returning 503 so Stripe retries the event.",
     });
-    return NextResponse.json({ ok: true, applied: false, configured: false });
+    return NextResponse.json(
+      { error: "Webhook is not configured." },
+      { status: 503 },
+    );
   }
 
   const rawBody = await request.text();
@@ -152,13 +150,20 @@ export async function POST(request: Request) {
       // Try personal then company; a charge maps to exactly one.
       const personalRevoked = await revokeEntitlementForRefund(charge);
       const companyRevoked = personalRevoked ? false : await revokeCompanyForRefund(charge);
+      const paymentIntentId = typeof charge.payment_intent === "string"
+        ? charge.payment_intent
+        : charge.payment_intent?.id ?? null;
+      const creditsRefunded = paymentIntentId
+        ? await refundCreditTopup(paymentIntentId)
+        : false;
       log.info("stripe_webhook_refund_processed", {
         eventId: event.id,
         chargeId: charge.id,
         revoked: personalRevoked || companyRevoked,
+        creditsRefunded,
         scope: companyRevoked ? "company" : "personal",
       });
-      return NextResponse.json({ ok: true, applied: personalRevoked || companyRevoked });
+      return NextResponse.json({ ok: true, applied: personalRevoked || companyRevoked || creditsRefunded });
     }
 
     if (event.type === "payment_intent.succeeded") {

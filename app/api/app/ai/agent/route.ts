@@ -5,6 +5,7 @@ import {
   deductCredits,
   resolveCompanyAiCredential,
   deductCompanyCredits,
+  cancelCreditReservation,
 } from "@/lib/ai/credits";
 import { callOpenRouter, streamOpenRouter, parseJsonObject } from "@/lib/ai/openrouter";
 import { getAgentModelId } from "@/lib/ai/model-catalog";
@@ -24,12 +25,25 @@ import { resolveActiveCreed } from "@/lib/creed-context";
 import { getCompanyAccessState } from "@/lib/creed-membership";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sectionBodyMarkdown } from "@/lib/creed-data";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const auth = await requireApiAuth();
   if (auth instanceof NextResponse) return auth;
+  const rateLimit = await checkRateLimit({
+    scope: "ai-agent",
+    identifier: auth.user.id,
+    limit: 10,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      { error: "Too many agent requests." },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+    );
+  }
 
   // The in-app "Creed" agent works on personal AND company Creeds. On a company
   // Creed it behaves identically, attributed to the acting member as "[member]'s
@@ -63,6 +77,7 @@ export async function POST(request: Request) {
     apiKey: string;
     modelId: string;
     mode: "credits" | "byok";
+    reservationId?: string;
     sectionIds: Set<string>;
     archivedIds: Set<string>;
     companyId?: string;
@@ -107,6 +122,7 @@ export async function POST(request: Request) {
       apiKey: credential.apiKey,
       modelId: getAgentModelId(),
       mode: credential.mode,
+      reservationId: credential.reservationId,
       sectionIds,
       archivedIds,
       companyId,
@@ -213,12 +229,14 @@ export async function POST(request: Request) {
                 costUsd: modelResult.costUsd,
                 feature: "panel",
                 modelId: p.modelId,
+                reservationId: p.reservationId,
               })
             : await deductCredits({
                 userId: auth.user.id,
                 costUsd: modelResult.costUsd,
                 feature: "panel",
                 modelId: p.modelId,
+                reservationId: p.reservationId,
               });
           if (debit) {
             creditBalanceUsd = debit.balanceUsd;
@@ -289,6 +307,7 @@ export async function POST(request: Request) {
         };
         send({ type: "result", result });
       } catch (error) {
+        await cancelCreditReservation(p.reservationId);
         const message =
           error instanceof Error && error.name === "AbortError"
             ? "Stopped."

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import { ChevronDownIcon as AnimatedChevronDown } from "@/components/ui/chevron-down";
@@ -72,7 +72,7 @@ function ReviewAllActions({
   );
 }
 
-export function ReviewPill({
+export const ReviewPill = memo(function ReviewPill({
   proposals,
   onAcceptAll,
   onRejectAll,
@@ -437,7 +437,7 @@ export function ReviewPill({
       ) : null}
     </div>
   );
-}
+});
 
 function ReviewPillItem({
   item,

@@ -26,6 +26,7 @@ const NO_STORE_HEADERS = {
 } as const;
 
 const PROBE_TIMEOUT_MS = 4_000;
+const PROBE_CACHE_MS = 15_000;
 
 type ComponentName = "api" | "db" | "auth";
 
@@ -42,6 +43,10 @@ type HealthPayload = {
   uptimeSeconds: number;
   components: Record<ComponentName, ComponentStatus>;
 };
+
+type ProbeResult = { payload: HealthPayload; httpStatus: number };
+let cachedProbe: { expiresAt: number; result: ProbeResult } | null = null;
+let pendingProbe: Promise<ProbeResult> | null = null;
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
@@ -70,6 +75,20 @@ async function buildPayload(): Promise<{
   payload: HealthPayload;
   httpStatus: number;
 }> {
+  const now = Date.now();
+  if (cachedProbe && cachedProbe.expiresAt > now) return cachedProbe.result;
+  if (pendingProbe) return pendingProbe;
+  pendingProbe = runProbes();
+  try {
+    const result = await pendingProbe;
+    cachedProbe = { expiresAt: Date.now() + PROBE_CACHE_MS, result };
+    return result;
+  } finally {
+    pendingProbe = null;
+  }
+}
+
+async function runProbes(): Promise<ProbeResult> {
   const apiStart = Date.now();
 
   // Run independent probes in parallel so total latency is bounded by the

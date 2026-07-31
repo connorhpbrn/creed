@@ -9,6 +9,7 @@ import {
 import { resolveManagedCompanyCreedId } from "@/lib/creed-context";
 import { withCompanyGitHubAccess } from "@/lib/company-github";
 import { readCompanyVersionControl, updateCompanyVersionControlSync } from "@/lib/company-version-control";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 type PushBody = {
   markdown?: string;
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
     }
 
     const { supabase, user } = await requireAuthenticatedUser();
+    const rateLimit = await checkRateLimit({ scope: "github-push", identifier: user.id, limit: 10, windowMs: 60_000 });
+    if (!rateLimit.ok) return NextResponse.json({ error: "Too many GitHub push requests." }, { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } });
 
     // Company managers push the company file to the COMPANY target on the TEAM's
     // GitHub connection (never a personal token); the sync bookkeeping lands on

@@ -39,7 +39,10 @@ export function getStripeClient(): Stripe {
   // No `apiVersion` pin - let the SDK use its own default so we don't
   // have to chase Stripe's version-string churn. Account-level pinning
   // is set in the Stripe Dashboard.
-  stripeClient = new Stripe(getStripeSecretKey());
+  stripeClient = new Stripe(getStripeSecretKey(), {
+    timeout: 15_000,
+    maxNetworkRetries: 2,
+  });
   return stripeClient;
 }
 

@@ -5,6 +5,7 @@ import {
   deductCredits,
   resolveCompanyAiCredential,
   deductCompanyCredits,
+  cancelCreditReservation,
 } from "@/lib/ai/credits";
 import { callOpenRouter, parseJsonObject } from "@/lib/ai/openrouter";
 import { recordAiUsage } from "@/lib/ai/persistence";
@@ -23,6 +24,7 @@ import {
   type PanelTurn,
 } from "@/lib/panel/actions";
 import { permissionIsReadable, sectionBodyMarkdown } from "@/lib/creed-data";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // Panel's Search + Ask resolve in a single fast call; a minute is generous
 // headroom, not a target - the client aborts long before this.
@@ -31,7 +33,20 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const auth = await requireApiAuth();
   if (auth instanceof NextResponse) return auth;
+  const rateLimit = await checkRateLimit({
+    scope: "ai-panel",
+    identifier: auth.user.id,
+    limit: 10,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      { error: "Too many panel requests." },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+    );
+  }
 
+  let reservationId: string | undefined;
   try {
     const body = (await request.json()) as {
       mode?: string;
@@ -118,6 +133,7 @@ export async function POST(request: Request) {
     const credential = companyId
       ? await resolveCompanyAiCredential(companyId, "panel")
       : await resolveAiCredential(auth.supabase, auth.user.id, "panel");
+    reservationId = credential.reservationId;
     const result = await callOpenRouter({
       apiKey: credential.apiKey,
       modelId: credential.modelId,
@@ -167,12 +183,14 @@ export async function POST(request: Request) {
             costUsd: result.costUsd,
             feature: "panel",
             modelId: credential.modelId,
+            reservationId: credential.reservationId,
           })
         : await deductCredits({
             userId: auth.user.id,
             costUsd: result.costUsd,
             feature: "panel",
             modelId: credential.modelId,
+            reservationId: credential.reservationId,
           });
       if (debit) {
         creditBalanceUsd = debit.balanceUsd;
@@ -213,6 +231,7 @@ export async function POST(request: Request) {
     };
     return NextResponse.json(payload);
   } catch (error) {
+    await cancelCreditReservation(reservationId);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "That didn't go through. Try again" },
       { status: 400 }

@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/api-auth";
 import { log } from "@/lib/observability";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const MEDIAN_ENDPOINT = "https://api.median.sh/api/feedback";
 
 export async function POST(request: Request) {
   const auth = await requireApiAuth();
   if (auth instanceof NextResponse) return auth;
+  const rateLimit = await checkRateLimit({ scope: "feedback", identifier: auth.user.id, limit: 5, windowMs: 60_000 });
+  if (!rateLimit.ok) return NextResponse.json({ error: "Too many feedback requests." }, { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } });
 
   const apiKey = process.env.MEDIAN_API_KEY?.trim();
   if (!apiKey) {
@@ -66,6 +69,7 @@ export async function POST(request: Request) {
           submittedAt: new Date().toISOString(),
         },
       }),
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!upstream.ok) {

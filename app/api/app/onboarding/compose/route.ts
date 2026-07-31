@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   const auth = await requireApiAuth();
   if (auth instanceof NextResponse) return auth;
 
-  const verdict = checkRateLimit({
+  const verdict = await checkRateLimit({
     scope: "onboarding-compose",
     identifier: auth.user.id,
     limit: 10,

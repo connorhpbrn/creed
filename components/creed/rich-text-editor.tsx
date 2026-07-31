@@ -2,6 +2,7 @@
 
 import type { ComponentType, CSSProperties, ReactNode } from "react";
 import {
+  memo,
   startTransition,
   useCallback,
   useEffect,
@@ -282,7 +283,7 @@ function findSectionTagSuggestionMatch({
   return null;
 }
 
-export function RichTextEditor({
+function RichTextEditorImpl({
   sectionId,
   content,
   readOnly = false,
@@ -294,6 +295,10 @@ export function RichTextEditor({
   onAddSectionAfter,
 }: RichTextEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const onChangeRef = useRef(onChange);
+  const onAddSectionAfterRef = useRef(onAddSectionAfter);
+  onChangeRef.current = onChange;
+  onAddSectionAfterRef.current = onAddSectionAfter;
   // Track the most recent HTML we emitted so the content-sync effect can
   // skip the round-trip getHTML() / setContent() when the parent rerenders
   // with the same string we just sent it. Without this every keystroke
@@ -481,11 +486,11 @@ export function RichTextEditor({
         keywords: ["new section", "add section", "insert section"],
         run: (editor, range) => {
           editor.chain().focus().deleteRange(range).run();
-          onAddSectionAfter?.();
+          onAddSectionAfterRef.current?.();
         },
       },
     ],
-    [onAddSectionAfter],
+    [],
   );
 
   const inlineTagExtension = useMemo(
@@ -510,7 +515,7 @@ export function RichTextEditor({
         shouldDeferKey: (state) =>
           Boolean(
             slashPluginKey.getState(state)?.active ||
-              sectionTagPluginKey.getState(state)?.active,
+            sectionTagPluginKey.getState(state)?.active,
           ),
       }),
     [],
@@ -581,10 +586,7 @@ export function RichTextEditor({
         placeAbove,
         top: placeAbove ? undefined : clientRect.bottom + 10,
         bottomOffset: placeAbove
-          ? Math.max(
-              window.innerHeight - clientRect.top + 10,
-              0,
-            )
+          ? Math.max(window.innerHeight - clientRect.top + 10, 0)
           : undefined,
       });
     },
@@ -1077,7 +1079,7 @@ export function RichTextEditor({
       // the keystroke's paint on the resulting cascade of re-renders.
       // Persistence is already debounced downstream (see creed-provider).
       startTransition(() => {
-        onChange(html);
+        onChangeRef.current(html);
       });
       syncSelectionToolbar(editor);
     },
@@ -1141,6 +1143,7 @@ export function RichTextEditor({
 
   useEffect(() => {
     if (!editor || readOnly) return;
+    let listening = false;
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.metaKey || event.ctrlKey) {
@@ -1158,13 +1161,37 @@ export function RichTextEditor({
       setModifierLinkMode(false);
     }
 
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("blur", onBlur);
-    return () => {
+    function startListening() {
+      if (listening) return;
+      listening = true;
+      window.addEventListener("keydown", onKeyDown);
+      window.addEventListener("keyup", onKeyUp);
+      window.addEventListener("blur", onBlur);
+    }
+
+    function removeListeners() {
+      if (!listening) return;
+      listening = false;
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
+    }
+
+    function stopListening() {
+      removeListeners();
+      setModifierLinkMode(false);
+    }
+
+    editor.on("focus", startListening);
+    editor.on("blur", stopListening);
+    if (editor.isFocused) {
+      startListening();
+    }
+
+    return () => {
+      editor.off("focus", startListening);
+      editor.off("blur", stopListening);
+      removeListeners();
     };
   }, [editor, readOnly]);
 
@@ -1228,8 +1255,9 @@ export function RichTextEditor({
     } catch {
       const domSelection = window.getSelection();
       if (domSelection && domSelection.rangeCount > 0) {
-        const domRects = Array.from(domSelection.getRangeAt(0).getClientRects())
-          .filter((item) => item.width > 0 || item.height > 0);
+        const domRects = Array.from(
+          domSelection.getRangeAt(0).getClientRects(),
+        ).filter((item) => item.width > 0 || item.height > 0);
         rect = domRects[0] ?? null;
       }
     }
@@ -1303,22 +1331,34 @@ export function RichTextEditor({
 
   // Reposition the bubble menu on scroll/resize so it stays glued to the
   // selection when the page or any scroll container moves under it.
+  const selectionToolbarVisible = selectionToolbar !== null;
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || !selectionToolbarVisible) return;
+    const currentEditor = editor;
+    let frameId: number | null = null;
 
     function reposition() {
-      if (!editor) return;
-      syncSelectionToolbar(editor);
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        syncSelectionToolbar(currentEditor);
+      });
     }
 
-    window.addEventListener("scroll", reposition, true);
+    window.addEventListener("scroll", reposition, {
+      capture: true,
+      passive: true,
+    });
     window.addEventListener("resize", reposition);
     return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
       window.removeEventListener("scroll", reposition, true);
       window.removeEventListener("resize", reposition);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor]);
+  }, [editor, selectionToolbarVisible]);
 
   // Hide the toolbar when the editor loses focus so it doesn't linger after
   // the user clicks away (e.g. into a sidebar / dialog).
@@ -1661,6 +1701,18 @@ export function RichTextEditor({
     </div>
   );
 }
+
+export const RichTextEditor = memo(
+  RichTextEditorImpl,
+  (previous, next) =>
+    previous.sectionId === next.sectionId &&
+    previous.content === next.content &&
+    previous.readOnly === next.readOnly &&
+    previous.placeholder === next.placeholder &&
+    previous.accentColor === next.accentColor &&
+    previous.sectionTagTargets === next.sectionTagTargets &&
+    previous.density === next.density,
+);
 
 function ToolbarButton({
   active,

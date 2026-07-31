@@ -26,7 +26,6 @@ type LiveStatusResponse = {
 
 const DEFAULT_LABEL = "Fully operational";
 const STATUS_ENDPOINT = "/api/status";
-const POLL_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 8_000;
 
 const STATUS_COLOR_CLASSES: Record<
@@ -151,13 +150,11 @@ export function SystemStatusPill({
     const onFocus = () => void loadStatus();
 
     void loadStatus();
-    const intervalId = window.setInterval(() => void loadStatus(), POLL_MS);
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onFocus);
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onFocus);
     };

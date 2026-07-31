@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const verdict = checkRateLimit({
+  const verdict = await checkRateLimit({
     scope: "creed-read",
     identifier: token,
     limit: 120,

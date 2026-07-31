@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const verdict = checkRateLimit({
+  const verdict = await checkRateLimit({
     scope: "creed-proposals",
     identifier: proposalToken,
     limit: 60,

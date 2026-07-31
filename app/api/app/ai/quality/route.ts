@@ -6,6 +6,7 @@ import { resolveActiveCreed } from "@/lib/creed-context";
 import { getCompanyAccessState, getPersonalCreedId } from "@/lib/creed-membership";
 import { canRunAnalysis } from "@/lib/creed-permissions";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // Quality analysis can take 30–90s depending on the model. Give the route
 // enough budget to finish even if the client disconnects mid-flight, so the
@@ -58,6 +59,19 @@ export async function POST(request: Request) {
       });
 
       return NextResponse.json(result);
+    }
+
+    const rateLimit = await checkRateLimit({
+      scope: "ai-quality",
+      identifier: auth.user.id,
+      limit: 3,
+      windowMs: 60_000,
+    });
+    if (!rateLimit.ok) {
+      return NextResponse.json(
+        { error: "Too many quality analysis requests." },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+      );
     }
 
     if (companyId) {

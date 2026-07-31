@@ -22,7 +22,6 @@ export function FileSectionNavButton({
   collapsed = false,
   reorderPosition,
   canDrag = false,
-  dragging = false,
   onDragStateChange,
   onClick,
 }: {
@@ -35,7 +34,6 @@ export function FileSectionNavButton({
   collapsed?: boolean;
   reorderPosition?: number;
   canDrag?: boolean;
-  dragging?: boolean;
   onDragStateChange?: (dragging: boolean) => void;
   onClick: () => void;
 }) {
@@ -47,7 +45,6 @@ export function FileSectionNavButton({
         type="button"
         onPointerDown={(event) => {
           if (!canDrag) return;
-          onDragStateChange?.(true);
           dragControls.start(event, { distanceThreshold: 4 });
         }}
         onClick={() => {
@@ -112,13 +109,20 @@ export function FileSectionNavButton({
       layoutDependency={reorderPosition}
       dragElastic={0}
       dragMomentum={false}
-      animate={{ opacity: dragging ? 0.64 : 1 }}
+      initial={{ opacity: 1 }}
+      whileDrag={{ opacity: 0.64 }}
       transition={{
-        layout: { duration: 0.2, ease: [0.22, 1, 0.36, 1] },
+        layout: {
+          type: "spring",
+          stiffness: 560,
+          damping: 40,
+          mass: 0.65,
+        },
         opacity: { duration: 0.12 },
       }}
       onDragStart={() => {
         draggedRef.current = true;
+        onDragStateChange?.(true);
       }}
       onDragEnd={() => {
         onDragStateChange?.(false);

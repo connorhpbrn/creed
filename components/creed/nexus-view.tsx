@@ -30,10 +30,7 @@ type NexusViewProps = {
 };
 
 export type NexusViewState = {
-  nodes: Record<
-    string,
-    Pick<SimNode, "x" | "y" | "vx" | "vy">
-  >;
+  nodes: Record<string, Pick<SimNode, "x" | "y" | "vx" | "vy">>;
   size: CanvasSize;
   transform: ViewTransform;
 };
@@ -197,8 +194,7 @@ function mixCanvasColors(
     const foregroundValue = Number.parseInt(foregroundChannel, 16);
     const backgroundValue = Number.parseInt(backgroundChannel, 16);
     return Math.round(
-      backgroundValue +
-        (foregroundValue - backgroundValue) * foregroundWeight,
+      backgroundValue + (foregroundValue - backgroundValue) * foregroundWeight,
     );
   };
 
@@ -331,6 +327,7 @@ export function NexusView({
   const draggedNodeRef = useRef<string | null>(null);
   const hoveredNodeRef = useRef<string | null>(null);
   const animationAlphaRef = useRef(initialViewState ? 0.08 : 1);
+  const requestCanvasDrawRef = useRef<() => void>(() => {});
   const needsFitRef = useRef(!initialViewState);
   const graphKeyRef = useRef("");
   const nodeKeyRef = useRef("");
@@ -377,8 +374,7 @@ export function NexusView({
           transformRef.current.x += (width - current.width) / 2;
           transformRef.current.y += (height - current.height) / 2;
         } else if (restoredSizeRef.current) {
-          transformRef.current.x +=
-            (width - restoredSizeRef.current.width) / 2;
+          transformRef.current.x += (width - restoredSizeRef.current.width) / 2;
           transformRef.current.y +=
             (height - restoredSizeRef.current.height) / 2;
           restoredSizeRef.current = null;
@@ -389,6 +385,7 @@ export function NexusView({
         return { width, height };
       });
       animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.5);
+      requestCanvasDrawRef.current();
     });
 
     observer.observe(container);
@@ -469,6 +466,7 @@ export function NexusView({
     graphKeyRef.current = graphKey;
     nodeKeyRef.current = nodeKey;
     graphHydratedRef.current = true;
+    requestCanvasDrawRef.current();
     setSelectedNodeId((current) =>
       current && next.has(current) ? current : null,
     );
@@ -569,6 +567,7 @@ export function NexusView({
 
   const updateTooltipForNode = useCallback((node: SimNode | null) => {
     hoveredNodeRef.current = node?.id ?? null;
+    requestCanvasDrawRef.current();
     if (!node) {
       setTooltip(null);
       return;
@@ -608,6 +607,7 @@ export function NexusView({
         containNodeInView(node, size, transformRef.current);
       }
       animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.15);
+      requestCanvasDrawRef.current();
     },
     [graph.nodes.length, size],
   );
@@ -672,6 +672,7 @@ export function NexusView({
         };
         draggedNodeRef.current = node.id;
         animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.5);
+        requestCanvasDrawRef.current();
         updateTooltipForNode(node);
         setDragging(true);
         return;
@@ -726,6 +727,7 @@ export function NexusView({
           k: scale,
         };
         animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.15);
+        requestCanvasDrawRef.current();
         return;
       }
 
@@ -736,6 +738,7 @@ export function NexusView({
           y: gesture.transform.y + point.y - gesture.start.y,
         };
         animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.12);
+        requestCanvasDrawRef.current();
         return;
       }
 
@@ -757,6 +760,7 @@ export function NexusView({
         node.vx = 0;
         node.vy = 0;
         animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.45);
+        requestCanvasDrawRef.current();
         updateTooltipForNode(node);
         return;
       }
@@ -824,6 +828,7 @@ export function NexusView({
   const resetView = useCallback(() => {
     fitToGraph();
     animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.4);
+    requestCanvasDrawRef.current();
   }, [fitToGraph]);
 
   const handleKeyDown = useCallback(
@@ -858,6 +863,7 @@ export function NexusView({
       }
 
       animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.16);
+      requestCanvasDrawRef.current();
     },
     [applyZoom, resetView, selectedNodeId, size.height, size.width],
   );
@@ -870,7 +876,7 @@ export function NexusView({
     }
 
     const ctx = context;
-    let frameId = 0;
+    let frameId: number | null = null;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.floor(size.width * dpr);
     canvas.height = Math.floor(size.height * dpr);
@@ -963,6 +969,7 @@ export function NexusView({
     }
 
     function draw() {
+      frameId = null;
       if (needsFitRef.current) {
         fitToGraph();
         needsFitRef.current = false;
@@ -1019,9 +1026,7 @@ export function NexusView({
           }
         }
       }
-      const canvasBackground = resolveCanvasColor(
-        "var(--creed-background)",
-      );
+      const canvasBackground = resolveCanvasColor("var(--creed-background)");
 
       for (const node of nodes) {
         const hovered = hoveredNodeRef.current === node.id;
@@ -1049,11 +1054,28 @@ export function NexusView({
 
       ctx.restore();
 
+      if (
+        animationAlphaRef.current >= 0.002 ||
+        gestureRef.current !== null ||
+        needsFitRef.current
+      ) {
+        frameId = window.requestAnimationFrame(draw);
+      }
+    }
+
+    function requestDraw() {
+      if (frameId !== null) return;
       frameId = window.requestAnimationFrame(draw);
     }
 
-    frameId = window.requestAnimationFrame(draw);
-    return () => window.cancelAnimationFrame(frameId);
+    requestCanvasDrawRef.current = requestDraw;
+    requestDraw();
+    return () => {
+      requestCanvasDrawRef.current = () => {};
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
   }, [fitToGraph, selectedNodeId, size]);
 
   return (

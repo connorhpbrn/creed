@@ -8,6 +8,7 @@ import { companyInviteSubject, renderCompanyInviteEmail } from "@/lib/email-temp
 import { getSiteUrl } from "@/lib/supabase/env";
 import { recordAuditEvent } from "@/lib/audit-log";
 import { getDisplayName } from "@/lib/user-name";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -45,6 +46,8 @@ export async function DELETE(_request: Request, ctx: Ctx) {
 export async function POST(request: Request, ctx: Ctx) {
   const auth = await requireApiAuth();
   if (auth instanceof NextResponse) return auth;
+  const rateLimit = await checkRateLimit({ scope: "company-invite-resend", identifier: auth.user.id, limit: 10, windowMs: 60 * 60_000 });
+  if (!rateLimit.ok) return NextResponse.json({ error: "Too many invite requests." }, { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } });
   const { id } = await ctx.params;
 
   const creedId = await resolveCreedId(id);

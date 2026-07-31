@@ -115,7 +115,7 @@ export async function POST(request: Request) {
     return oauthError("invalid_client", 400, "client_id is required.");
   }
 
-  const verdict = checkRateLimit({
+  const verdict = await checkRateLimit({
     scope: "oauth-token",
     identifier: clientId,
     limit: 60,

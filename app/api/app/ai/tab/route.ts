@@ -5,6 +5,7 @@ import {
   deductCredits,
   resolveCompanyAiCredential,
   deductCompanyCredits,
+  cancelCreditReservation,
 } from "@/lib/ai/credits";
 import { streamOpenRouter } from "@/lib/ai/openrouter";
 import { recordAiUsage } from "@/lib/ai/persistence";
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
   const auth = await requireApiAuth();
   if (auth instanceof NextResponse) return auth;
 
-  const verdict = checkRateLimit({
+  const verdict = await checkRateLimit({
     scope: "ai-tab",
     identifier: auth.user.id,
     limit: TAB_RATE_LIMIT,
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
     modelId: string;
     mode: "credits" | "byok";
     maxTokens: number;
+    reservationId?: string;
   };
   try {
     const body = (await request.json()) as {
@@ -136,6 +138,7 @@ export async function POST(request: Request) {
       apiKey: credential.apiKey,
       modelId: credential.modelId,
       mode: credential.mode,
+      reservationId: credential.reservationId,
       // Headroom over the visible completion: reasoning models spend some of
       // this budget on (excluded) reasoning before the content arrives.
       maxTokens: mode === "draft" ? 400 : 320,
@@ -196,12 +199,14 @@ export async function POST(request: Request) {
                 costUsd: result.costUsd,
                 feature: "tab",
                 modelId: p.modelId,
+                reservationId: p.reservationId,
               })
             : await deductCredits({
                 userId: auth.user.id,
                 costUsd: result.costUsd,
                 feature: "tab",
                 modelId: p.modelId,
+                reservationId: p.reservationId,
               });
           if (debit) {
             creditBalanceUsd = debit.balanceUsd;
@@ -229,6 +234,7 @@ export async function POST(request: Request) {
           }
         }
       } catch (error) {
+        await cancelCreditReservation(p.reservationId);
         // An empty or failed stream simply yields no ghost: the client treats
         // an empty body as "no suggestion" and returns to idle silently. A
         // user-initiated abort is expected, not an error.

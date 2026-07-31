@@ -4,6 +4,7 @@ import { requireApiAuth } from "@/lib/api-auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { updateCompanyGeneral } from "@/lib/company-admin";
 import { getCreedRole } from "@/lib/creed-membership";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const AVATAR_BUCKET = "creed-avatars";
 const MAX_BYTES = 3 * 1024 * 1024;
@@ -43,6 +44,7 @@ type StorageClient = {
         },
       ) => Promise<{ error: { message: string } | null }>;
       getPublicUrl: (path: string) => { data: { publicUrl: string } };
+      remove: (paths: string[]) => Promise<{ error: { message: string } | null }>;
     };
   };
 };
@@ -68,6 +70,8 @@ function badRequest(message: string) {
 export async function POST(request: Request) {
   const auth = await requireApiAuth();
   if (auth instanceof NextResponse) return auth;
+  const rateLimit = await checkRateLimit({ scope: "avatar-upload", identifier: auth.user.id, limit: 3, windowMs: 60 * 60_000 });
+  if (!rateLimit.ok) return NextResponse.json({ error: "Too many profile picture uploads." }, { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } });
 
   const form = await request.formData().catch(() => null);
   if (!form) return badRequest("Invalid upload.");
@@ -138,6 +142,7 @@ export async function POST(request: Request) {
   } = storage.storage.from(AVATAR_BUCKET).getPublicUrl(path);
 
   if (scope === "personal") {
+    const previousUrl = typeof auth.user.user_metadata?.avatar_url === "string" ? auth.user.user_metadata.avatar_url : null;
     const { error } = await auth.supabase.auth.updateUser({
       data: {
         avatar_url: publicUrl,
@@ -145,24 +150,42 @@ export async function POST(request: Request) {
       },
     });
     if (error) {
+      await storage.storage.from(AVATAR_BUCKET).remove([path]);
       return NextResponse.json(
         { error: "Could not save profile picture." },
         { status: 500 },
       );
     }
+    if (previousUrl) await removePreviousAvatar(storage, previousUrl, path);
   } else {
+    const { data: previousCompany } = await getSupabaseAdminClient().from("creeds").select("avatar_url").eq("id", String(creedId)).maybeSingle();
     const result = await updateCompanyGeneral({
       creedId: String(creedId),
       actor: auth.user,
       avatarUrl: publicUrl,
     });
     if (!result.ok) {
+      await storage.storage.from(AVATAR_BUCKET).remove([path]);
       return NextResponse.json(
         { error: result.error },
         { status: result.status },
       );
     }
+    const previousUrl = (previousCompany as { avatar_url?: string | null } | null)?.avatar_url;
+    if (previousUrl) await removePreviousAvatar(storage, previousUrl, path);
   }
 
   return NextResponse.json({ ok: true, avatarUrl: publicUrl });
+}
+
+async function removePreviousAvatar(storage: StorageClient, publicUrl: string, currentPath: string) {
+  try {
+    const marker = `/storage/v1/object/public/${AVATAR_BUCKET}/`;
+    const encodedPath = publicUrl.split(marker)[1];
+    if (!encodedPath) return;
+    const previousPath = decodeURIComponent(encodedPath);
+    if (previousPath !== currentPath) await storage.storage.from(AVATAR_BUCKET).remove([previousPath]);
+  } catch {
+    // The new avatar is already saved. Orphan cleanup is best-effort.
+  }
 }

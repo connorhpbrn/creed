@@ -4,6 +4,7 @@ import { resolveActiveCreed } from "@/lib/creed-context";
 import { requireApiAuth } from "@/lib/api-auth";
 import { log } from "@/lib/observability";
 import { validateCreedState } from "@/lib/validation/creed-state";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function GET() {
   const auth = await requireApiAuth();
@@ -35,6 +36,8 @@ export async function GET() {
 export async function PUT(request: Request) {
   const auth = await requireApiAuth();
   if (auth instanceof NextResponse) return auth;
+  const rateLimit = await checkRateLimit({ scope: "state-write", identifier: auth.user.id, limit: 60, windowMs: 60_000 });
+  if (!rateLimit.ok) return NextResponse.json({ error: "Too many save requests." }, { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } });
 
   // The full-state PUT is the personal autosave path (writes by user_id). In
   // company mode the client must use the per-section API instead; reject here so

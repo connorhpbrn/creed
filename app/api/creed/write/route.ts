@@ -304,7 +304,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const verdict = checkRateLimit({
+  const verdict = await checkRateLimit({
     scope: "creed-write",
     identifier: writeToken,
     limit: 60,

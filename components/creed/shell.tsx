@@ -203,8 +203,6 @@ export function CreedShell({
   canonicalSidebarOrderRef.current = canonicalSidebarOrder;
   const [sidebarOrder, setSidebarOrder] = useState<string[] | null>(null);
   const sidebarOrderRef = useRef<string[] | null>(null);
-  const [sidebarReorderActive, setSidebarReorderActive] = useState(false);
-  const [sidebarDraggingId, setSidebarDraggingId] = useState<string | null>(null);
   const orderedSidebarSections = useMemo(() => {
     if (!sidebarOrder) return visibleSidebarSections;
     const sectionsById = new Map(
@@ -219,43 +217,41 @@ export function CreedShell({
     state.company?.myRole === "owner" ||
     state.company?.myRole === "admin";
 
-  const beginSidebarReorder = useCallback((sectionId: string) => {
+  const beginSidebarReorder = useCallback(() => {
     const initialOrder = canonicalSidebarOrderRef.current;
     sidebarOrderRef.current = initialOrder;
-    setSidebarOrder(initialOrder);
-    setSidebarReorderActive(true);
-    setSidebarDraggingId(sectionId);
   }, []);
 
   const previewSidebarReorder = useCallback((nextOrder: string[]) => {
+    if (nextOrder.join("|") === sidebarOrderRef.current?.join("|")) return;
     sidebarOrderRef.current = nextOrder;
     setSidebarOrder(nextOrder);
   }, []);
 
   const finishSidebarReorder = useCallback(() => {
     const finalOrder = sidebarOrderRef.current;
+    if (!finalOrder) return;
+
+    if (finalOrder.join("|") !== canonicalSidebarOrderRef.current.join("|")) {
+      reorderSections(finalOrder);
+      return;
+    }
+
     sidebarOrderRef.current = null;
     setSidebarOrder(null);
-    setSidebarReorderActive(false);
-    setSidebarDraggingId(null);
-    if (
-      finalOrder &&
-      finalOrder.join("|") !== canonicalSidebarOrderRef.current.join("|")
-    ) {
-      reorderSections(finalOrder);
-    }
   }, [reorderSections]);
 
   useEffect(() => {
-    if (!sidebarReorderActive) return;
-    const finish = () => finishSidebarReorder();
-    window.addEventListener("pointerup", finish);
-    window.addEventListener("pointercancel", finish);
-    return () => {
-      window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", finish);
-    };
-  }, [finishSidebarReorder, sidebarReorderActive]);
+    if (
+      !sidebarOrder ||
+      sidebarOrder.join("|") !== canonicalSidebarOrder.join("|")
+    ) {
+      return;
+    }
+
+    sidebarOrderRef.current = null;
+    setSidebarOrder(null);
+  }, [canonicalSidebarOrder, sidebarOrder]);
   const registerFileActions = useCallback((actions: ShellFileActions) => {
     fileActionsRef.current = actions;
 
@@ -560,10 +556,9 @@ export function CreedShell({
                     collapsed={collapsed}
                     reorderPosition={reorderPosition}
                     canDrag={canReorderSidebar}
-                    dragging={sidebarDraggingId === section.id}
                     onDragStateChange={(dragging) =>
                       dragging
-                        ? beginSidebarReorder(section.id)
+                        ? beginSidebarReorder()
                         : finishSidebarReorder()
                     }
                     onClick={() => handleSectionClick(section.id)}

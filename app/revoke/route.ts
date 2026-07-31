@@ -19,7 +19,7 @@ export function OPTIONS() {
 
 export async function POST(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  const verdict = checkRateLimit({
+  const verdict = await checkRateLimit({
     scope: "oauth-revoke",
     identifier: ip,
     limit: 30,

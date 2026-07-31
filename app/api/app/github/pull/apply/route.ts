@@ -3,6 +3,7 @@ import type { CreedSection } from "@/lib/creed-data";
 import { loadCreedState, persistCreedState } from "@/lib/creed-backend";
 import { requireAuthenticatedUser } from "@/lib/github-version-control";
 import { resolveManagedCompanyCreedId } from "@/lib/creed-context";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 type ApplyBody = {
   sections?: CreedSection[];
@@ -15,6 +16,8 @@ type ApplyBody = {
 export async function POST(request: Request) {
   try {
     const { supabase, user } = await requireAuthenticatedUser();
+    const rateLimit = await checkRateLimit({ scope: "github-pull-apply", identifier: user.id, limit: 10, windowMs: 60_000 });
+    if (!rateLimit.ok) return NextResponse.json({ error: "Too many GitHub pull requests." }, { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } });
     // Applying a GitHub import overwrites sections via the personal full-state
     // persist, which is blocked for company Creeds; guard it explicitly.
     if (await resolveManagedCompanyCreedId(supabase, user)) {

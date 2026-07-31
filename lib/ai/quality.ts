@@ -15,6 +15,7 @@ import {
   deductCompanyCredits,
   resolveAiCredential,
   resolveCompanyAiCredential,
+  cancelCreditReservation,
 } from "@/lib/ai/credits";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
@@ -806,7 +807,9 @@ export async function analyzeCreedQuality({
     : await resolveAiCredential(client, userId, "analysis");
   const qualityScope: QualityScope = companyId ? "company" : "personal";
   const qualitySubjectText = qualitySubject(qualityScope);
-  const result = await callOpenRouter({
+  let result: Awaited<ReturnType<typeof callOpenRouter>>;
+  try {
+    result = await callOpenRouter({
     apiKey: credential.apiKey,
     modelId: credential.modelId,
     // The schema-valid reply is compact (scores + short notes for the targeted
@@ -828,7 +831,11 @@ export async function analyzeCreedQuality({
         content: buildQualityPrompt(sections, targets, qualityScope),
       },
     ],
-  });
+    });
+  } catch (error) {
+    await cancelCreditReservation(credential.reservationId);
+    throw error;
+  }
 
   // Parse the model output first. A truncated or malformed response throws
   // here, before any charge, so the user is never billed for an analysis that
@@ -837,6 +844,7 @@ export async function analyzeCreedQuality({
   try {
     parsed = parseJsonObject(result.content);
   } catch {
+    await cancelCreditReservation(credential.reservationId);
     throw new Error("Analysis failed. Try again");
   }
 
@@ -878,12 +886,14 @@ export async function analyzeCreedQuality({
           costUsd: result.costUsd,
           feature: "analysis",
           modelId: credential.modelId,
+          reservationId: credential.reservationId,
         })
       : await deductCredits({
           userId,
           costUsd: result.costUsd,
           feature: "analysis",
           modelId: credential.modelId,
+          reservationId: credential.reservationId,
         });
     if (debit) {
       creditBalanceUsd = debit.balanceUsd;

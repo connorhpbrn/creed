@@ -40,7 +40,42 @@ export type ResolvedAiCredential = {
   apiKey: string;
   modelId: string;
   mode: AiMode;
+  reservationId?: string;
 };
+
+const MAX_RESERVATION_MICRO: Record<AiFeature, number> = {
+  tab: 100_000,
+  panel: 2_000_000,
+  analysis: 2_000_000,
+};
+
+async function reserveCredits(params: {
+  creedId: string;
+  feature: AiFeature;
+  modelId: string;
+  spentBy: string | null;
+}): Promise<string> {
+  const admin = getSupabaseAdminClient() as unknown as RpcClient;
+  const { data, error } = await admin.rpc("reserve_credits", {
+    p_creed_id: params.creedId,
+    p_amount_micro: MAX_RESERVATION_MICRO[params.feature],
+    p_feature: params.feature,
+    p_model_id: params.modelId,
+    p_spent_by: params.spentBy,
+  });
+  if (error || typeof data !== "string") {
+    if (/insufficient_credits/i.test(error?.message ?? "")) throw new Error("Out of credits");
+    throw new Error("Credits are temporarily unavailable");
+  }
+  return data;
+}
+
+export async function cancelCreditReservation(reservationId: string | undefined): Promise<void> {
+  if (!reservationId) return;
+  const admin = getSupabaseAdminClient() as unknown as RpcClient;
+  const { error } = await admin.rpc("cancel_credit_reservation", { p_reservation_id: reservationId });
+  if (error) log.error("credit_reservation_cancel_failed", { reservationId, message: error.message });
+}
 
 export type PublicCreditTransaction = {
   id: string;
@@ -378,7 +413,9 @@ export async function resolveAiCredential(
     throw new Error("Out of credits");
   }
 
-  return { apiKey, modelId, mode: "credits" };
+  const creedId = await personalCreedId(userId);
+  const reservationId = await reserveCredits({ creedId, feature, modelId, spentBy: userId });
+  return { apiKey, modelId, mode: "credits", reservationId };
 }
 
 // Deduct realCost x markup after a successful call, draining the granted bucket
@@ -390,24 +427,22 @@ export async function deductCredits({
   costUsd,
   feature,
   modelId,
+  reservationId,
 }: {
   userId: string;
   costUsd: number;
   feature: AiFeature;
   modelId: string;
+  reservationId?: string;
 }): Promise<{ chargedMicroUsd: number; balanceUsd: number } | null> {
   const chargedMicroUsd = Math.max(
     MIN_DEBIT_MICRO,
     Math.ceil(costUsd * CREDIT_MARKUP * MICRO_PER_USD)
   );
   const admin = getSupabaseAdminClient() as unknown as RpcClient;
-  const { data, error } = await admin.rpc("debit_credits", {
-    p_creed_id: await personalCreedId(userId),
-    p_amount_micro: chargedMicroUsd,
-    p_feature: feature,
-    p_model_id: modelId,
-    p_spent_by: userId,
-  });
+  const { data, error } = reservationId
+    ? await admin.rpc("settle_credit_reservation", { p_reservation_id: reservationId, p_actual_micro: chargedMicroUsd })
+    : await admin.rpc("debit_credits", { p_creed_id: await personalCreedId(userId), p_amount_micro: chargedMicroUsd, p_feature: feature, p_model_id: modelId, p_spent_by: userId });
   if (error) {
     log.error("credit_debit_failed_after_spend", {
       userId,
@@ -609,7 +644,8 @@ export async function resolveCompanyAiCredential(
   if (totalMicro <= 0) {
     throw new Error("Out of credits");
   }
-  return { apiKey, modelId, mode: "credits" };
+  const reservationId = await reserveCredits({ creedId, feature, modelId, spentBy: null });
+  return { apiKey, modelId, mode: "credits", reservationId };
 }
 
 // Deduct a company AI call from the pooled balance, attributed to the spender.
@@ -620,22 +656,20 @@ export async function deductCompanyCredits({
   costUsd,
   feature,
   modelId,
+  reservationId,
 }: {
   creedId: string;
   spentBy: string;
   costUsd: number;
   feature: AiFeature;
   modelId: string;
+  reservationId?: string;
 }): Promise<{ chargedMicroUsd: number; balanceUsd: number } | null> {
   const chargedMicroUsd = Math.max(MIN_DEBIT_MICRO, Math.ceil(costUsd * CREDIT_MARKUP * MICRO_PER_USD));
   const admin = getSupabaseAdminClient() as unknown as RpcClient;
-  const { data, error } = await admin.rpc("debit_credits", {
-    p_creed_id: creedId,
-    p_amount_micro: chargedMicroUsd,
-    p_feature: feature,
-    p_model_id: modelId,
-    p_spent_by: spentBy,
-  });
+  const { data, error } = reservationId
+    ? await admin.rpc("settle_credit_reservation", { p_reservation_id: reservationId, p_actual_micro: chargedMicroUsd })
+    : await admin.rpc("debit_credits", { p_creed_id: creedId, p_amount_micro: chargedMicroUsd, p_feature: feature, p_model_id: modelId, p_spent_by: spentBy });
   if (error) {
     log.error("company_credit_debit_failed_after_spend", { creedId, micro: chargedMicroUsd, feature, message: error.message });
     return null;
@@ -691,6 +725,18 @@ export async function companyCreditTopup({
     log.error("company_credit_topup_failed", { creedId, paymentIntentId, message: error.message });
     throw new Error("Could not credit balance");
   }
+}
+
+export async function refundCreditTopup(paymentIntentId: string): Promise<boolean> {
+  const admin = getSupabaseAdminClient() as unknown as RpcClient;
+  const { data, error } = await admin.rpc("refund_credit_topup", {
+    p_payment_intent_id: paymentIntentId,
+  });
+  if (error) {
+    log.error("credit_topup_refund_failed", { paymentIntentId, message: error.message });
+    throw new Error("Could not refund credit balance");
+  }
+  return data === true;
 }
 
 // Balance (both buckets) + recent ledger for the settings card. Refreshes the

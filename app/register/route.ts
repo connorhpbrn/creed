@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  const verdict = checkRateLimit({
+  const verdict = await checkRateLimit({
     scope: "oauth-register",
     identifier: ip,
     limit: 20,

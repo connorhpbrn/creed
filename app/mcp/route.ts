@@ -2169,7 +2169,7 @@ export async function POST(request: Request) {
     return unauthorized();
   }
 
-  const verdict = checkRateLimit({
+  const verdict = await checkRateLimit({
     scope: "creed-mcp",
     identifier: bearer,
     limit: 120,
@@ -2200,8 +2200,26 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = (await request.json()) as JsonRpcRequest | JsonRpcRequest[];
+  let body: JsonRpcRequest | JsonRpcRequest[];
+  try {
+    body = (await request.json()) as JsonRpcRequest | JsonRpcRequest[];
+  } catch {
+    return NextResponse.json(
+      { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } },
+      { status: 400, headers: MCP_CORS_HEADERS },
+    );
+  }
   const requests = Array.isArray(body) ? body : [body];
+  if (requests.length > 20) {
+    return NextResponse.json(
+      {
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32600, message: "JSON-RPC batches are limited to 20 requests." },
+      },
+      { status: 400, headers: MCP_CORS_HEADERS },
+    );
+  }
   // Resolve which Creed this batch targets (personal by default, or a company
   // Creed named via the `creed` arg + granted to this token). Company Creeds
   // load read-only. MCP only needs recent activity + a tight proposal cap.

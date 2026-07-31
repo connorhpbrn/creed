@@ -8,6 +8,7 @@ import { companyInviteSubject, renderCompanyInviteEmail } from "@/lib/email-temp
 import { getSiteUrl } from "@/lib/supabase/env";
 import { recordAuditEvent } from "@/lib/audit-log";
 import { getDisplayName } from "@/lib/user-name";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // POST /api/app/company/invites { creedId, email, role } - owner/admin.
 // Creates a pending invite (seat + freeze checked in the lib) and emails the
@@ -16,6 +17,8 @@ import { getDisplayName } from "@/lib/user-name";
 export async function POST(request: Request) {
   const auth = await requireApiAuth();
   if (auth instanceof NextResponse) return auth;
+  const rateLimit = await checkRateLimit({ scope: "company-invite", identifier: auth.user.id, limit: 10, windowMs: 60 * 60_000 });
+  if (!rateLimit.ok) return NextResponse.json({ error: "Too many invite requests." }, { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } });
 
   let body: unknown;
   try {

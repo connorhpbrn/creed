@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV !== "production";
+const distDir =
+  process.env.CREED_DIST_DIR ||
+  (isDev ? ".next-runtime.nosync" : undefined);
 
 // CSP — kept reasonable: blocks framing + restricts script origins. Inline
 // styles are allowed because Tailwind v4 + framer-motion both set them. To
@@ -34,9 +37,8 @@ const baseSecurityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
 ];
 
-// Run CSP in Report-Only first so we can verify nothing breaks before enforcing.
-// Flip to "Content-Security-Policy" when you've watched the console for a release cycle.
-const cspHeader = process.env.CREED_CSP_ENFORCE === "1"
+// Production enforces CSP unless an emergency rollback explicitly disables it.
+const cspHeader = !isDev && process.env.CREED_CSP_ENFORCE !== "0"
   ? { key: "Content-Security-Policy", value: csp }
   : { key: "Content-Security-Policy-Report-Only", value: csp };
 
@@ -67,12 +69,11 @@ const withBundleAnalyzer = process.env.ANALYZE === "true"
   : (config: NextConfig) => config;
 
 const nextConfig: NextConfig = {
-  // Dev builds to .next-runtime (not .next). CREED_DIST_DIR lets a second dev
-  // server (e.g. an agent preview) run from an isolated build dir so it doesn't
-  // race the primary dev server's artifacts.
-  ...(process.env.NODE_ENV === "development"
-    ? { distDir: process.env.CREED_DIST_DIR || ".next-runtime" }
-    : {}),
+  // Keep the constantly changing dev cache out of iCloud Drive. macOS excludes
+  // directories ending in `.nosync`, which prevents Desktop-hosted checkouts
+  // from making fileproviderd index every Turbopack write. CREED_DIST_DIR lets
+  // preview servers and local verification builds use their own isolated cache.
+  ...(distDir ? { distDir } : {}),
   reactStrictMode: true,
   poweredByHeader: false,
   images: {

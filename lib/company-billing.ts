@@ -112,14 +112,9 @@ export async function provisionCompanyFromSession(
 
   const admin = getSupabaseAdminClient() as unknown as SupabaseLikeClient;
 
-  // Idempotency: if a billing row already carries this session id, we already
-  // provisioned. Return its Creed id.
-  const { data: existingBySession } = (await admin
-    .from("creed_company_billing")
-    .select("creed_id")
-    .eq("stripe_session_id", session.id)
-    .maybeSingle()) as { data: { creed_id: string } | null };
-  if (existingBySession) return existingBySession.creed_id;
+  // Re-run the idempotent provisioning steps on webhook retries. In particular,
+  // do not return early for an existing billing row: the previous attempt may
+  // have failed while granting the initial AI allowance.
 
   const mode: "subscription" | "lifetime" =
     session.mode === "subscription" ? "subscription" : "lifetime";
@@ -171,11 +166,21 @@ export async function provisionCompanyFromSession(
       .from("creeds")
       .insert({ type: "company", name: "Your company", owner_user_id: userId, onboarding_stage: "questions" })
       .select("id")
-      .single()) as { data: { id: string } | null; error: { message: string } | null };
-    if (createError || !created) {
+      .single()) as { data: { id: string } | null; error: { message: string; code?: string } | null };
+    if (createError?.code === "23505") {
+      const { data: concurrentShell } = (await admin
+        .from("creeds")
+        .select("id")
+        .eq("owner_user_id", userId)
+        .eq("type", "company")
+        .single()) as { data: { id: string } | null };
+      if (!concurrentShell) throw new Error("Could not resolve the company Creed.");
+      creedId = concurrentShell.id;
+    } else if (createError || !created) {
       throw new Error(createError?.message ?? "Could not create the company Creed.");
+    } else {
+      creedId = created.id;
     }
-    creedId = created.id;
   }
 
   // Owner membership (idempotent via the (creed_id, user_id) PK). This and the
@@ -217,8 +222,8 @@ export async function provisionCompanyFromSession(
 
   // Initial usage grant on the shared creed_id-keyed wallet (grant_allowance,
   // same RPC personal uses). Subscription -> $50 this month; lifetime -> one-time
-  // $200 keyed to the session so it never resets. Best-effort: a grant failure
-  // must not unwind the paid provisioning.
+  // $200 keyed to the session so it never resets. Failure is retryable through
+  // Stripe because provisioning and the grant are idempotent.
   const grantMicro =
     (mode === "lifetime" ? COMPANY_GRANT_LIFETIME_USD : COMPANY_GRANT_MONTHLY_USD) *
     MICRO_PER_USD;
@@ -232,10 +237,11 @@ export async function provisionCompanyFromSession(
     p_period_key: periodKey,
   });
   if (grantError) {
-    log.warn("company_initial_grant_failed", {
+    log.error("company_initial_grant_failed", {
       creedId,
       error: grantError instanceof Error ? grantError.message : String(grantError),
     });
+    throw new Error("Could not grant the company AI allowance.");
   }
 
   return creedId;
@@ -407,6 +413,10 @@ export async function buyCompanySeats(params: {
   const subscription = await stripe.subscriptions.retrieve(billing.stripe_subscription_id);
   const seatItem = subscription.items.data.find((item) => item.price.id === seatPriceId);
   const newSeatQuantity = (seatItem?.quantity ?? 0) + quantity;
+
+  // Stripe owns the authoritative quantity. Concurrent dashboard purchases can
+  // race on this read-modify-write, but the next subscription webhook always
+  // reconciles `extra_seats` from Stripe, so the local row is never authoritative.
 
   await stripe.subscriptions.update(subscription.id, {
     items: [

@@ -99,10 +99,7 @@ import {
   subscribeQualityRunner,
 } from "@/lib/ai/quality-runner";
 import { RichTextEditor } from "@/components/creed/rich-text-editor";
-import {
-  NexusView,
-  type NexusViewState,
-} from "@/components/creed/nexus-view";
+import { NexusView, type NexusViewState } from "@/components/creed/nexus-view";
 import { CreedFindReplace } from "@/components/creed/find-replace";
 import {
   DiffBadge,
@@ -321,10 +318,7 @@ function scrollFileElementIntoView(
   container.scrollTo({ top: targetTop, behavior });
 }
 
-function getFileElementScrollTop(
-  container: HTMLElement,
-  element: HTMLElement,
-) {
+function getFileElementScrollTop(container: HTMLElement, element: HTMLElement) {
   const stickyHeader = container.querySelector<HTMLElement>(
     "[data-file-sticky-header]",
   );
@@ -831,7 +825,9 @@ export function FileScreen() {
       setCollapsedSectionIds(
         new Set(
           Array.isArray(parsed)
-            ? parsed.filter((value): value is string => typeof value === "string")
+            ? parsed.filter(
+                (value): value is string => typeof value === "string",
+              )
             : [],
         ),
       );
@@ -868,10 +864,6 @@ export function FileScreen() {
   canonicalVisibleOrderRef.current = canonicalVisibleOrder;
   const [reorderOrder, setReorderOrder] = useState<string[] | null>(null);
   const reorderOrderRef = useRef<string[] | null>(null);
-  const [reorderActive, setReorderActive] = useState(false);
-  const [reorderDraggingId, setReorderDraggingId] = useState<string | null>(
-    null,
-  );
   const orderedVisibleSections = useMemo(() => {
     if (!reorderOrder) return visibleSections;
     const sectionsById = new Map(
@@ -886,32 +878,41 @@ export function FileScreen() {
       ...visibleSections.filter((section) => !orderedIds.has(section.id)),
     ];
   }, [reorderOrder, visibleSections]);
-  const beginReorder = useCallback((sectionId: string) => {
+  const beginReorder = useCallback(() => {
     const initialOrder = canonicalVisibleOrderRef.current;
     reorderOrderRef.current = initialOrder;
-    setReorderOrder(initialOrder);
-    setReorderActive(true);
-    setReorderDraggingId(sectionId);
   }, []);
 
   const previewReorder = useCallback((nextOrder: string[]) => {
+    if (nextOrder.join("|") === reorderOrderRef.current?.join("|")) return;
     reorderOrderRef.current = nextOrder;
     setReorderOrder(nextOrder);
   }, []);
 
   const finishReorder = useCallback(() => {
     const finalOrder = reorderOrderRef.current;
+    if (!finalOrder) return;
+
+    if (finalOrder.join("|") !== canonicalVisibleOrderRef.current.join("|")) {
+      reorderSections(finalOrder);
+      return;
+    }
+
     reorderOrderRef.current = null;
     setReorderOrder(null);
-    setReorderActive(false);
-    setReorderDraggingId(null);
-    if (
-      finalOrder &&
-      finalOrder.join("|") !== canonicalVisibleOrderRef.current.join("|")
-    ) {
-      reorderSections(finalOrder);
-    }
   }, [reorderSections]);
+
+  useEffect(() => {
+    if (
+      !reorderOrder ||
+      reorderOrder.join("|") !== canonicalVisibleOrder.join("|")
+    ) {
+      return;
+    }
+
+    reorderOrderRef.current = null;
+    setReorderOrder(null);
+  }, [canonicalVisibleOrder, reorderOrder]);
   // json-stable: names/accents change rarely, so the identity survives
   // keystrokes and the memoized section cards don't see a new prop.
   const visibleSectionTagTargets = useJsonStable(
@@ -955,6 +956,46 @@ export function FileScreen() {
     }
     return buckets;
   }, [stablePendingProposals]);
+  const reviewPillProposalCandidates = useMemo(() => {
+    const sectionsById = new Map(
+      state.sections.map((section) => [section.id, section]),
+    );
+    return stablePendingProposals.map((proposal) => {
+      const target = sectionsById.get(proposal.sectionId);
+      return {
+        proposal,
+        existingContent: target?.content ?? "",
+        sectionName: target?.name ?? proposal.sectionName,
+        canReview:
+          state.creedType !== "company" ||
+          (state.company?.myPermissions?.[proposal.sectionId] ?? "direct") ===
+            "direct",
+      };
+    });
+  }, [
+    stablePendingProposals,
+    state.company?.myPermissions,
+    state.creedType,
+    state.sections,
+  ]);
+  const reviewPillProposalsRef = useRef(reviewPillProposalCandidates);
+  const reviewPillProposalsChanged =
+    reviewPillProposalsRef.current.length !==
+      reviewPillProposalCandidates.length ||
+    reviewPillProposalCandidates.some((candidate, index) => {
+      const previous = reviewPillProposalsRef.current[index];
+      return (
+        !previous ||
+        previous.proposal !== candidate.proposal ||
+        previous.existingContent !== candidate.existingContent ||
+        previous.sectionName !== candidate.sectionName ||
+        previous.canReview !== candidate.canReview
+      );
+    });
+  if (reviewPillProposalsChanged) {
+    reviewPillProposalsRef.current = reviewPillProposalCandidates;
+  }
+  const reviewPillProposals = reviewPillProposalsRef.current;
   const [activityOpen, setActivityOpen] = useState(false);
   // Watching the state covers every open path at once (the A shortcut, the
   // header buttons, shell intents), so the "Check activity" getting-started
@@ -1176,33 +1217,33 @@ export function FileScreen() {
           : `stored:${payload.storedContentHash ?? payload.report.contentHash}`,
       );
       const nextSectionFingerprints = Object.fromEntries(
-          sectionsSnapshot.flatMap((section) => {
-            const currentSectionFingerprint = qualityFingerprint(section);
-            const storedSectionHash = payload.storedSectionHashes?.[section.id];
-            const currentSectionHash = payload.sectionHashes?.[section.id];
-            const hasLegacySectionReport = payload.report?.sections.some(
-              (sectionReport) => sectionReport.sectionId === section.id,
-            );
+        sectionsSnapshot.flatMap((section) => {
+          const currentSectionFingerprint = qualityFingerprint(section);
+          const storedSectionHash = payload.storedSectionHashes?.[section.id];
+          const currentSectionHash = payload.sectionHashes?.[section.id];
+          const hasLegacySectionReport = payload.report?.sections.some(
+            (sectionReport) => sectionReport.sectionId === section.id,
+          );
 
-            if (
-              payload.current ||
-              (storedSectionHash && storedSectionHash === currentSectionHash)
-            ) {
-              return [[section.id, currentSectionFingerprint] as const];
-            }
-            if (storedSectionHash) {
-              return [[section.id, `stored:${storedSectionHash}`] as const];
-            }
-            if (hasLegacySectionReport) {
-              return [
-                [
-                  section.id,
-                  `stored:legacy:${payload.storedContentHash ?? payload.report?.contentHash ?? "unknown"}:${section.id}`,
-                ] as const,
-              ];
-            }
-            return [];
-          }),
+          if (
+            payload.current ||
+            (storedSectionHash && storedSectionHash === currentSectionHash)
+          ) {
+            return [[section.id, currentSectionFingerprint] as const];
+          }
+          if (storedSectionHash) {
+            return [[section.id, `stored:${storedSectionHash}`] as const];
+          }
+          if (hasLegacySectionReport) {
+            return [
+              [
+                section.id,
+                `stored:legacy:${payload.storedContentHash ?? payload.report?.contentHash ?? "unknown"}:${section.id}`,
+              ] as const,
+            ];
+          }
+          return [];
+        }),
       );
       setAnalyzedSectionFingerprints((previous) =>
         keepIfEqual(previous, nextSectionFingerprints),
@@ -1210,19 +1251,6 @@ export function FileScreen() {
     },
     [],
   );
-  useEffect(() => {
-    if (!reorderActive) return;
-    // Safety net: a pointerdown on the drag handle that never becomes a drag
-    // doesn't fire onDragEnd, so the pointer release clears the flag.
-    const clear = () => finishReorder();
-    window.addEventListener("pointerup", clear);
-    window.addEventListener("pointercancel", clear);
-    return () => {
-      window.removeEventListener("pointerup", clear);
-      window.removeEventListener("pointercancel", clear);
-    };
-  }, [finishReorder, reorderActive]);
-
   // Stable dispatch table for the memoized section cards: identity never
   // changes (safe to hold in a memoized card across skipped renders), while
   // calls always run the freshest closures via the ref.
@@ -1260,8 +1288,8 @@ export function FileScreen() {
     addSectionAfter: (sectionId: string) => openComposerAndReveal(sectionId),
     setCollapsed: (sectionId: string, collapsed: boolean) =>
       setSectionCollapsed(sectionId, collapsed),
-    dragActiveChange: (active: boolean, sectionId: string) =>
-      active ? beginReorder(sectionId) : finishReorder(),
+    dragActiveChange: (active: boolean, _sectionId: string) =>
+      active ? beginReorder() : finishReorder(),
   };
   const sectionHandlersRef = useRef(sectionHandlersImpl);
   sectionHandlersRef.current = sectionHandlersImpl;
@@ -2083,6 +2111,50 @@ export function FileScreen() {
     },
     [normalizedPendingProposals, revealEditorTarget],
   );
+  const acceptAllReviewPillProposals = useCallback(() => {
+    acceptProposals(stablePendingProposals.map((proposal) => proposal.id));
+  }, [acceptProposals, stablePendingProposals]);
+  const rejectAllReviewPillProposals = useCallback(() => {
+    stablePendingProposals.forEach((proposal) => rejectProposal(proposal.id));
+  }, [rejectProposal, stablePendingProposals]);
+  const acceptOneReviewPillProposal = useCallback(
+    (proposalId: string) => {
+      void acceptProposal(proposalId);
+    },
+    [acceptProposal],
+  );
+  const rejectOneReviewPillProposal = useCallback(
+    (proposalId: string) => rejectProposal(proposalId),
+    [rejectProposal],
+  );
+  const deleteOneReviewPillProposal = useCallback(
+    (proposalId: string) => withdrawProposal(proposalId),
+    [withdrawProposal],
+  );
+  const editOneReviewPillProposal = useCallback(
+    (proposal: Proposal) => {
+      const html =
+        proposal.draft.kind === "rich-text"
+          ? (proposal.draft.contentHtml ?? "")
+          : "";
+      setReopenDraft({
+        sectionId: proposal.sectionId,
+        content: html,
+      });
+      withdrawProposal(proposal.id);
+      revealEditorTarget({ type: "section", id: proposal.sectionId });
+    },
+    [revealEditorTarget, withdrawProposal],
+  );
+  const jumpToReviewPillProposal = useCallback(
+    (proposal: Proposal) => {
+      const targetId =
+        proposal.draft.kind === "new-section" ? null : proposal.sectionId;
+      if (!targetId) return;
+      revealEditorTarget({ type: "section", id: targetId });
+    },
+    [revealEditorTarget],
+  );
 
   const handleProposalSelect = useCallback(
     (proposalId: string) => {
@@ -2175,9 +2247,13 @@ export function FileScreen() {
       const offset = (stickyHeader?.getBoundingClientRect().height ?? 96) + 32;
       let bestId: string | null = null;
       let bestDistance = Infinity;
+      let firstVisibleId: string | null = null;
 
       for (const element of elements) {
         const rect = element.getBoundingClientRect();
+        if (!firstVisibleId && rect.bottom > offset) {
+          firstVisibleId = targetIdOf(element);
+        }
         const distance = Math.abs(rect.top - offset);
         if (rect.top - offset <= 0 && rect.bottom > offset) {
           if (distance < bestDistance) {
@@ -2188,11 +2264,7 @@ export function FileScreen() {
       }
 
       if (!bestId) {
-        const firstVisible = elements.find((element) => {
-          const rect = element.getBoundingClientRect();
-          return rect.bottom > offset;
-        });
-        bestId = firstVisible ? targetIdOf(firstVisible) : null;
+        bestId = firstVisibleId;
       }
 
       const lock = scrollLockRef.current;
@@ -2207,13 +2279,25 @@ export function FileScreen() {
       setActiveShellSection(bestId);
     }
 
+    let frameId: number | null = null;
+    function scheduleUpdate() {
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        update();
+      });
+    }
+
     update();
-    container.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
+    container.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
 
     return () => {
-      container.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      container.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
       setActiveShellSection(null);
     };
   }, [
@@ -2713,71 +2797,14 @@ export function FileScreen() {
                 {normalizedPendingProposals.length > 0 ? (
                   <FileStickyReviewRow>
                     <ReviewPill
-                      proposals={normalizedPendingProposals.map((proposal) => {
-                        const target = state.sections.find(
-                          (s) => s.id === proposal.sectionId,
-                        );
-                        return {
-                          proposal,
-                          existingContent: target?.content ?? "",
-                          sectionName: target?.name ?? proposal.sectionName,
-                          canReview:
-                            state.creedType !== "company" ||
-                            (state.company?.myPermissions?.[
-                              proposal.sectionId
-                            ] ?? "direct") === "direct",
-                        };
-                      })}
-                      onAcceptAll={() => {
-                        // Single-commit batch accept - bypasses the
-                        // per-proposal server-state fetch that was
-                        // re-introducing already-accepted proposals.
-                        acceptProposals(
-                          normalizedPendingProposals.map((p) => p.id),
-                        );
-                      }}
-                      onRejectAll={() => {
-                        normalizedPendingProposals.forEach((p) =>
-                          rejectProposal(p.id),
-                        );
-                      }}
-                      onAcceptOne={(id) => {
-                        void acceptProposal(id);
-                      }}
-                      onRejectOne={(id) => {
-                        rejectProposal(id);
-                      }}
-                      onDeleteOne={(id) => {
-                        withdrawProposal(id);
-                      }}
-                      onEditOne={(proposal) => {
-                        // Re-open the draft in its section, withdraw the pending
-                        // one, and scroll there so they continue editing.
-                        const html =
-                          proposal.draft.kind === "rich-text"
-                            ? (proposal.draft.contentHtml ?? "")
-                            : "";
-                        setReopenDraft({
-                          sectionId: proposal.sectionId,
-                          content: html,
-                        });
-                        withdrawProposal(proposal.id);
-                        revealEditorTarget({
-                          type: "section",
-                          id: proposal.sectionId,
-                        });
-                      }}
-                      onJumpToProposal={(proposal) => {
-                        const targetId =
-                          proposal.draft.kind === "new-section"
-                            ? null
-                            : proposal.sectionId;
-                        if (!targetId) return;
-                        revealEditorTarget({
-                          type: "section",
-                          id: targetId,
-                        });
-                      }}
+                      proposals={reviewPillProposals}
+                      onAcceptAll={acceptAllReviewPillProposals}
+                      onRejectAll={rejectAllReviewPillProposals}
+                      onAcceptOne={acceptOneReviewPillProposal}
+                      onRejectOne={rejectOneReviewPillProposal}
+                      onDeleteOne={deleteOneReviewPillProposal}
+                      onEditOne={editOneReviewPillProposal}
+                      onJumpToProposal={jumpToReviewPillProposal}
                     />
                   </FileStickyReviewRow>
                 ) : null}
@@ -2854,45 +2881,46 @@ export function FileScreen() {
                       return (
                         <SectionCardBound
                           key={section.id}
-                          section={section}
-                          editingBy={sectionPresence[section.id]}
-                          sectionTagTargets={visibleSectionTagTargets}
-                          locked={sectionLocked}
-                          proposeMode={proposeMode}
-                          canReview={canReview}
-                          readOnlyMember={readOnlyMember}
-                          canDrag={canReorderSections}
-                          reorderPosition={reorderPosition}
-                          isDragging={reorderDraggingId === section.id}
-                          collapsed={collapsedSectionIds.has(section.id)}
-                          reopenDraft={
-                            reopenDraft?.sectionId === section.id
-                              ? reopenDraft.content
-                              : null
-                          }
-                          globalLocked={state.locked}
-                          quality={quality}
-                          qualityLoading={qualitySectionLoading === section.id}
-                          qualityDirty={
-                            qualityEnabled &&
-                            canSeeQuality &&
-                            // Members can only refresh sections they have propose or direct access to.
-                            (state.creedType !== "company" ||
-                              canProposeToSection(myPerm)) &&
-                            (!quality ||
-                              !analyzedFingerprint ||
-                              analyzedFingerprint !== currentFingerprint)
-                          }
-                          proposals={
-                            proposalsBySectionId.get(section.id) ??
-                            EMPTY_PROPOSALS
-                          }
-                          canHistory={
-                            state.creedType === "company" && isCompanyManager
-                          }
-                          canArchive={canArchiveSection}
-                          canAddAfter={canCreateSections}
-                          handlers={sectionHandlers}
+                            section={section}
+                            editingBy={sectionPresence[section.id]}
+                            sectionTagTargets={visibleSectionTagTargets}
+                            locked={sectionLocked}
+                            proposeMode={proposeMode}
+                            canReview={canReview}
+                            readOnlyMember={readOnlyMember}
+                            canDrag={canReorderSections}
+                            reorderPosition={reorderPosition}
+                            collapsed={collapsedSectionIds.has(section.id)}
+                            reopenDraft={
+                              reopenDraft?.sectionId === section.id
+                                ? reopenDraft.content
+                                : null
+                            }
+                            globalLocked={state.locked}
+                            quality={quality}
+                            qualityLoading={
+                              qualitySectionLoading === section.id
+                            }
+                            qualityDirty={
+                              qualityEnabled &&
+                              canSeeQuality &&
+                              // Members can only refresh sections they have propose or direct access to.
+                              (state.creedType !== "company" ||
+                                canProposeToSection(myPerm)) &&
+                              (!quality ||
+                                !analyzedFingerprint ||
+                                analyzedFingerprint !== currentFingerprint)
+                            }
+                            proposals={
+                              proposalsBySectionId.get(section.id) ??
+                              EMPTY_PROPOSALS
+                            }
+                            canHistory={
+                              state.creedType === "company" && isCompanyManager
+                            }
+                            canArchive={canArchiveSection}
+                            canAddAfter={canCreateSections}
+                            handlers={sectionHandlers}
                         />
                       );
                     })}
@@ -3392,7 +3420,6 @@ const SectionCardBound = memo(function SectionCardBound({
   readOnlyMember,
   canDrag,
   reorderPosition,
-  isDragging,
   collapsed,
   reopenDraft,
   globalLocked,
@@ -3414,7 +3441,6 @@ const SectionCardBound = memo(function SectionCardBound({
   readOnlyMember: boolean;
   canDrag: boolean;
   reorderPosition: number;
-  isDragging: boolean;
   collapsed: boolean;
   reopenDraft: string | null;
   globalLocked: boolean;
@@ -3438,7 +3464,6 @@ const SectionCardBound = memo(function SectionCardBound({
       readOnlyMember={readOnlyMember}
       canDrag={canDrag}
       reorderPosition={reorderPosition}
-      isDragging={isDragging}
       collapsed={collapsed}
       onCollapsedChange={(nextCollapsed) =>
         handlers.setCollapsed(section.id, nextCollapsed)
@@ -3495,7 +3520,6 @@ function SectionCard({
   readOnlyMember = false,
   canDrag = true,
   reorderPosition,
-  isDragging,
   collapsed,
   onCollapsedChange,
   onDragActiveChange,
@@ -3537,10 +3561,7 @@ function SectionCard({
   // Whether this viewer may reorder sections (owner/admin, or personal). When
   // false the drag handle is hidden and there's no icon left of the name.
   canDrag?: boolean;
-  // Motion measures this item only when its position changes. Unaffected rich
-  // editors keep stable props while another section crosses the list.
   reorderPosition: number;
-  isDragging: boolean;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   onDragActiveChange?: (active: boolean) => void;
@@ -3576,6 +3597,7 @@ function SectionCard({
   // changes so a draft never leaks across sections.
   const [proposalDraft, setProposalDraft] = useState<string | null>(null);
   const [submittingProposal, setSubmittingProposal] = useState(false);
+  const [dragging, setDragging] = useState(false);
   useEffect(() => {
     setProposalDraft(null);
   }, [section.id]);
@@ -3609,6 +3631,9 @@ function SectionCard({
     onWithdrawProposal(p.id);
   }
   const accent = accentColorMap[section.accent];
+  const editorContent = proposeMode
+    ? (proposalDraft ?? section.content)
+    : section.content;
   // Ref so the Colour sub-trigger row can drive the stamp animation when
   // the row itself is hovered (not just the icon's own hit-target).
   const stampIconRef = useRef<StampIconHandle | null>(null);
@@ -3622,15 +3647,22 @@ function SectionCard({
       layoutDependency={reorderPosition}
       dragElastic={0}
       dragMomentum={false}
-      animate={{ opacity: isDragging ? 0.64 : 1 }}
       transition={{
         layout: {
-          duration: 0.22,
-          ease: [0.22, 1, 0.36, 1],
+          type: "spring",
+          stiffness: 520,
+          damping: 38,
+          mass: 0.7,
         },
-        opacity: { duration: 0.14 },
       }}
-      onDragEnd={() => onDragActiveChange?.(false)}
+      onDragStart={() => {
+        setDragging(true);
+        onDragActiveChange?.(true);
+      }}
+      onDragEnd={() => {
+        setDragging(false);
+        onDragActiveChange?.(false);
+      }}
       data-section-id={section.id}
       data-theme-snapshot-section
       id={section.id}
@@ -3644,7 +3676,6 @@ function SectionCard({
           <button
             type="button"
             onPointerDown={(event) => {
-              onDragActiveChange?.(true);
               dragControls.start(event, { distanceThreshold: 4 });
             }}
             className="group/drag absolute -left-7 top-1 hidden touch-none rounded-full p-1 text-[var(--creed-text-secondary)] transition-colors duration-150 hover:text-[var(--creed-text-primary)] xl:flex"
@@ -3666,7 +3697,8 @@ function SectionCard({
             onCollapsedChange(!collapsed);
           }}
           className={cn(
-            "group/header flex cursor-pointer items-start justify-between gap-4 transition-[margin] duration-[280ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "group/header flex cursor-pointer items-start justify-between gap-4 transition-opacity duration-150 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            dragging && "opacity-60",
             collapsed ? "mb-0" : "mb-6",
           )}
         >
@@ -3929,20 +3961,10 @@ function SectionCard({
           </div>
         </div>
 
-        <div
-          className={cn(
-            "grid transition-[grid-template-rows] duration-[280ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-            collapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
-          )}
-        >
-          <div className="min-h-0 overflow-hidden">
+        <div className={collapsed ? "hidden" : "block"}>
+          <div>
             <div
-              className={cn(
-                "transition-[opacity,transform] ease-[cubic-bezier(0.22,1,0.36,1)]",
-                collapsed
-                  ? "pointer-events-none -translate-y-1 opacity-0 duration-150"
-                  : "translate-y-0 opacity-100 duration-200",
-              )}
+              className="animate-in fade-in-0 duration-150"
               aria-hidden={collapsed}
             >
               {proposals.length > 0 ? (
@@ -4001,11 +4023,7 @@ function SectionCard({
               >
                 <RichTextEditor
                   sectionId={section.id}
-                  content={
-                    proposeMode
-                      ? (proposalDraft ?? section.content)
-                      : section.content
-                  }
+                  content={editorContent}
                   readOnly={locked}
                   accentColor={accentColorMap[section.accent]}
                   sectionTagTargets={sectionTagTargets}
@@ -4246,6 +4264,51 @@ function ActivityRail({
   );
   const [visibleCount, setVisibleCount] = useState(50);
 
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [statusFilter]);
+
+  return (
+    <FileActivityRailFrame open={open}>
+      {open ? (
+        <ActivityRailContent
+          activity={activity}
+          creedType={creedType}
+          proposals={proposals}
+          sections={sections}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          visibleCount={visibleCount}
+          setVisibleCount={setVisibleCount}
+          onClose={onClose}
+        />
+      ) : null}
+    </FileActivityRailFrame>
+  );
+}
+
+function ActivityRailContent({
+  activity,
+  creedType,
+  proposals,
+  sections,
+  statusFilter,
+  setStatusFilter,
+  visibleCount,
+  setVisibleCount,
+  onClose,
+}: {
+  activity: ActivityEntry[];
+  creedType: "personal" | "company";
+  proposals: Proposal[];
+  sections: CreedSection[];
+  statusFilter: "all" | ActivityStatus;
+  setStatusFilter: (status: "all" | ActivityStatus) => void;
+  visibleCount: number;
+  setVisibleCount: React.Dispatch<React.SetStateAction<number>>;
+  onClose: () => void;
+}) {
+
   const livePendingProposalIds = useMemo(
     () =>
       new Set(
@@ -4304,10 +4367,6 @@ function ActivityRail({
     [activity, creedType, livePendingProposalIds, statusFilter],
   );
 
-  useEffect(() => {
-    setVisibleCount(50);
-  }, [statusFilter]);
-
   const filtered = useMemo(
     () => filteredAll.slice(0, visibleCount),
     [filteredAll, visibleCount],
@@ -4329,8 +4388,7 @@ function ActivityRail({
   );
 
   return (
-    <FileActivityRailFrame open={open}>
-      <div className="flex h-full w-full flex-col p-5 lg:w-[356px]">
+    <div className="flex h-full w-full flex-col p-5 lg:w-[356px]">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2.5">
@@ -4431,8 +4489,7 @@ function ActivityRail({
             </div>
           )}
         </ScrollArea>
-      </div>
-    </FileActivityRailFrame>
+    </div>
   );
 }
 

@@ -315,25 +315,19 @@ export async function acceptInvite(token: string, user: User): Promise<AcceptRes
     return { ok: true, creedId: invite.creed_id };
   }
 
-  // Seat capacity may have shrunk since the invite was sent.
-  const seats = await getSeatUsage(invite.creed_id);
-  if (seats.available <= 0) {
-    return { ok: false, error: "This company is out of seats.", code: "no_seats" };
-  }
-
-  const { error: memberError } = await db.from("creed_members").insert({
-    creed_id: invite.creed_id,
-    user_id: user.id,
-    role: invite.role,
+  const rpc = db as unknown as {
+    rpc: (name: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
+  };
+  const { data: accepted, error: memberError } = await rpc.rpc("accept_company_invite", {
+    p_invite_id: invite.id,
+    p_user_id: user.id,
   });
-  if (memberError) {
+  if (memberError || accepted === "invalid") {
     return { ok: false, error: "Could not join the company.", code: "failed" };
   }
-
-  await db
-    .from("creed_invites")
-    .update({ status: "accepted", updated_at: new Date().toISOString() })
-    .eq("id", invite.id);
+  if (accepted === "no_seats") {
+    return { ok: false, error: "This company is out of seats.", code: "no_seats" };
+  }
 
   return { ok: true, creedId: invite.creed_id };
 }
