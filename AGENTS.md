@@ -69,7 +69,9 @@ lib/
 
 supabase/migrations/    canonical schema (forward-only, idempotent)
 public/                 static assets
-context/                gitignored — internal context pack (read this first)
+.agents/
+├── context/            versioned internal context pack (read this first)
+└── skills/             task-triggered agent workflows
 ```
 
 The four "god" files to be careful in:
@@ -82,14 +84,53 @@ The four "god" files to be careful in:
 
 ## Reading order before edits
 
-1. `context/index.md` (gitignored — exists locally for the maintainer
-   and any agent working in the repo)
-2. The other files in `context/` listed by `index.md`
+1. `.agents/context/index.md`
+2. The task-relevant files in `.agents/context/` listed by `index.md`
 3. The exact code path you're about to change
 
-If `context/` is missing (you cloned a public copy without it),
-read `README.md` + `CONTRIBUTING.md` + `SECURITY.md` and then this file
-end-to-end.
+If `.agents/context/` is unexpectedly missing, read `README.md` +
+`CONTRIBUTING.md` + `SECURITY.md` and then this file end-to-end.
+
+---
+
+## Repository skills
+
+When a skill is delivered as `/name` or `$name`, treat it as an explicit request
+to load that skill. A direct natural-language request for the same operation is
+equivalent. Slash-command support varies by client, so skills must never depend
+on `/name` as their only invocation path. Invocation loads the workflow but does
+not bypass its permission, confirmation, or safety gates.
+
+- Before creating any Git commit, always read and apply
+  `.agents/skills/tasks/commit/SKILL.md`, even when the current agent does not
+  discover repository skills automatically.
+- Read and apply `.agents/skills/tasks/refactor/SKILL.md` whenever the user asks to
+  refactor, restructure, simplify, extract, consolidate, split, or clean up
+  existing code.
+- After meaningful code edits and before claiming completion, always read and
+  apply `.agents/skills/tasks/review/SKILL.md`. Apply it in read-only mode when
+  the user requested review without implementation.
+- Read and apply `.agents/skills/tasks/copy/SKILL.md` whenever writing, editing,
+  or reviewing product, marketing, onboarding, interface, error, toast, prompt,
+  documentation, pricing, or other user-facing language.
+- Read and apply `.agents/skills/tasks/migrate/SKILL.md` whenever changing
+  Supabase schema, persisted data shapes, indexes, functions, triggers, grants,
+  storage policies, or RLS.
+- Read and apply `.agents/skills/tasks/debug/SKILL.md` whenever diagnosing or
+  fixing a bug, regression, failed check, unexpected behavior, or performance
+  problem.
+- Read and apply `.agents/skills/tasks/release/SKILL.md` only when the user
+  explicitly asks to prepare or execute a release, deployment, publication, or
+  tag.
+- After meaningful work, make one quiet skill-maintenance check. Read
+  `.agents/skills/authoring/create/SKILL.md` when a concrete repeated
+  workflow may deserve a new skill, and read
+  `.agents/skills/authoring/update/SKILL.md` when usage or repository
+  changes expose a stale or ineffective skill. When the opportunity was not
+  explicitly requested, offer the narrow create or update with a reason and wait
+  for approval. If no durable opportunity exists, say nothing about skills.
+- Read the matching authoring skill immediately whenever the user explicitly
+  asks to create or update a repository skill.
 
 ---
 
@@ -186,7 +227,7 @@ a sample update.
 
 Decide:
 - Did I learn something durable about the product, architecture, or
-  repo conventions? → update the relevant file in `context/`.
+  repo conventions? → update the relevant file in `.agents/context/`.
 - Did I leave the code worse in some small way (a `TODO`, a duplicated
   helper, a missing edge case)? → fix it now or call it out.
 - Did I create a new file or pattern? → make sure it's discoverable
