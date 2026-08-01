@@ -142,10 +142,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not push Creed to GitHub.";
+    const message = "Could not push Creed to GitHub.";
     return NextResponse.json(
       { error: message },
-      { status: message === "Unauthorized" ? 401 : 400 }
+      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 400 }
     );
   }
 }

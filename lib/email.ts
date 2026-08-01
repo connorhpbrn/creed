@@ -38,6 +38,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
         subject: input.subject,
         html: input.html,
       }),
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!response.ok) {

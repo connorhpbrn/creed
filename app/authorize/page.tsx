@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { CreedWordmark, IntegrationGlyph } from "@/components/creed/brand";
 import { AuthorizeSpacePicker, type SpaceOption } from "@/components/creed/authorize-space-picker";
 import { Button } from "@/components/ui/button";
 import { getAgentIconKind } from "@/lib/agent-icon";
-import { getOAuthClient, isAllowedRedirectUri } from "@/lib/oauth";
+import { getOAuthClient, isAllowedRedirectUri, oauthResource } from "@/lib/oauth";
 import {
   getAvatarInitials,
   getAvatarUrl,
@@ -13,6 +14,7 @@ import { listUserCreeds } from "@/lib/creed-membership";
 import { hasActiveEntitlement } from "@/lib/stripe";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { issueOAuthCsrfToken, oauthCsrfCookieName, OAUTH_CSRF_MAX_AGE } from "@/lib/oauth-csrf";
 
 // Creed-branded OAuth consent screen. A signed-in, set-up user sees a single
 // Allow / Deny choice with the connecting client's icon. The page renders only;
@@ -28,6 +30,7 @@ type SearchParams = {
   response_type?: string;
   state?: string;
   scope?: string;
+  resource?: string;
 };
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -73,6 +76,7 @@ export default async function AuthorizePage({
   const clientId = params.client_id ?? "";
   const redirectUri = params.redirect_uri ?? "";
   const codeChallenge = params.code_challenge ?? "";
+  const resource = params.resource ?? "";
 
   // Validate the request before showing anything. On a bad client or
   // redirect_uri we render an error and never redirect, so we can't be used as
@@ -81,6 +85,7 @@ export default async function AuthorizePage({
     !clientId ||
     !redirectUri ||
     !codeChallenge ||
+    resource !== oauthResource() ||
     !/^[A-Za-z0-9_-]{43,128}$/.test(codeChallenge) ||
     params.response_type !== "code" ||
     params.code_challenge_method !== "S256"
@@ -200,6 +205,14 @@ export default async function AuthorizePage({
     avatarUrl: creed.type === "personal" ? getAvatarUrl(user) : creed.avatarUrl,
   }));
   const showPicker = spaces.length > 1;
+  const csrfToken = issueOAuthCsrfToken();
+  (await cookies()).set(oauthCsrfCookieName(csrfToken), csrfToken, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/authorize",
+    maxAge: OAUTH_CSRF_MAX_AGE,
+  });
 
   return (
     <Shell>
@@ -224,6 +237,8 @@ export default async function AuthorizePage({
         <input type="hidden" name="client_id" value={clientId} />
         <input type="hidden" name="redirect_uri" value={redirectUri} />
         <input type="hidden" name="code_challenge" value={codeChallenge} />
+        <input type="hidden" name="resource" value={resource} />
+        <input type="hidden" name="csrf_token" value={csrfToken} />
         {params.state ? <input type="hidden" name="state" value={params.state} /> : null}
         {params.scope ? <input type="hidden" name="scope" value={params.scope} /> : null}
         {showPicker ? <AuthorizeSpacePicker spaces={spaces} /> : null}

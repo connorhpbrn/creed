@@ -25,6 +25,8 @@ export type RateLimitOptions = {
   limit: number;
   /** Window in milliseconds. */
   windowMs: number;
+  /** Number of actions consumed by this check. Defaults to one. */
+  cost?: number;
 };
 
 function cleanupExpired(now: number) {
@@ -42,11 +44,13 @@ function localRateLimit({
   identifier,
   limit,
   windowMs,
+  cost = 1,
 }: RateLimitOptions): RateLimitVerdict {
   if (limit <= 0 || windowMs <= 0) {
     return { ok: true, remaining: limit };
   }
 
+  const normalizedCost = Math.max(1, Math.floor(cost));
   const key = `${scope}:${identifier}`;
   const now = Date.now();
   cleanupExpired(now);
@@ -54,18 +58,24 @@ function localRateLimit({
   const bucket = BUCKETS.get(key);
 
   if (!bucket) {
-    BUCKETS.set(key, { tokens: limit - 1, refilledAt: now });
-    return { ok: true, remaining: limit - 1 };
+    const remaining = Math.max(0, limit - normalizedCost);
+    BUCKETS.set(key, { tokens: remaining, refilledAt: now });
+    return normalizedCost <= limit
+      ? { ok: true, remaining }
+      : { ok: false, retryAfterSeconds: Math.ceil(windowMs / 1000) };
   }
 
   const elapsed = now - bucket.refilledAt;
   if (elapsed >= windowMs) {
-    BUCKETS.set(key, { tokens: limit - 1, refilledAt: now });
-    return { ok: true, remaining: limit - 1 };
+    const remaining = Math.max(0, limit - normalizedCost);
+    BUCKETS.set(key, { tokens: remaining, refilledAt: now });
+    return normalizedCost <= limit
+      ? { ok: true, remaining }
+      : { ok: false, retryAfterSeconds: Math.ceil(windowMs / 1000) };
   }
 
-  if (bucket.tokens > 0) {
-    bucket.tokens -= 1;
+  if (bucket.tokens >= normalizedCost) {
+    bucket.tokens -= normalizedCost;
     return { ok: true, remaining: bucket.tokens };
   }
 
@@ -108,7 +118,7 @@ export async function checkRateLimit(
       p_key: `${options.scope}:${identifierHash}`,
       p_limit: options.limit,
       p_window_seconds: windowSeconds,
-      p_cost: 1,
+      p_cost: Math.max(1, Math.floor(options.cost ?? 1)),
     },
   );
   if (error) {

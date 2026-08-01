@@ -30,10 +30,10 @@ export async function GET() {
       })),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not load GitHub repos.";
+    const message = "Could not load GitHub repos.";
     return NextResponse.json(
       { error: message },
-      { status: message === "Unauthorized" ? 401 : 400 }
+      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 400 }
     );
   }
 }

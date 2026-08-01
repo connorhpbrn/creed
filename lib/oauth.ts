@@ -28,6 +28,7 @@ type CodeRow = {
   scope: string;
   expires_at: string;
   creed_grants: CreedGrant[] | null;
+  resource: string | null;
 };
 
 // A per-Creed MCP grant chosen on the consent screen: which Creed the agent may
@@ -43,6 +44,7 @@ type TokenRow = {
   revoked_at: string | null;
   access_expires_at: string;
   refresh_expires_at: string;
+  resource: string | null;
 };
 
 const ACCESS_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -51,6 +53,10 @@ const CODE_TTL_MS = 60 * 1000; // 60 seconds
 
 export const DEFAULT_SCOPE = "read propose";
 export const DIRECT_EDIT_SCOPE = "direct_edit";
+export function oauthResource() {
+  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  return `${site}/mcp`;
+}
 
 export type OAuthClient = {
   clientId: string;
@@ -70,6 +76,7 @@ export type ResolvedAccessToken = {
   clientId: string;
   clientName: string | null;
   scope: string;
+  resource: string | null;
   // The oauth_tokens row id, used to look up per-Creed grants
   // (oauth_token_creeds) for the Company plan.
   tokenId: string;
@@ -166,6 +173,11 @@ export async function getOAuthClient(clientId: string): Promise<OAuthClient | nu
   if (!row) {
     return null;
   }
+  void admin
+    .from("oauth_clients")
+    .update({ last_used_at: new Date().toISOString() })
+    .eq("client_id", row.client_id)
+    .then(undefined, () => {});
   return {
     clientId: row.client_id,
     clientName: row.client_name,
@@ -180,6 +192,7 @@ export async function issueAuthorizationCode(input: {
   codeChallenge: string;
   scope: string;
   creedGrants: CreedGrant[];
+  resource: string;
 }): Promise<string> {
   const admin = adminDb();
   const code = generateOpaqueToken("creed_ac");
@@ -192,6 +205,7 @@ export async function issueAuthorizationCode(input: {
     scope: input.scope,
     // The Creeds the user granted this connection, carried to token issue.
     creed_grants: input.creedGrants,
+    resource: input.resource,
     expires_at: new Date(Date.now() + CODE_TTL_MS).toISOString(),
   });
   if (error) {
@@ -207,14 +221,15 @@ export async function redeemAuthorizationCode(input: {
   clientId: string;
   redirectUri: string;
   codeVerifier: string;
-}): Promise<{ userId: string; scope: string; creedGrants: CreedGrant[] } | { error: string }> {
+  resource: string;
+}): Promise<{ userId: string; scope: string; creedGrants: CreedGrant[]; resource: string } | { error: string }> {
   const admin = adminDb();
   const { data, error } = await admin
     .from("oauth_authorization_codes")
     .update({ used_at: new Date().toISOString() })
     .eq("code_hash", hashSecret(input.code))
     .is("used_at", null)
-    .select("client_id, user_id, redirect_uri, code_challenge, scope, expires_at, creed_grants")
+    .select("client_id, user_id, redirect_uri, code_challenge, scope, expires_at, creed_grants, resource")
     .maybeSingle();
 
   if (error) {
@@ -236,8 +251,11 @@ export async function redeemAuthorizationCode(input: {
   if (!verifyPkceS256(input.codeVerifier, row.code_challenge)) {
     return { error: "invalid_grant" };
   }
+  if ((row.resource !== null && row.resource !== input.resource) || input.resource !== oauthResource()) {
+    return { error: "invalid_target" };
+  }
 
-  return { userId: row.user_id, scope: row.scope, creedGrants: row.creed_grants ?? [] };
+  return { userId: row.user_id, scope: row.scope, creedGrants: row.creed_grants ?? [], resource: input.resource };
 }
 
 export async function issueTokenPair(input: {
@@ -245,6 +263,7 @@ export async function issueTokenPair(input: {
   userId: string;
   scope: string;
   creedGrants: CreedGrant[];
+  resource: string;
 }): Promise<IssuedTokens> {
   const admin = adminDb();
   const accessToken = generateOpaqueToken("creed_at");
@@ -261,6 +280,7 @@ export async function issueTokenPair(input: {
       client_id: input.clientId,
       user_id: input.userId,
       scope: input.scope,
+      resource: input.resource,
       access_expires_at: new Date(now + ACCESS_TTL_MS).toISOString(),
       refresh_expires_at: new Date(now + REFRESH_TTL_MS).toISOString(),
     })
@@ -315,12 +335,14 @@ async function writeTokenCreedGrants(
 // Refresh rotation: the presented refresh token is revoked and a fresh pair is
 // issued, so a leaked-and-replayed refresh token is single-use.
 export async function rotateRefreshToken(
-  refreshToken: string
+  refreshToken: string,
+  clientId: string,
+  resource: string,
 ): Promise<IssuedTokens | { error: string }> {
   const admin = adminDb();
   const { data, error } = await admin
     .from("oauth_tokens")
-    .select("id, client_id, user_id, scope, revoked_at, refresh_expires_at")
+    .select("id, client_id, user_id, scope, revoked_at, refresh_expires_at, resource")
     .eq("refresh_token_hash", hashSecret(refreshToken))
     .maybeSingle();
 
@@ -329,6 +351,13 @@ export async function rotateRefreshToken(
   }
   const row = (data as TokenRow | null) ?? null;
   if (!row || row.revoked_at) {
+    return { error: "invalid_grant" };
+  }
+  if (
+    row.client_id !== clientId ||
+    (row.resource !== null && row.resource !== resource) ||
+    resource !== oauthResource()
+  ) {
     return { error: "invalid_grant" };
   }
   if (new Date(row.refresh_expires_at).getTime() < Date.now()) {
@@ -356,6 +385,7 @@ export async function rotateRefreshToken(
     userId: row.user_id,
     scope: row.scope,
     creedGrants,
+    resource,
   });
 }
 
@@ -365,7 +395,7 @@ export async function findOAuthAccessToken(
   const admin = adminDb();
   const { data } = await admin
     .from("oauth_tokens")
-    .select("id, client_id, user_id, scope, revoked_at, access_expires_at")
+    .select("id, client_id, user_id, scope, resource, revoked_at, access_expires_at")
     .eq("access_token_hash", hashSecret(token))
     .maybeSingle();
 
@@ -391,6 +421,7 @@ export async function findOAuthAccessToken(
     clientId: row.client_id,
     clientName: client?.clientName ?? null,
     scope: row.scope,
+    resource: row.resource,
     tokenId: row.id,
   };
 }

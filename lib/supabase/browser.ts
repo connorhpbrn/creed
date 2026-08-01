@@ -1,7 +1,7 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
-import { getSupabasePublishableKey, getSupabaseUrl } from "@/lib/supabase/env";
+import { getSupabasePublishableKey, getSupabaseUrl } from "@/lib/supabase/env-public";
 
 // Standard @supabase/ssr browser client - default cookie handling so the PKCE
 // code-verifier and session cookies round-trip correctly between the browser

@@ -64,10 +64,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json(payload);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not preview GitHub import.";
+    const message = "Could not preview GitHub import.";
     return NextResponse.json(
       { error: message },
-      { status: message === "Unauthorized" ? 401 : message.includes("No creed.md") ? 404 : 400 }
+      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : error instanceof Error && error.message.includes("No creed.md") ? 404 : 400 }
     );
   }
 }

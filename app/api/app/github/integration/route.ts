@@ -44,10 +44,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not persist GitHub integration.";
+    const message = "Could not persist GitHub integration.";
     return NextResponse.json(
       { error: message },
-      { status: message === "Unauthorized" ? 401 : 400 }
+      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 400 }
     );
   }
 }
@@ -63,10 +63,10 @@ export async function DELETE(request: Request) {
     });
     return NextResponse.json({ ok: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not disconnect GitHub.";
+    const message = "Could not disconnect GitHub.";
     return NextResponse.json(
       { error: message },
-      { status: message === "Unauthorized" ? 401 : 400 }
+      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 400 }
     );
   }
 }

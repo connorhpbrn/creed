@@ -29,6 +29,7 @@ export async function fetchRoadmap(): Promise<RoadmapColumn[]> {
       // about a minute, while capping median to ~1 request/min no matter how
       // much marketing traffic hits the page.
       next: { revalidate: 60 },
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {

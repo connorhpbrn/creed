@@ -414,6 +414,7 @@ export async function getOpenRouterModelCatalog({ force = false }: { force?: boo
     const response = await fetch(OPENROUTER_MODELS_URL, {
       method: "GET",
       cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
     });
     const payload = (await response.json()) as { data?: OpenRouterModel[] };
 

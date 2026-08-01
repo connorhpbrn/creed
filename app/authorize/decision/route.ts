@@ -5,11 +5,14 @@ import {
   getOAuthClient,
   isAllowedRedirectUri,
   issueAuthorizationCode,
+  oauthResource,
   type CreedGrant,
 } from "@/lib/oauth";
 import { listUserCreeds } from "@/lib/creed-membership";
 import { hasActiveEntitlement } from "@/lib/stripe";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
+import { oauthCsrfCookieName, verifyOAuthCsrfToken } from "@/lib/oauth-csrf";
 
 // Handles the Allow / Deny POST from the consent screen. The user is
 // re-resolved from the session (never a form field) and the client + redirect
@@ -36,16 +39,29 @@ function redirectWith(redirectUri: string, params: Record<string, string>) {
 }
 
 export async function POST(request: Request) {
+  const expectedOrigin = new URL(request.url).origin;
+  if (request.headers.get("origin") !== expectedOrigin) {
+    return badRequest("Invalid request origin.");
+  }
   const form = await request.formData();
   const decision = String(form.get("decision") ?? "");
   const clientId = String(form.get("client_id") ?? "");
   const redirectUri = String(form.get("redirect_uri") ?? "");
   const codeChallenge = String(form.get("code_challenge") ?? "");
+  const resource = String(form.get("resource") ?? "");
   const state = form.get("state");
   // Bound the reflected state defensively; legitimate CSRF state is short.
   const stateValue = typeof state === "string" && state.length <= 2048 ? state : "";
+  const csrfToken = String(form.get("csrf_token") ?? "");
+  const cookieStore = await cookies();
+  const csrfCookieName = csrfToken ? oauthCsrfCookieName(csrfToken) : "";
+  const csrfCookie = csrfCookieName ? cookieStore.get(csrfCookieName)?.value ?? "" : "";
+  if (csrfCookieName) cookieStore.delete(csrfCookieName);
+  if (!csrfToken || csrfToken !== csrfCookie || !verifyOAuthCsrfToken(csrfToken)) {
+    return badRequest("Invalid or expired consent request.");
+  }
 
-  if (!clientId || !redirectUri || !codeChallenge) {
+  if (!clientId || !redirectUri || !codeChallenge || resource !== oauthResource()) {
     return badRequest("Missing required parameters.");
   }
 
@@ -120,6 +136,7 @@ export async function POST(request: Request) {
     codeChallenge,
     scope,
     creedGrants,
+    resource,
   });
 
   return redirectWith(redirectUri, {

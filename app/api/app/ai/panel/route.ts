@@ -230,10 +230,10 @@ export async function POST(request: Request) {
       actions: ok ? actions ?? [] : [],
     };
     return NextResponse.json(payload);
-  } catch (error) {
+  } catch {
     await cancelCreditReservation(reservationId);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "That didn't go through. Try again" },
+      { error: "That didn't go through. Try again" },
       { status: 400 }
     );
   }

@@ -11,7 +11,7 @@ const distDir =
 const csp = [
   "default-src 'self'",
   // Scripts: same-origin + Next runtime needs eval in dev; loosen to unsafe-inline so we don't break inline boot
-  `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : ""} https://*.supabase.co https://js.stripe.com https://checkout.stripe.com`,
+  `script-src 'self' ${isDev ? "'unsafe-inline' 'unsafe-eval'" : ""} https://*.supabase.co https://js.stripe.com https://checkout.stripe.com`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",

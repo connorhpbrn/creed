@@ -112,9 +112,9 @@ export async function PUT(request: Request) {
     });
 
     return NextResponse.json({ settings });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not save AI settings." },
+      { error: "Could not save AI settings." },
       { status: 400 }
     );
   }

@@ -47,9 +47,9 @@ export async function POST(request: Request) {
       clientSecret: intent.client_secret,
       publishableKey: getStripePublishableKey(),
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not start the payment." },
+      { error: "Could not start the payment." },
       { status: 400 }
     );
   }

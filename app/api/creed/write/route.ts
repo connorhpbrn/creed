@@ -142,6 +142,37 @@ type DirectWriteBody =
       contentHtml?: string;
     };
 
+const MAX_WRITE_BODY_BYTES = 250_000;
+const MAX_SECTION_NAME_LENGTH = 200;
+const MAX_AGENT_NAME_LENGTH = 200;
+const MAX_CONTENT_LENGTH = 100_000;
+
+function validateDirectWriteBody(body: DirectWriteBody): string | null {
+  if ("agentName" in body && (
+    typeof body.agentName !== "string" ||
+    body.agentName.trim().length === 0 ||
+    body.agentName.length > MAX_AGENT_NAME_LENGTH
+  )) return "agentName must be between 1 and 200 characters.";
+
+  const strings: unknown[] = [];
+  if ("section" in body && body.section) {
+    if ("name" in body.section && body.section.name.length > MAX_SECTION_NAME_LENGTH) {
+      return "Section names are limited to 200 characters.";
+    }
+    if ("contentHtml" in body.section) strings.push(body.section.contentHtml);
+    if ("contentMarkdown" in body.section) strings.push(body.section.contentMarkdown);
+  }
+  if ("contentHtml" in body) strings.push(body.contentHtml);
+  if ("contentMarkdown" in body) strings.push(body.contentMarkdown);
+  if ("name" in body && typeof body.name === "string" && body.name.length > MAX_SECTION_NAME_LENGTH) {
+    return "Section names are limited to 200 characters.";
+  }
+  if (strings.some((value) => typeof value === "string" && value.length > MAX_CONTENT_LENGTH)) {
+    return "Section content is limited to 100,000 characters.";
+  }
+  return null;
+}
+
 function escapeHtml(value: string) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -303,6 +334,10 @@ export async function POST(request: Request) {
       { status: 401 }
     );
   }
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_WRITE_BODY_BYTES) {
+    return NextResponse.json({ error: "Request body is too large." }, { status: 413 });
+  }
 
   const verdict = await checkRateLimit({
     scope: "creed-write",
@@ -340,6 +375,10 @@ export async function POST(request: Request) {
     body = (await request.json()) as DirectWriteBody;
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const validationError = validateDirectWriteBody(body);
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
   let nextSections = result.state.sections;

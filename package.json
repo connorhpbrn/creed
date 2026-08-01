@@ -34,6 +34,7 @@
     "clsx": "^2.1.1",
     "diff": "^9.0.0",
     "framer-motion": "^12.38.0",
+    "isomorphic-dompurify": "^3.19.0",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.7.0",
     "motion": "^12.38.0",

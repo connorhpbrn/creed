@@ -145,6 +145,7 @@ export async function exchangeGitHubOAuthCode(args: {
       redirect_uri: args.redirectUri,
     }),
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
 
   const payload = await readJson<GitHubTokenRefreshPayload>(response);
@@ -181,6 +182,7 @@ async function githubRequest<T>(
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
+    signal: init?.signal ?? AbortSignal.timeout(10_000),
   });
 
   if (init?.allowNotFound && response.status === 404) {
@@ -362,6 +364,7 @@ export async function refreshGitHubAccessToken(
       refresh_token: refreshToken,
     }),
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
 
   const payload = await readJson<GitHubTokenRefreshPayload>(response);

@@ -53,9 +53,7 @@ export const metadata: Metadata = {
 };
 
 // The root layout is intentionally static: it holds no user state, reads no
-// cookies/headers, and renders no CreedProvider. That is what lets marketing
-// pages prerender as a static shell so <Link> fully prefetches them and
-// navigation is instant with no server round-trip. The user-specific work
+// cookies/headers, and renders no CreedProvider. User-specific work
 // (Supabase session, loadCreedState, CreedProvider) lives in <AuthedProviders>,
 // pulled in only by the layouts that need it (the app shell and onboarding).
 export default function RootLayout({
@@ -63,7 +61,6 @@ export default function RootLayout({
 }: Readonly<{
   children: ReactNode;
 }>) {
-
   return (
     <html
       lang="en"
@@ -71,18 +68,10 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
-        {/* Apply persisted theme before paint so dark mode doesn't flash.
-            This is a server-rendered inline script - runs once during the
-            initial HTML response, before React hydrates, so the dark-mode
-            class is on <html> by the time anything else paints.
-            `next/script` with strategy="beforeInteractive" was causing the
-            page to hang in Next 16 dev. Inline <script> in <head> is the
-            canonical no-flash pattern and works without ceremony. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem('creed:theme');if(t==='dark'){document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark';}}catch(e){}`,
-          }}
-        />
+        {/* A same-origin external script keeps the no-flash theme boot while
+            allowing production CSP to reject every inline script. */}
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script src="/theme-init.js" />
       </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>

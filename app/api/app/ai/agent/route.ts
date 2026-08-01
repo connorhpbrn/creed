@@ -127,9 +127,9 @@ export async function POST(request: Request) {
       archivedIds,
       companyId,
     };
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "That didn't go through. Try again" },
+      { error: "That didn't go through. Try again" },
       { status: 400 }
     );
   }
@@ -311,9 +311,7 @@ export async function POST(request: Request) {
         const message =
           error instanceof Error && error.name === "AbortError"
             ? "Stopped."
-            : error instanceof Error
-              ? error.message
-              : "That didn't go through. Try again";
+            : "That didn't go through. Try again";
         send({ type: "error", message });
       } finally {
         controller.close();

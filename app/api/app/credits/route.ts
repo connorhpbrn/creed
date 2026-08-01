@@ -32,9 +32,9 @@ export async function GET(request: Request) {
       credits.transactions = [];
     }
     return NextResponse.json({ credits }, { headers: NO_STORE_HEADERS });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not load credits." },
+      { error: "Could not load credits." },
       { status: 400 }
     );
   }

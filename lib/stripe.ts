@@ -875,6 +875,9 @@ export async function syncSubscriptionFromStripe(
   if (error) {
     throw new Error(error.message);
   }
+  if (subscription.status === "canceled") {
+    await revokeOAuthTokensForUser(row.user_id);
+  }
   return true;
 }
 

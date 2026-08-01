@@ -42,9 +42,9 @@ export async function POST(request: Request) {
       ? await getCompanyCreditsState(companyId)
       : await getCreditsState(auth.supabase, auth.user.id);
     return NextResponse.json({ credits });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not confirm the payment." },
+      { error: "Could not confirm the payment." },
       { status: 400 }
     );
   }

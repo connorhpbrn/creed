@@ -97,10 +97,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not import Creed from GitHub.";
+    const message = "Could not import Creed from GitHub.";
     return NextResponse.json(
       { error: message },
-      { status: message === "Unauthorized" ? 401 : 400 }
+      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 400 }
     );
   }
 }

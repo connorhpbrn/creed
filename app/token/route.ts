@@ -3,6 +3,7 @@ import {
   getOAuthClient,
   isAllowedRedirectUri,
   issueTokenPair,
+  oauthResource,
   redeemAuthorizationCode,
   rotateRefreshToken,
   type IssuedTokens,
@@ -107,12 +108,16 @@ export async function POST(request: Request) {
   }
 
   const grantType = params.grant_type;
+  const resource = params.resource;
   // Prefer the form-body client_id; fall back to the Basic-auth header so
   // clients like ChatGPT that authenticate the token request that way work.
   const clientId = params.client_id || parseBasicAuthClientId(request.headers.get("authorization"));
 
   if (!clientId) {
     return oauthError("invalid_client", 400, "client_id is required.");
+  }
+  if (resource !== oauthResource()) {
+    return oauthError("invalid_target", 400, "resource must identify this MCP server.");
   }
 
   const verdict = await checkRateLimit({
@@ -154,6 +159,7 @@ export async function POST(request: Request) {
       clientId,
       redirectUri,
       codeVerifier,
+      resource,
     });
     if ("error" in redeemed) {
       return oauthError(redeemed.error, redeemed.error === "server_error" ? 500 : 400);
@@ -164,6 +170,7 @@ export async function POST(request: Request) {
       userId: redeemed.userId,
       scope: redeemed.scope,
       creedGrants: redeemed.creedGrants,
+      resource: redeemed.resource,
     });
     return tokenResponse(tokens);
   }
@@ -173,7 +180,7 @@ export async function POST(request: Request) {
     if (!refreshToken) {
       return oauthError("invalid_request", 400, "refresh_token is required.");
     }
-    const rotated = await rotateRefreshToken(refreshToken);
+    const rotated = await rotateRefreshToken(refreshToken, clientId, resource);
     if ("error" in rotated) {
       return oauthError(rotated.error, rotated.error === "server_error" ? 500 : 400);
     }

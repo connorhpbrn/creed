@@ -23,9 +23,14 @@ import {
 } from "@/lib/creed-backend";
 import { companyMcpWrite, type CompanyMcpOp } from "@/lib/company-sections";
 import { minPermission, resolveSectionPermission } from "@/lib/creed-permissions";
-import { listUserCreeds, getCreedRole } from "@/lib/creed-membership";
+import { hasCompanyAccess, listUserCreeds, getCreedRole } from "@/lib/creed-membership";
 import { CREED_PROMPTS } from "@/lib/creed-prompts";
-import { findOAuthAccessToken } from "@/lib/oauth";
+import { findOAuthAccessToken, oauthResource } from "@/lib/oauth";
+import {
+  oauthPermissionCeiling,
+  parseOAuthMcpScopes,
+  type OAuthMcpScopes,
+} from "@/lib/oauth-scopes";
 import type { SupabaseLikeClient } from "@/lib/supabase/types";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -53,6 +58,39 @@ const MCP_CORS_HEADERS = {
   "Access-Control-Expose-Headers": "WWW-Authenticate, Mcp-Session-Id",
 } as const;
 
+const ENTITLEMENT_CACHE_TTL_MS = 60_000;
+const entitlementCache = new Map<string, { allowed: boolean; expiresAt: number }>();
+
+async function hasCurrentMcpAccess(
+  admin: SupabaseLikeClient,
+  userId: string,
+): Promise<boolean> {
+  const cached = entitlementCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.allowed;
+
+  const { data, error } = (await admin
+    .from("creed_entitlements")
+    .select("billing_mode, status")
+    .eq("user_id", userId)
+    .maybeSingle()) as {
+    data: { billing_mode?: string; status?: string } | null;
+    error: { message: string } | null;
+  };
+  const hasPersonalEntitlement =
+    !error &&
+    !!data &&
+    (data.billing_mode === "lifetime"
+      ? data.status === "paid"
+      : ["paid", "active", "trialing"].includes(data.status ?? ""));
+  const allowed =
+    hasPersonalEntitlement || (await hasCompanyAccess(admin, admin, userId));
+  entitlementCache.set(userId, {
+    allowed,
+    expiresAt: Date.now() + ENTITLEMENT_CACHE_TTL_MS,
+  });
+  return allowed;
+}
+
 // Injected into the model's context at connect time via the initialize
 // response. Carries the read-before-work / propose-narrowly contract so a
 // connected agent behaves correctly without the user pasting any prompt. The
@@ -77,6 +115,45 @@ type McpToolCallParams = {
   name?: string;
   arguments?: Record<string, unknown>;
 };
+
+const PROPOSAL_TOOLS = new Set([
+  "propose_creed_update",
+  "creed_update_section",
+  "creed_create_section",
+  "creed_delete_section",
+  "creed_rename_section",
+  "creed_recolor_section",
+  "creed_append_to_section",
+  "creed_reorder_section",
+]);
+
+function clampStateToOAuthGrant(
+  state: CreedState,
+  scopes: OAuthMcpScopes,
+  grantMode: string | null,
+): CreedState {
+  const scopeCeiling: AgentPermission = oauthPermissionCeiling(scopes);
+  const modeCeiling: AgentPermission =
+    grantMode === "read-only"
+      ? "read-only"
+      : grantMode === "proposal-only"
+        ? "propose"
+        : "direct";
+  return {
+    ...state,
+    sections: state.sections.map((section) => {
+      const permission = minPermission(
+        minPermission(section.agentPermission, scopeCeiling),
+        modeCeiling,
+      );
+      return {
+        ...section,
+        agentPermission: permission,
+        agentWritable: permission === "propose" || permission === "direct",
+      };
+    }),
+  };
+}
 
 // Keep the MCP route self-contained for schema/error text so a route-module
 // evaluation issue cannot break policy reads for connected agents.
@@ -462,13 +539,19 @@ const tools = [
 // approval turned off, so we hide it otherwise rather than advertising a tool
 // that would only return a 403. The flat creed_* tools stay listed in both
 // modes because they degrade to proposals automatically.
-function listToolsFor(state: CreedState) {
+function listToolsFor(state: CreedState, scopes: OAuthMcpScopes) {
   // direct_edit_creed is only useful when at least one section allows direct
   // edits; otherwise hide it so the agent doesn't reach for a tool it'd be
   // 403'd from.
   const anyDirect = state.sections.some((section) => section.agentPermission === "direct");
   const hidden = new Set<string>();
-  if (!anyDirect) hidden.add("direct_edit_creed");
+  if (!scopes.read) {
+    for (const tool of tools) hidden.add(tool.name);
+  }
+  if (!scopes.propose) {
+    for (const name of PROPOSAL_TOOLS) hidden.add(name);
+  }
+  if (!scopes.directEdit || !anyDirect) hidden.add("direct_edit_creed");
   return hidden.size > 0 ? tools.filter((tool) => !hidden.has(tool.name)) : tools;
 }
 
@@ -694,6 +777,7 @@ async function callInternalCreedRoute(
     },
     body: JSON.stringify(body),
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
   const payload = (await response.json()) as { error?: string };
 
@@ -2019,7 +2103,8 @@ async function handleRpcRequest(
   rpcRequest: JsonRpcRequest,
   state: CreedState,
   user: User,
-  fallbackAgentName: string | null
+  fallbackAgentName: string | null,
+  scopes: OAuthMcpScopes,
 ) {
   if (!rpcRequest.method) {
     return errorFor(rpcRequest.id, -32600, "Missing JSON-RPC method.");
@@ -2046,7 +2131,7 @@ async function handleRpcRequest(
   }
 
   if (rpcRequest.method === "tools/list") {
-    return responseFor(rpcRequest.id, { tools: listToolsFor(state) });
+    return responseFor(rpcRequest.id, { tools: listToolsFor(state, scopes) });
   }
 
   if (rpcRequest.method === "resources/list") {
@@ -2063,6 +2148,9 @@ async function handleRpcRequest(
   }
 
   if (rpcRequest.method === "resources/read") {
+    if (!scopes.read) {
+      return errorFor(rpcRequest.id, -32001, "The access token does not grant read scope.");
+    }
     const uri = (rpcRequest.params as { uri?: unknown } | undefined)?.uri;
     if (uri !== CREED_RESOURCE_URI) {
       return errorFor(rpcRequest.id, -32602, `Unknown resource: ${String(uri)}.`);
@@ -2102,6 +2190,16 @@ async function handleRpcRequest(
   }
 
   if (rpcRequest.method === "tools/call") {
+    const toolName = (rpcRequest.params as McpToolCallParams | undefined)?.name;
+    if (!scopes.read) {
+      return errorFor(rpcRequest.id, -32001, "The access token does not grant read scope.");
+    }
+    if (toolName === "direct_edit_creed" && !scopes.directEdit) {
+      return errorFor(rpcRequest.id, -32001, "The access token does not grant direct_edit scope.");
+    }
+    if (toolName && PROPOSAL_TOOLS.has(toolName) && !scopes.propose) {
+      return errorFor(rpcRequest.id, -32001, "The access token does not grant propose scope.");
+    }
     try {
       const result = await handleToolCall(request, rpcRequest, state, user, fallbackAgentName);
       return responseFor(rpcRequest.id, result);
@@ -2169,19 +2267,24 @@ export async function POST(request: Request) {
     return unauthorized();
   }
 
-  const verdict = await checkRateLimit({
-    scope: "creed-mcp",
-    identifier: bearer,
-    limit: 120,
+  // Limit unauthenticated token probes before any database or Auth Admin work.
+  // Keying this by IP prevents attackers from bypassing it by generating a new
+  // random bearer value for every request. The token-scoped, batch-cost-aware
+  // limiter below remains the authoritative limit for valid connections.
+  const callerIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const authVerdict = await checkRateLimit({
+    scope: "creed-mcp-auth",
+    identifier: callerIp,
+    limit: 240,
     windowMs: 60_000,
   });
-  if (!verdict.ok) {
+  if (!authVerdict.ok) {
     return NextResponse.json(
       { error: "Too many requests." },
       {
         status: 429,
-        headers: { ...MCP_CORS_HEADERS, "Retry-After": String(verdict.retryAfterSeconds) },
-      }
+        headers: { ...MCP_CORS_HEADERS, "Retry-After": String(authVerdict.retryAfterSeconds) },
+      },
     );
   }
 
@@ -2189,9 +2292,18 @@ export async function POST(request: Request) {
   if (!resolved) {
     return unauthorized();
   }
+  if (resolved.resource !== null && resolved.resource !== oauthResource()) {
+    return unauthorized();
+  }
   const userId = resolved.userId;
 
   const admin = getSupabaseAdminClient();
+  if (!(await hasCurrentMcpAccess(admin as unknown as SupabaseLikeClient, userId))) {
+    return NextResponse.json(
+      { error: "An active Creed entitlement is required." },
+      { status: 403, headers: MCP_CORS_HEADERS },
+    );
+  }
   const { data: userData, error: userError } = await admin.auth.admin.getUserById(userId);
   if (userError || !userData.user) {
     return NextResponse.json(
@@ -2220,14 +2332,42 @@ export async function POST(request: Request) {
       { status: 400, headers: MCP_CORS_HEADERS },
     );
   }
+  const verdict = await checkRateLimit({
+    scope: "creed-mcp",
+    identifier: bearer,
+    limit: 120,
+    windowMs: 60_000,
+    cost: Math.max(1, requests.length),
+  });
+  if (!verdict.ok) {
+    return NextResponse.json(
+      { error: "Too many requests." },
+      {
+        status: 429,
+        headers: { ...MCP_CORS_HEADERS, "Retry-After": String(verdict.retryAfterSeconds) },
+      }
+    );
+  }
   // Resolve which Creed this batch targets (personal by default, or a company
   // Creed named via the `creed` arg + granted to this token). Company Creeds
   // load read-only. MCP only needs recent activity + a tight proposal cap.
-  const { state } = await resolveMcpState(
+  const resolvedState = await resolveMcpState(
     admin as unknown as SupabaseLikeClient,
     userData.user as unknown as { id: string } & Record<string, unknown>,
     resolved.tokenId,
     requests
+  );
+  const scopes = parseOAuthMcpScopes(resolved.scope);
+  const { data: grantRow } = (await admin
+    .from("oauth_token_creeds")
+    .select("mode")
+    .eq("token_id", resolved.tokenId)
+    .eq("creed_id", resolvedState.state.creedId ?? "")
+    .maybeSingle()) as { data: { mode?: string } | null };
+  const state = clampStateToOAuthGrant(
+    resolvedState.state,
+    scopes,
+    grantRow?.mode ?? null,
   );
   const firstRequest = requests[0];
   const firstToolArgs =
@@ -2259,7 +2399,14 @@ export async function POST(request: Request) {
   }
 
   const results = (
-    await Promise.all(requests.map((rpcRequest) => handleRpcRequest(request, rpcRequest, state, userData.user as User, clientName)))
+    await Promise.all(requests.map((rpcRequest) => handleRpcRequest(
+      request,
+      rpcRequest,
+      state,
+      userData.user as User,
+      clientName,
+      scopes,
+    )))
   ).filter(Boolean);
 
   if (results.length === 0) {

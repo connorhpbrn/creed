@@ -6,5 +6,13 @@ export function sanitizeNextPath(next: string | string[] | undefined | null): st
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) {
     return "/";
   }
-  return value;
+  try {
+    const base = new URL("https://creed.invalid");
+    const resolved = new URL(value, base);
+    return resolved.origin === base.origin
+      ? `${resolved.pathname}${resolved.search}${resolved.hash}`
+      : "/";
+  } catch {
+    return "/";
+  }
 }

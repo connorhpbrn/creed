@@ -185,6 +185,7 @@ export async function fetchOpenRouterBalance(apiKey: string): Promise<OpenRouter
     method: "GET",
     headers: { Authorization: `Bearer ${apiKey}` },
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {

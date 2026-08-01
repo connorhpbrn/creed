@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { upsertGitHubIntegration } from "@/lib/creed-backend";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { sanitizeNextPath } from "@/lib/safe-next";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -59,17 +60,7 @@ export async function GET(request: Request) {
   // could resolve to a different host. This blocks open-redirect tricks
   // like `next=//evil.com` or `next=/\evil.com` (which `startsWith("/")`
   // alone would have accepted).
-  const safeNext = (() => {
-    if (!next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
-      return "/";
-    }
-    try {
-      const resolved = new URL(next, origin);
-      return resolved.origin === origin ? `${resolved.pathname}${resolved.search}${resolved.hash}` : "/";
-    } catch {
-      return "/";
-    }
-  })();
+  const safeNext = sanitizeNextPath(next);
 
   // Only a genuinely failed sign-in/confirmation goes to /login; link flows
   // always return to where they came from (the user is still signed in).
