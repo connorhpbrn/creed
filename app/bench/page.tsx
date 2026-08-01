@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { AnimatedPageTitle } from "@/components/marketing/animated-page-title";
 import { CodeCommand } from "@/components/marketing/code-command";
-import { CreedBenchChartLoader } from "@/components/marketing/creed-bench-chart-loader";
+import { CreedBenchChart } from "@/components/marketing/creed-bench-chart";
 import {
   MarketingFooter,
   MarketingHeroBanner,
@@ -123,7 +123,7 @@ export default function BenchPage() {
             </p>
           </header>
           <div className="mt-12">
-            <CreedBenchChartLoader />
+            <CreedBenchChart />
           </div>
 
           <section className="mt-12 border-t border-[var(--creed-border)] pt-8">

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { SceneryImage } from "@/components/marketing/scenery-image";
 import { BelowHeroSections } from "@/components/marketing/below-hero-sections";
-import { CreedAppDemoLoader } from "@/components/marketing/creed-app-demo-loader";
+import { CreedAppDemo } from "@/components/marketing/creed-app-demo";
 import { MarketingHeader } from "@/components/marketing/site-chrome";
 import { useLandingAuthState } from "@/components/marketing/use-landing-auth-state";
 import { usePaidStatus } from "@/components/marketing/use-paid-status";
@@ -108,7 +108,7 @@ export function LandingHero({ configured }: { configured: boolean }) {
           page below (like a hero product shot crossing the seam). */}
       <div className="relative z-20 -mt-[30vh] px-4 md:-mt-[34vh] md:px-10 lg:px-12">
         <div className="mx-auto max-w-6xl">
-          <CreedAppDemoLoader />
+          <CreedAppDemo />
         </div>
       </div>
 
