@@ -974,63 +974,6 @@
   }
 }
 
-/* Editor boot splash. Inert by default - the markup sits in every page's shell,
-   but only a fresh document load of /file gets `creed-booting` on <html> from
-   /theme-init.js, so nothing else ever paints it.
-
-   It leaves on a pure CSS signal: `:has()` goes true when the editor's trailing
-   marker arrives in the stream, which is before hydration and before the router
-   has anything to say. That is deliberate - a splash that waited for hydration
-   would still be up after the editor had painted. The marker is emitted after
-   the editor rather than on it, so the splash never pulls away over markup that
-   is still arriving.
-
-   Flashes are prevented on the way in rather than on the way out. Holding the
-   exit made the screen sit there after the editor was ready, which reads as
-   waiting; holding the entrance instead means a handover fast enough to look
-   like a flash simply never paints. Once the editor is here the screen leaves
-   straight away. */
-.creed-boot-splash {
-  display: none;
-}
-
-html.creed-booting .creed-boot-splash {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: block;
-  /* Opaque on the splash itself, not only on the screen inside it: nothing
-     behind should ever show through while it is up. */
-  background: var(--creed-surface);
-  /* `both` holds it at zero through the delay, so a handover inside that window
-     is never seen at all. */
-  animation: creed-boot-splash-in 160ms linear 180ms both;
-}
-
-@keyframes creed-boot-splash-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-html.creed-booting:has([data-creed-editor]) .creed-boot-splash {
-  pointer-events: none;
-  animation: creed-boot-splash-out 220ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
-}
-
-@keyframes creed-boot-splash-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-    visibility: hidden;
-  }
-}
-
 /* Hold the loading screen back for a beat before showing it. A Creed that
    resolves quickly should never flash a loader on the way past - with `both`
    fill the screen sits at zero opacity through the delay, so a load that

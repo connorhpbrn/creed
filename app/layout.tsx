@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
-import { CreedBootSplash } from "@/components/creed/creed-boot-splash";
 import { ThemeProvider } from "@/components/creed/theme-provider";
 import { WelcomeDevPreview } from "@/components/creed/welcome-dev-preview";
 import { CREED_DESCRIPTION, CREED_META_TITLE } from "@/lib/marketing/brand";
@@ -82,11 +81,6 @@ export default function RootLayout({
         <script src="/theme-init.js" />
       </head>
       <body className="min-h-full flex flex-col">
-        {/* Painted with the first bytes of the shell when /theme-init.js marks a
-            fresh document load of the editor, and taken away by CSS the moment
-            the editor's own markup arrives in the stream. Inert everywhere else
-            (see `creed-boot-splash` in globals.css). */}
-        <CreedBootSplash />
         <ThemeProvider>
           {children}
           <Toaster />

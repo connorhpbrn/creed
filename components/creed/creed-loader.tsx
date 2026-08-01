@@ -1,17 +1,34 @@
-// Branded first-load screen for a Creed. The mark turns one full revolution,
-// eased from rest to rest, then holds before going again - a continuous spin
-// reads as a generic loader, while the pause makes it feel deliberate.
+// Branded loading screen for a Creed. The mark turns one full revolution, eased
+// from rest to rest, then holds before going again - a continuous spin reads as
+// a generic loader, while the pause makes it feel deliberate.
+//
+// NOT WIRED TO ANY ROUTE. Kept for a future loading state; press L in
+// development to see it (components/creed/welcome-dev-preview.tsx).
+//
+// Two things worth knowing before putting it in front of people again, both
+// learned the hard way:
+//
+//   - A route-level loading.tsx only covers its own segment's page. The wait
+//     that matters for /file belongs to the (creed-app) layout - session,
+//     entitlement, Creed state - and an async layout's own await is covered by
+//     the boundary above it, which is also the marketing pages'. A loading.tsx
+//     under /file therefore covers the editor's render only, which is usually
+//     too fast to see.
+//   - Anything that covers the editor after the fact - a curtain mounted on
+//     hydration, a shell splash lifted on a signal that arrives mid-stream -
+//     will sooner or later paint over content the reader can already see. The
+//     trigger has to be something that cannot fire late.
 //
 // The logo is painted as a mask over --creed-text-primary rather than rendered
 // as an <img>, so it takes the exact foreground colour in both themes and scales
 // to any size without a second asset. No client JS - the animation is CSS
-// (`creed-logo-spin` in globals.css), which is what lets this render inside a
-// route-level loading.tsx.
+// (`creed-logo-spin` in globals.css), so it can render in a server-only
+// fallback.
 //
 // `delayed` holds the whole screen at zero opacity for a beat before fading it
 // in, so a Creed that loads quickly never flashes a loader on the way past. Use
-// it wherever the screen might not be needed at all (the route fallback); leave
-// it off where the screen is already on show (the curtain's copy of it).
+// it wherever the screen might not be needed at all; leave it off where the
+// screen is already on show.
 
 const logo = "/assets/brand/logo.svg";
 
