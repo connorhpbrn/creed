@@ -1,18 +1,21 @@
 
-import DOMPurify from "isomorphic-dompurify";
+import sanitizeHtml from "sanitize-html";
 
 const RICH_TEXT_TAGS = [
   "p", "strong", "em", "u", "s", "mark", "code", "pre", "blockquote",
   "ul", "ol", "li", "a", "h2", "h3", "h4", "br", "span", "hr",
 ];
-const RICH_TEXT_ATTRIBUTES = ["href", "class", "data-tag"];
-const SAFE_RICH_TEXT_URI = /^(?:https?:|mailto:|#|\/)/i;
-
 export function sanitizeRichTextHtml(html: string): string {
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: RICH_TEXT_TAGS,
-    ALLOWED_ATTR: RICH_TEXT_ATTRIBUTES,
-    ALLOWED_URI_REGEXP: SAFE_RICH_TEXT_URI,
+  return sanitizeHtml(html, {
+    allowedTags: RICH_TEXT_TAGS,
+    allowedAttributes: {
+      a: ["href"],
+      span: ["class", "data-tag"],
+      blockquote: ["class"],
+    },
+    allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesAppliedToAttributes: ["href"],
+    allowProtocolRelative: false,
   });
 }
 
