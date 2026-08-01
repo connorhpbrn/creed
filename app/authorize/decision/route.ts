@@ -11,8 +11,7 @@ import {
 import { listUserCreeds } from "@/lib/creed-membership";
 import { hasActiveEntitlement } from "@/lib/stripe";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { cookies } from "next/headers";
-import { oauthCsrfCookieName, verifyOAuthCsrfToken } from "@/lib/oauth-csrf";
+import { verifyOAuthCsrfToken } from "@/lib/oauth-csrf";
 
 // Handles the Allow / Deny POST from the consent screen. The user is
 // re-resolved from the session (never a form field) and the client + redirect
@@ -53,13 +52,6 @@ export async function POST(request: Request) {
   // Bound the reflected state defensively; legitimate CSRF state is short.
   const stateValue = typeof state === "string" && state.length <= 2048 ? state : "";
   const csrfToken = String(form.get("csrf_token") ?? "");
-  const cookieStore = await cookies();
-  const csrfCookieName = csrfToken ? oauthCsrfCookieName(csrfToken) : "";
-  const csrfCookie = csrfCookieName ? cookieStore.get(csrfCookieName)?.value ?? "" : "";
-  if (csrfCookieName) cookieStore.delete(csrfCookieName);
-  if (!csrfToken || csrfToken !== csrfCookie || !verifyOAuthCsrfToken(csrfToken)) {
-    return badRequest("Invalid or expired consent request.");
-  }
 
   if (!clientId || !redirectUri || !codeChallenge || resource !== oauthResource()) {
     return badRequest("Missing required parameters.");
@@ -81,6 +73,35 @@ export async function POST(request: Request) {
     // again rather than leaking anything to the redirect URI. 303 so the POST
     // becomes a GET.
     return NextResponse.redirect(new URL("/", request.url).toString(), 303);
+  }
+
+  // The consent token is signed for the user who loaded the screen, so it can
+  // only be checked once the session is resolved. Nothing above this point has
+  // any side effect, and no code is issued below it without a valid token.
+  if (!verifyOAuthCsrfToken(csrfToken, user.id)) {
+    // Overwhelmingly this is someone who left the consent tab open past the
+    // token's ten minutes, and a 400 leaves them stranded mid-connect with no
+    // way back. Send them through the consent screen once more for a fresh
+    // token; `retry` makes that a single bounce rather than a loop if the
+    // token is failing for any other reason.
+    if (new URL(request.url).searchParams.get("retry") === "1") {
+      return badRequest("Invalid or expired consent request.");
+    }
+
+    const retry = new URL("/authorize", request.url);
+    // The consent page reads this back and posts to `?retry=1`, so a second
+    // failure lands on the 400 above instead of bouncing again.
+    retry.searchParams.set("retry", "1");
+    retry.searchParams.set("client_id", clientId);
+    retry.searchParams.set("redirect_uri", redirectUri);
+    retry.searchParams.set("code_challenge", codeChallenge);
+    retry.searchParams.set("code_challenge_method", "S256");
+    retry.searchParams.set("response_type", "code");
+    retry.searchParams.set("resource", resource);
+    if (stateValue) retry.searchParams.set("state", stateValue);
+    const requestedScopeParam = String(form.get("scope") ?? "").trim();
+    if (requestedScopeParam) retry.searchParams.set("scope", requestedScopeParam);
+    return NextResponse.redirect(retry.toString(), 303);
   }
 
   if (decision !== "allow") {

@@ -3,6 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { contentSecurityPolicy, requiresCspNonce } from "../lib/csp-policy.ts";
+import {
+  issueCsrfToken,
+  verifyCsrfToken,
+  OAUTH_CSRF_MAX_AGE,
+} from "../lib/oauth-csrf-core.ts";
 import { normalizeRichTextInput } from "../lib/rich-text.ts";
 import { sanitizeNextPath } from "../lib/safe-next.ts";
 import { oauthPermissionCeiling, parseOAuthMcpScopes } from "../lib/oauth-scopes.ts";
@@ -142,6 +147,58 @@ test("every nonce route renders per request", () => {
   ]) {
     assert.equal(declaresDynamic(file), true, `${file} must declare force-dynamic`);
   }
+});
+
+test("consent tokens bind to the session user and never to a cookie", () => {
+  const secret = "test-csrf-secret";
+  const token = issueCsrfToken(secret, "user-a");
+
+  assert.equal(verifyCsrfToken(secret, token, "user-a"), true);
+  // A token minted for one account cannot authorise another's consent POST.
+  assert.equal(verifyCsrfToken(secret, token, "user-b"), false);
+  assert.equal(verifyCsrfToken(secret, "", "user-a"), false);
+  assert.equal(verifyCsrfToken(secret, token, ""), false);
+  assert.equal(verifyCsrfToken(secret, `${token}tampered`, "user-a"), false);
+  assert.equal(verifyCsrfToken("other-secret", token, "user-a"), false);
+  // Expiry is enforced from the timestamp baked into the payload.
+  const issuedAt = 1_000_000;
+  const old = issueCsrfToken(secret, "user-a", issuedAt);
+  assert.equal(verifyCsrfToken(secret, old, "user-a", issuedAt + 60_000), true);
+  assert.equal(
+    verifyCsrfToken(secret, old, "user-a", issuedAt + (OAUTH_CSRF_MAX_AGE + 1) * 1000),
+    false,
+  );
+
+  // The consent screen is a Server Component: `cookies().set()` throws there, so
+  // every paid user reaching it crashed into the error boundary and MCP auth
+  // could not complete. Nothing on this page may write a cookie again.
+  const page = readFileSync(new URL("../app/authorize/page.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /cookies\(\)/);
+  assert.match(page, /issueOAuthCsrfToken\(user\.id\)/);
+
+  // And the decision route must check the token against the resolved session.
+  const decision = readFileSync(
+    new URL("../app/authorize/decision/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(decision, /verifyOAuthCsrfToken\(csrfToken, user\.id\)/);
+  // Compare against the call site, not the import at the top of the file.
+  const verifyAt = decision.indexOf("verifyOAuthCsrfToken(csrfToken, user.id)");
+  assert.ok(
+    decision.indexOf("supabase.auth.getUser()") < verifyAt,
+    "the token check needs the session user, so it must come after it is resolved",
+  );
+  assert.ok(
+    verifyAt < decision.indexOf("issueAuthorizationCode({"),
+    "no authorization code may be issued before the token is verified",
+  );
+});
+
+test("the consent screen degrades to a message instead of the error boundary", () => {
+  const page = readFileSync(new URL("../app/authorize/page.tsx", import.meta.url), "utf8");
+
+  assert.match(page, /try \{\s*return await renderAuthorize\(params\)/);
+  assert.match(page, /log\.error\("authorize consent screen failed"/);
 });
 
 test("OAuth follow-up migration keeps resources portable and cleanup serialized", () => {

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { CreedWordmark, IntegrationGlyph } from "@/components/creed/brand";
 import { AuthorizeSpacePicker, type SpaceOption } from "@/components/creed/authorize-space-picker";
 import { Button } from "@/components/ui/button";
@@ -14,7 +13,8 @@ import { listUserCreeds } from "@/lib/creed-membership";
 import { hasActiveEntitlement } from "@/lib/stripe";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { issueOAuthCsrfToken, oauthCsrfCookieName, OAUTH_CSRF_MAX_AGE } from "@/lib/oauth-csrf";
+import { issueOAuthCsrfToken } from "@/lib/oauth-csrf";
+import { log } from "@/lib/observability";
 
 // Creed-branded OAuth consent screen. A signed-in, set-up user sees a single
 // Allow / Deny choice with the connecting client's icon. The page renders only;
@@ -31,6 +31,7 @@ type SearchParams = {
   state?: string;
   scope?: string;
   resource?: string;
+  retry?: string;
 };
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -62,6 +63,26 @@ export default async function AuthorizePage({
 }) {
   const params = await searchParams;
 
+  // This screen is the last step of someone else's connect flow, so a failed
+  // read here must not surface as the generic error boundary - they have no way
+  // to interpret it and no way back. Any failure below renders the same calm
+  // "start the connection again" message, and the cause goes to the logs.
+  try {
+    return await renderAuthorize(params);
+  } catch (error) {
+    log.error("authorize consent screen failed", { route: "/authorize" }, error);
+    return (
+      <Shell>
+        <Message
+          title="Connection unavailable"
+          body="We couldn't prepare this connection just now. Start the connection again from your agent."
+        />
+      </Shell>
+    );
+  }
+}
+
+async function renderAuthorize(params: SearchParams) {
   if (!isSupabaseConfigured()) {
     return (
       <Shell>
@@ -205,14 +226,10 @@ export default async function AuthorizePage({
     avatarUrl: creed.type === "personal" ? getAvatarUrl(user) : creed.avatarUrl,
   }));
   const showPicker = spaces.length > 1;
-  const csrfToken = issueOAuthCsrfToken();
-  (await cookies()).set(oauthCsrfCookieName(csrfToken), csrfToken, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/authorize",
-    maxAge: OAUTH_CSRF_MAX_AGE,
-  });
+  // Signed for this user and this moment; the decision route re-derives the
+  // user from the session and re-checks the signature. Deliberately not a
+  // cookie - a Server Component cannot write one (see lib/oauth-csrf).
+  const csrfToken = issueOAuthCsrfToken(user.id);
 
   return (
     <Shell>
@@ -233,7 +250,14 @@ export default async function AuthorizePage({
         Signed in as {user.email}
       </p>
 
-      <form method="post" action="/authorize/decision" className="mt-5">
+      {/* `retry` is set only when the decision route bounced an expired token
+          back here for a fresh one. Forwarding it means a second failure ends
+          in a plain error rather than another round trip. */}
+      <form
+        method="post"
+        action={params.retry === "1" ? "/authorize/decision?retry=1" : "/authorize/decision"}
+        className="mt-5"
+      >
         <input type="hidden" name="client_id" value={clientId} />
         <input type="hidden" name="redirect_uri" value={redirectUri} />
         <input type="hidden" name="code_challenge" value={codeChallenge} />
