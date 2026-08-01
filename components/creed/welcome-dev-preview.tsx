@@ -8,9 +8,11 @@
 //   P - welcome tour preview
 //   O - "Get started" checklist card preview (click rows to toggle checks)
 //   V - "New version available" toast
-//   L - Creed first-load screen (any key or click dismisses)
+//   L - Creed first-load screen (any key or click dismisses, with its real fade)
 import { useEffect, useState } from "react";
 import { CreedLoader } from "@/components/creed/creed-loader";
+import { CREED_LOADER_EXIT_MS } from "@/components/creed/creed-loader-curtain";
+import { cn } from "@/lib/utils";
 import { WelcomeDialog } from "@/components/creed/welcome-dialog";
 import { WelcomeVideoPreloader } from "@/components/creed/welcome-video-preloader";
 import { showVersionUpdateToast } from "@/components/creed/app-version-notifier";
@@ -128,7 +130,7 @@ function VersionToastDevPreview() {
 }
 
 function CreedLoaderDevPreview() {
-  const [visible, setVisible] = useState(false);
+  const [phase, setPhase] = useState<"hidden" | "showing" | "leaving">("hidden");
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -141,26 +143,41 @@ function CreedLoaderDevPreview() {
       ) {
         return;
       }
-      // While it's up, any key drops it again - the real screen has nothing to
+      // While it's up, any key dismisses it - the real screen has nothing to
       // interact with, so trapping the keyboard behind it would just be annoying.
-      if (visible) {
-        setVisible(false);
+      // Dismissing runs the same fade the real handoff uses, so L previews the
+      // exit as well as the loop.
+      if (phase === "showing") {
+        setPhase("leaving");
         return;
       }
-      if (event.key.toLowerCase() === "l") {
-        setVisible(true);
+      if (phase === "hidden" && event.key.toLowerCase() === "l") {
+        setPhase("showing");
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [visible]);
+  }, [phase]);
 
-  if (!visible) return null;
+  useEffect(() => {
+    if (phase !== "leaving") return;
+    const timeoutId = window.setTimeout(
+      () => setPhase("hidden"),
+      CREED_LOADER_EXIT_MS,
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [phase]);
+
+  if (phase === "hidden") return null;
 
   return (
     <div
-      className="fixed inset-0 z-[100] cursor-pointer"
-      onClick={() => setVisible(false)}
+      className={cn(
+        "fixed inset-0 z-[100] cursor-pointer transition-opacity ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+        phase === "leaving" ? "pointer-events-none opacity-0" : "opacity-100",
+      )}
+      style={{ transitionDuration: `${CREED_LOADER_EXIT_MS}ms` }}
+      onClick={() => setPhase("leaving")}
     >
       <CreedLoader />
     </div>

@@ -948,35 +948,52 @@
   color: #f5f5f0;
 }
 
-/* First-load Creed mark. It breathes instead of blinking: the mark sinks and
-   contracts on the way down, then rises back, so a slow load reads as something
-   alive rather than a flashing placeholder. The dip is asymmetric - slower down
-   than up - which is what makes it feel like a breath rather than a bounce. */
-.creed-logo-breathe {
-  animation: creed-logo-breathe 1800ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+/* First-load Creed mark. It turns a half-circle, rests, turns the other half,
+   rests - rather than spinning continuously, which reads as a generic spinner.
+   Each turn eases in and out of its own rest, and the rests are held with a
+   linear segment so the easing belongs to the turn rather than the pause. The
+   slight contraction mid-turn keeps the mark from looking like a flat sticker
+   being rotated. */
+.creed-logo-spin {
+  animation: creed-logo-spin 2600ms infinite;
   transform-origin: center;
-  will-change: transform, opacity;
+  will-change: transform;
 }
 
-@keyframes creed-logo-breathe {
+@keyframes creed-logo-spin {
   0% {
-    transform: translateY(0) scale(1);
-    opacity: 1;
+    transform: rotate(0deg) scale(1);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
   }
-  55% {
-    transform: translateY(4px) scale(0.86);
-    opacity: 0.45;
+  15% {
+    transform: rotate(90deg) scale(0.94);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  30% {
+    transform: rotate(180deg) scale(1);
+    animation-timing-function: linear;
+  }
+  50% {
+    transform: rotate(180deg) scale(1);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  65% {
+    transform: rotate(270deg) scale(0.94);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  80% {
+    transform: rotate(360deg) scale(1);
+    animation-timing-function: linear;
   }
   100% {
-    transform: translateY(0) scale(1);
-    opacity: 1;
+    transform: rotate(360deg) scale(1);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   /* Hold the mark still rather than swapping in a different motion: the point
      of the screen is "we are working on it", which the logo alone still says. */
-  .creed-logo-breathe {
+  .creed-logo-spin {
     animation: none;
     opacity: 0.75;
   }
