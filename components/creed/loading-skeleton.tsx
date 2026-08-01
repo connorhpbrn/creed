@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-// Shared primitives for the route-level loading skeletons (/file, /connections,
+// Shared primitives for the route-level loading skeletons (/connections,
 // /settings). Every measurement in those files is copied from the real screen so
 // the swap from skeleton to content lands on the same pixels: same container
 // max-widths and paddings, same card radii and paddings, same row heights and
@@ -38,10 +38,6 @@ const TEXT_PRESETS = {
   h1: { box: "h-[42px]", bar: "h-5" },
   // text-[16px] - section headings
   h2: { box: "h-6", bar: "h-3" },
-  // font-heading text-[1.22rem] md:text-[1.45rem] - the Creed title
-  creedTitle: { box: "h-[29.28px] md:h-[34.8px]", bar: "h-3.5 md:h-[17px]" },
-  // text-[1.22rem] md:text-[1.45rem] leading-none - section names
-  sectionName: { box: "h-[19.52px] md:h-[23.2px]", bar: "h-3.5 md:h-4" },
   t15: { box: "h-[22.5px]", bar: "h-[11px]" },
   // text-sm and text-[14px] both resolve to a 20px box
   t14: { box: "h-5", bar: "h-2.5" },
@@ -53,8 +49,6 @@ const TEXT_PRESETS = {
   fig30: { box: "h-[45px]", bar: "h-[22px]" },
   fig28: { box: "h-7", bar: "h-5" },
   fig22: { box: "h-[33px]", bar: "h-4" },
-  // The editor's prose: 17px at line-height 1.75
-  body17: { box: "h-[29.75px]", bar: "h-3" },
 } as const;
 
 export function SkeletonText({

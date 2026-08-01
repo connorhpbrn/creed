@@ -1,10 +1,6 @@
 import "server-only";
 
-import {
-  issueCsrfToken,
-  verifyCsrfToken,
-  OAUTH_CSRF_MAX_AGE,
-} from "@/lib/oauth-csrf-core";
+import { issueCsrfToken, verifyCsrfToken } from "@/lib/oauth-csrf-core";
 
 function signingSecret() {
   const secret = process.env.CREED_CSRF_SECRET?.trim() ?? process.env.CREED_ENCRYPTION_SECRET?.trim();
@@ -19,5 +15,3 @@ export function issueOAuthCsrfToken(userId: string) {
 export function verifyOAuthCsrfToken(token: string, userId: string) {
   return verifyCsrfToken(signingSecret(), token, userId);
 }
-
-export { OAUTH_CSRF_MAX_AGE };
