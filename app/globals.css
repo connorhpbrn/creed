@@ -951,8 +951,8 @@
 /* First-load Creed mark. One full revolution per cycle, eased from rest to rest,
    then held still before the next - not a continuous spin (which reads as a
    generic loader) and not split into part-turns. The rest is a linear segment so
-   the easing belongs entirely to the turn, and the curve is weighted hard at
-   both ends so the mark whips through the middle of the revolution rather than
+   the easing belongs entirely to the turn, and the curve is weighted at both
+   ends so the mark accelerates through the middle of the revolution rather than
    travelling it at an even rate. */
 .creed-logo-spin {
   animation: creed-logo-spin 1700ms infinite;
@@ -963,7 +963,7 @@
 @keyframes creed-logo-spin {
   0% {
     transform: rotate(0deg);
-    animation-timing-function: cubic-bezier(0.85, 0, 0.15, 1);
+    animation-timing-function: cubic-bezier(0.76, 0, 0.24, 1);
   }
   62% {
     transform: rotate(360deg);
