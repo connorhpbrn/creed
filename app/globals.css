@@ -948,45 +948,27 @@
   color: #f5f5f0;
 }
 
-/* First-load Creed mark. It turns a full circle, rests, turns again, rests -
-   rather than spinning continuously, which reads as a generic spinner. Each turn
-   eases in and out of its own rest, and the rests are held with a linear segment
-   so the easing belongs to the turn rather than the pause. The slight
-   contraction mid-turn keeps the mark from looking like a flat sticker being
-   rotated. */
+/* First-load Creed mark. One full revolution per cycle, eased from rest to rest,
+   then held still before the next - not a continuous spin (which reads as a
+   generic loader) and not split into part-turns. The rest is a linear segment so
+   the easing belongs entirely to the turn. */
 .creed-logo-spin {
-  animation: creed-logo-spin 2600ms infinite;
+  animation: creed-logo-spin 1700ms infinite;
   transform-origin: center;
   will-change: transform;
 }
 
 @keyframes creed-logo-spin {
   0% {
-    transform: rotate(0deg) scale(1);
-    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.62, 0, 0.32, 1);
   }
-  15% {
-    transform: rotate(180deg) scale(0.94);
-    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
-  }
-  30% {
-    transform: rotate(360deg) scale(1);
-    animation-timing-function: linear;
-  }
-  50% {
-    transform: rotate(360deg) scale(1);
-    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
-  }
-  65% {
-    transform: rotate(540deg) scale(0.94);
-    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
-  }
-  80% {
-    transform: rotate(720deg) scale(1);
+  62% {
+    transform: rotate(360deg);
     animation-timing-function: linear;
   }
   100% {
-    transform: rotate(720deg) scale(1);
+    transform: rotate(360deg);
   }
 }
 
