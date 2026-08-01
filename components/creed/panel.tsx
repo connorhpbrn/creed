@@ -1157,11 +1157,22 @@ export function CreedPanel({
       return;
     }
 
-    // Measured once, when the panel opens, and then never again for as long as
-    // it stays open. Nothing re-centres it - not typing, not the results list,
-    // not switching mode. It goes up centred and it stays exactly there.
-    const height = contentRef.current?.getBoundingClientRect().height;
-    if (height) setFrozenOffset(Math.round(height / 2));
+    let frame = 0;
+    const freeze = () => {
+      // offsetHeight, not getBoundingClientRect: the open animation scales the
+      // panel to 95%, and measuring through that would bake the wrong offset in.
+      const height = contentRef.current?.offsetHeight;
+      if (height) {
+        setFrozenOffset(Math.round(height / 2));
+        return;
+      }
+      // Nothing to measure yet. Keep trying - failing here silently would leave
+      // the panel on percentage centring, which is the bug.
+      frame = window.requestAnimationFrame(freeze);
+    };
+
+    freeze();
+    return () => window.cancelAnimationFrame(frame);
   }, [open]);
 
   const stageIndex = agentRun.stage ? AGENT_STAGES.indexOf(agentRun.stage) : -1;
@@ -1181,12 +1192,14 @@ export function CreedPanel({
         />
         <DialogPrimitive.Content
           ref={contentRef}
+          // Centred on open, then fixed. `-50%` is a share of the panel's own
+          // height, so it re-centred on every resize - which is what moved the
+          // input. Once measured this becomes a pixel offset and the panel is
+          // pinned: it grows and shrinks against its bottom edge only.
+          //
+          // On `translate` rather than `transform`, because the open animation
+          // owns `transform` and would drag the panel while it plays.
           style={{
-            // The `translate` property, not `transform`: the open animation
-            // animates `transform` (zoom-in-95), and putting the positioning
-            // there too would let the animation drag the panel around while it
-            // plays. Until the first measurement lands this is the same -50%
-            // the CSS used, so the panel never opens off-centre for a frame.
             translate:
               frozenOffset === null ? "-50% -50%" : `-50% -${frozenOffset}px`,
           }}
@@ -1214,12 +1227,6 @@ export function CreedPanel({
           }}
           className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-[560px] overflow-hidden rounded-[var(--radius-lg)] bg-[var(--creed-surface)] p-0 text-popover-foreground ring-1 ring-foreground/8 shadow-[0_18px_48px_rgba(28,28,26,0.08)] outline-none duration-[160ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
         >
-          {/* The panel opens centred, then stays put. Vertical centring is a
-              percentage of the panel's own height, so every line typed
-              re-centred it and slid the input - and the caret in it - up the
-              screen. The offset is frozen in pixels at the height it opened at:
-              same opening position, and every later change moves the bottom
-              edge only. */}
           <DialogPrimitive.Title className="sr-only">
             Panel
           </DialogPrimitive.Title>
