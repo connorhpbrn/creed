@@ -5,6 +5,10 @@ import { sanitizeNextPath } from "@/lib/safe-next";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+// Credential surface: kept under the strict nonce CSP, which requires
+// request-time rendering (see lib/csp-policy.ts).
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Sign in | Creed",
   description: "Sign in to your Creed.",

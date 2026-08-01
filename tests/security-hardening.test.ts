@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { contentSecurityPolicy, requiresCspNonce } from "../lib/csp-policy.ts";
 import { normalizeRichTextInput } from "../lib/rich-text.ts";
 import { sanitizeNextPath } from "../lib/safe-next.ts";
 import { oauthPermissionCeiling, parseOAuthMcpScopes } from "../lib/oauth-scopes.ts";
@@ -52,10 +53,95 @@ test("strict CSP uses proxy nonces without a manual layout nonce", () => {
 
   assert.doesNotMatch(layout, /from ["']next\/headers["']/);
   assert.match(layout, /src="\/theme-init\.js"/);
-  assert.match(layout, /dynamic = "force-dynamic"/);
   assert.match(proxy, /requestHeaders\.set\("x-nonce", nonce\)/);
-  assert.match(proxy, /'nonce-\$\{nonce\}'/);
-  assert.doesNotMatch(proxy, /script-src[^\n]*unsafe-inline/);
+  assert.match(contentSecurityPolicy("abc123"), /'nonce-abc123'/);
+});
+
+test("the nonce policy covers the app and credential surface, and nothing else", () => {
+  // The root layout must NOT force dynamic rendering: that applied the nonce
+  // policy's per-request cost to the marketing pages too, and blocked their
+  // JSON-LD. Scope belongs to lib/csp-policy.
+  const layout = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(layout, /^export const dynamic/m);
+
+  for (const pathname of [
+    "/",
+    "/file",
+    "/connections",
+    "/settings",
+    "/onboarding",
+    "/onboarding/company",
+    "/invite/abc",
+    "/payment/success",
+    "/login",
+    "/signup",
+    "/reset-password",
+    "/authorize",
+  ]) {
+    assert.equal(requiresCspNonce(pathname), true, `${pathname} must get a nonce`);
+  }
+
+  for (const pathname of [
+    "/home",
+    "/pricing",
+    "/docs",
+    "/changelog",
+    "/roadmap",
+    "/bench",
+    "/stack",
+    "/terms",
+    "/privacy",
+    "/company",
+    "/payment/cancelled",
+  ]) {
+    assert.equal(
+      requiresCspNonce(pathname),
+      false,
+      `${pathname} is prerendered, so a nonce would block its own scripts`,
+    );
+  }
+});
+
+test("nonce and inline policies stay mutually exclusive", () => {
+  // A browser ignores 'unsafe-inline' whenever a nonce is present, so emitting
+  // both would silently drop the inline allowance the public pages depend on.
+  const withNonce = contentSecurityPolicy("abc123");
+  const withoutNonce = contentSecurityPolicy(null);
+
+  assert.match(withNonce, /script-src [^;]*'nonce-abc123'/);
+  assert.doesNotMatch(withNonce, /script-src [^;]*unsafe-inline/);
+  assert.match(withoutNonce, /script-src [^;]*'unsafe-inline'/);
+  assert.doesNotMatch(withoutNonce, /nonce-/);
+
+  // Everything outside script-src is identical between the two.
+  const directives = (csp: string) =>
+    csp.split("; ").filter((directive) => !directive.startsWith("script-src "));
+  assert.deepEqual(directives(withNonce), directives(withoutNonce));
+});
+
+test("every nonce route renders per request", () => {
+  // A prerendered route under the nonce policy ships HTML whose scripts the
+  // browser refuses to run, so each prefix needs `force-dynamic` on its page or
+  // on a layout above it.
+  const declaresDynamic = (relativePath: string) => {
+    const source = readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
+    return /export const dynamic = "force-dynamic"/.test(source);
+  };
+
+  for (const file of [
+    "app/page.tsx",
+    "app/(creed-app)/layout.tsx",
+    "app/onboarding/layout.tsx",
+    "app/invite/[token]/page.tsx",
+    "app/payment/success/page.tsx",
+    "app/login/page.tsx",
+    "app/signup/page.tsx",
+    "app/reset-password/page.tsx",
+    "app/authorize/page.tsx",
+    "app/dev/company-onboarding/page.tsx",
+  ]) {
+    assert.equal(declaresDynamic(file), true, `${file} must declare force-dynamic`);
+  }
 });
 
 test("OAuth follow-up migration keeps resources portable and cleanup serialized", () => {

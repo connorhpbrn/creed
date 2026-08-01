@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { contentSecurityPolicy, requiresCspNonce } from "@/lib/csp-policy";
 import { isMarketingPath } from "@/lib/marketing-routes";
 import { getSupabasePublishableKey, getSupabaseUrl, isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -12,24 +13,6 @@ function hasSupabaseAuthCookie(request: NextRequest) {
   return request.cookies.getAll().some(
     ({ name }) => name.startsWith("sb-") && name.includes("auth-token"),
   );
-}
-
-function contentSecurityPolicy(nonce: string) {
-  const isDev = process.env.NODE_ENV !== "production";
-  return [
-    "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}'${isDev ? " 'unsafe-eval'" : ""} https://js.stripe.com https://checkout.stripe.com`,
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https:",
-    "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co https://*.supabase.in https://api.openrouter.ai https://openrouter.ai https://api.github.com https://api.stripe.com https://checkout.stripe.com",
-    "frame-src 'self' https://js.stripe.com https://checkout.stripe.com https://hooks.stripe.com",
-    "frame-ancestors 'self'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "object-src 'none'",
-    "upgrade-insecure-requests",
-  ].join("; ");
 }
 
 function generateRequestId() {
@@ -48,7 +31,12 @@ export async function proxy(request: NextRequest) {
   }
   const incomingId = request.headers.get("x-request-id");
   const requestId = incomingId && incomingId.length <= 80 ? incomingId : generateRequestId();
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  // Only the dynamically rendered app/credential routes get the nonce policy;
+  // prerendered public pages take the inline-permitting one. See lib/csp-policy
+  // for why the two cannot be combined.
+  const nonce = requiresCspNonce(pathname)
+    ? Buffer.from(crypto.randomUUID()).toString("base64")
+    : null;
   const csp = contentSecurityPolicy(nonce);
   const cspHeaderName =
     process.env.NODE_ENV === "production" && process.env.CREED_CSP_ENFORCE !== "0"
@@ -57,8 +45,12 @@ export async function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
-  requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("Content-Security-Policy", csp);
+  // Next reads these off the request to stamp the nonce onto its own scripts.
+  // Forwarding them on a nonce-free route would be meaningless, so we don't.
+  if (nonce) {
+    requestHeaders.set("x-nonce", nonce);
+    requestHeaders.set("Content-Security-Policy", csp);
+  }
   // Server Components can't read the request URL directly. Forwarding the
   // pathname here lets the root layout skip expensive Supabase fan-out for
   // marketing routes that never read user state.
@@ -92,8 +84,10 @@ export async function proxy(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           const refreshedHeaders = new Headers(request.headers);
           refreshedHeaders.set("x-request-id", requestId);
-          refreshedHeaders.set("x-nonce", nonce);
-          refreshedHeaders.set("Content-Security-Policy", csp);
+          if (nonce) {
+            refreshedHeaders.set("x-nonce", nonce);
+            refreshedHeaders.set("Content-Security-Policy", csp);
+          }
           refreshedHeaders.set("x-pathname", request.nextUrl.pathname);
           response = NextResponse.next({ request: { headers: refreshedHeaders } });
           cookiesToSet.forEach(({ name, value, options }) =>

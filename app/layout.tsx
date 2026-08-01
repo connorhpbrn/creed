@@ -52,10 +52,13 @@ export const metadata: Metadata = {
   },
 };
 
-// Strict nonce-based CSP requires request-time rendering so Next can attach the
-// current request's nonce to every framework and streaming script.
-export const dynamic = "force-dynamic";
-
+// No `dynamic` export here on purpose. The strict nonce CSP does need
+// request-time rendering, but forcing it at the root applied that cost to every
+// route in the app: marketing pages lost static generation, CDN caching,
+// <Link> prefetch and ISR, and their unnonced JSON-LD scripts were blocked. The
+// nonce policy is scoped to the already-dynamic app and credential routes
+// instead - see lib/csp-policy.ts.
+//
 // The root layout is intentionally static: it holds no user state, reads no
 // cookies/headers, and renders no CreedProvider. User-specific work
 // (Supabase session, loadCreedState, CreedProvider) lives in <AuthedProviders>,

@@ -101,6 +101,7 @@ import {
 } from "@/lib/ai/quality-runner";
 import { RichTextEditor } from "@/components/creed/rich-text-editor";
 import { NexusView, type NexusViewState } from "@/components/creed/nexus-view";
+import { LockLabel } from "@/components/creed/lock-label";
 import { CreedFindReplace } from "@/components/creed/find-replace";
 import {
   DiffBadge,
@@ -198,6 +199,10 @@ function useJsonStable<T>(value: T): T {
 
 const EMPTY_PROPOSALS: Proposal[] = [];
 const ACTIVITY_PAGE_SIZE = 20;
+// A touch longer than the rail's 340ms open/close animation (see
+// FileActivityRailFrame). Work that would compete with that animation waits for
+// this to elapse instead.
+const ACTIVITY_RAIL_SETTLE_MS = 380;
 
 function formatRelativeTime(timestamp?: string, fallbackLabel?: string) {
   if (!timestamp) {
@@ -1000,6 +1005,25 @@ export function FileScreen() {
   const reviewPillProposals = reviewPillProposalsRef.current;
   const [activityOpen, setActivityOpen] = useState(false);
   const closeActivity = useCallback(() => setActivityOpen(false), []);
+  // The activity rail animates its width, which resizes the editor column on
+  // every frame. That re-fires the editor's section IntersectionObserver, and
+  // each firing used to push `setActiveShellSection` through React - a full
+  // shell re-render per animation frame, which is what made opening the rail
+  // feel laggy. The active section cannot meaningfully change from a resize, so
+  // observer-driven updates are held for the length of the animation and then
+  // flushed once with the settled geometry.
+  const railAnimatingRef = useRef(false);
+  const flushActiveShellSectionRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    railAnimatingRef.current = true;
+    const timeoutId = window.setTimeout(() => {
+      railAnimatingRef.current = false;
+      flushActiveShellSectionRef.current();
+    }, ACTIVITY_RAIL_SETTLE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [activityOpen]);
+
   // Watching the state covers every open path at once (the A shortcut, the
   // header buttons, shell intents), so the "Check activity" getting-started
   // step can't be missed by a new entry point.
@@ -2253,6 +2277,10 @@ export function FileScreen() {
     const visibleTargets = new Map<HTMLElement, IntersectionObserverEntry>();
 
     function update() {
+      // Held while the activity rail animates - the flush below re-runs this
+      // once the geometry has settled.
+      if (railAnimatingRef.current) return;
+
       const bestEntry = Array.from(visibleTargets.values()).sort(
         (left, right) =>
           Math.abs(left.boundingClientRect.top) -
@@ -2289,9 +2317,11 @@ export function FileScreen() {
       },
     );
     for (const element of elements) observer.observe(element);
+    flushActiveShellSectionRef.current = update;
 
     return () => {
       observer.disconnect();
+      flushActiveShellSectionRef.current = () => {};
       setActiveShellSection(null);
     };
   }, [
@@ -4206,7 +4236,7 @@ function HeaderLockButton({
             className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none"
           />
         )}
-        {title}
+        <LockLabel locked={locked} />
       </Button>
     </>
   );
@@ -4285,6 +4315,20 @@ const ActivityRail = memo(function ActivityRail({
     "all",
   );
   const [visibleCount, setVisibleCount] = useState(ACTIVITY_PAGE_SIZE);
+  // Rows warm their collapsed diff summaries off this flag rather than off
+  // `open`, so the extra render lands after the slide has finished instead of
+  // in the middle of it. Once warm it stays warm across re-opens.
+  const [diffsWarm, setDiffsWarm] = useState(false);
+
+  useEffect(() => {
+    if (!open || diffsWarm) return;
+
+    const timeoutId = window.setTimeout(
+      () => setDiffsWarm(true),
+      ACTIVITY_RAIL_SETTLE_MS,
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [diffsWarm, open]);
 
   useEffect(() => {
     setVisibleCount(ACTIVITY_PAGE_SIZE);
@@ -4297,6 +4341,7 @@ const ActivityRail = memo(function ActivityRail({
         creedType={creedType}
         proposals={proposals}
         sections={sections}
+        warmDiffs={diffsWarm}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
         visibleCount={visibleCount}
@@ -4312,6 +4357,7 @@ const ActivityRailContent = memo(function ActivityRailContent({
   creedType,
   proposals,
   sections,
+  warmDiffs,
   statusFilter,
   setStatusFilter,
   visibleCount,
@@ -4322,6 +4368,7 @@ const ActivityRailContent = memo(function ActivityRailContent({
   creedType: "personal" | "company";
   proposals: Proposal[];
   sections: CreedSection[];
+  warmDiffs: boolean;
   statusFilter: "all" | ActivityStatus;
   setStatusFilter: (status: "all" | ActivityStatus) => void;
   visibleCount: number;
@@ -4481,6 +4528,7 @@ const ActivityRailContent = memo(function ActivityRailContent({
                           <ActivityRow
                             key={entry.id}
                             entry={entry}
+                            warmDiffs={warmDiffs}
                             liveExistingContent={liveExistingContent}
                             liveProposedText={liveProposedText}
                           />
@@ -4526,12 +4574,102 @@ const activityDiffCache = new Map<
   { before: string; after: string; parts: ReturnType<typeof computeDiffParts> }
 >();
 
+// A collapsed activity card shows its +N/−N summary, which needs the diff. Diffing
+// every row during first paint is what made the rail expensive, so rows enqueue
+// themselves here once the rail is actually open and this queue lets them in a
+// few at a time during idle slices. Opening the rail stays smooth, and the
+// summaries fill in a beat later instead of only after a click.
+type ActivityIdleDeadline = { timeRemaining: () => number };
+const activityDiffQueue: Array<() => void> = [];
+let activityDiffDrainScheduled = false;
+
+function drainActivityDiffQueue(deadline?: ActivityIdleDeadline) {
+  activityDiffDrainScheduled = false;
+  let ran = 0;
+  while (activityDiffQueue.length) {
+    activityDiffQueue.shift()?.();
+    ran += 1;
+    const hasBudget = deadline ? deadline.timeRemaining() > 4 : ran < 3;
+    if (!hasBudget) break;
+  }
+
+  if (activityDiffQueue.length) {
+    scheduleActivityDiffDrain();
+  }
+}
+
+function scheduleActivityDiffDrain() {
+  if (activityDiffDrainScheduled) return;
+  activityDiffDrainScheduled = true;
+
+  const idle = (
+    window as Window & {
+      requestIdleCallback?: (
+        callback: (deadline: ActivityIdleDeadline) => void,
+        options?: { timeout: number },
+      ) => number;
+    }
+  ).requestIdleCallback;
+
+  if (idle) {
+    idle((deadline) => drainActivityDiffQueue(deadline), { timeout: 600 });
+    return;
+  }
+
+  window.setTimeout(() => drainActivityDiffQueue(), 60);
+}
+
+function enqueueActivityDiff(task: () => void) {
+  activityDiffQueue.push(task);
+  scheduleActivityDiffDrain();
+}
+
+// Placeholder bar for activity content that is still being diffed. Sized in the
+// caller so it can stand in for a badge or a line of copy.
+function ActivitySkeletonBar({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "block animate-pulse rounded-[3px] bg-[var(--creed-border)] motion-reduce:animate-none",
+        className,
+      )}
+    />
+  );
+}
+
+// Stand-in for the +N/−N pair on a collapsed card. Matching the badges' height
+// and rough width keeps the row from shifting when the real numbers land.
+function ActivityStatsSkeleton() {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="text-[var(--creed-text-tertiary)]">·</span>
+      <ActivitySkeletonBar className="h-[11px] w-7" />
+      <ActivitySkeletonBar className="h-[11px] w-8" />
+    </span>
+  );
+}
+
+// Stand-in for the expanded diff body. Ragged widths on the last line so it
+// reads as a paragraph of prose rather than a filled block.
+function ActivityDiffSkeleton() {
+  return (
+    <span aria-hidden="true" className="block space-y-2 py-1">
+      <ActivitySkeletonBar className="h-3 w-full" />
+      <ActivitySkeletonBar className="h-3 w-[92%]" />
+      <ActivitySkeletonBar className="h-3 w-[64%]" />
+    </span>
+  );
+}
+
 const ActivityRow = memo(function ActivityRow({
   entry,
+  warmDiffs,
   liveExistingContent,
   liveProposedText,
 }: {
   entry: ActivityEntry;
+  warmDiffs: boolean;
   liveExistingContent?: string;
   liveProposedText?: string;
 }) {
@@ -4589,6 +4727,21 @@ const ActivityRow = memo(function ActivityRow({
     },
     [],
   );
+  // Warm the collapsed +N/−N summary once the rail is open. The work is queued
+  // for idle time rather than run here, so it never lands on the open animation
+  // or on first paint while the rail is still closed.
+  useEffect(() => {
+    if (!warmDiffs || diffReady) return;
+
+    let cancelled = false;
+    enqueueActivityDiff(() => {
+      if (cancelled) return;
+      startTransition(() => setDiffReady(true));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [diffReady, warmDiffs]);
   const toggleOpen = useCallback(() => {
     const nextOpen = !open;
     setOpen(nextOpen);
@@ -4607,12 +4760,8 @@ const ActivityRow = memo(function ActivityRow({
     (entry.beforeText?.startsWith("Keep ") ?? false);
 
   return (
-    <div className="rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-3 transition-colors duration-150 hover:bg-[var(--creed-background)]">
-      <button
-        type="button"
-        className="group w-full text-left"
-        onClick={toggleOpen}
-      >
+    <div className="group rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-3 transition-colors duration-150 hover:bg-[var(--creed-background)]">
+      <button type="button" className="w-full text-left" onClick={toggleOpen}>
         <div className="flex items-start gap-3">
           {entry.actorType === "agent" ? (
             <AgentIconStack
@@ -4643,7 +4792,7 @@ const ActivityRow = memo(function ActivityRow({
               </span>
               <ChevronDown
                 className={cn(
-                  "h-3.5 w-3.5 text-[var(--creed-text-tertiary)] transition-transform duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:text-[var(--creed-text-secondary)]",
+                  "h-3.5 w-3.5 text-[var(--creed-text-tertiary)] transition-[color,transform] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:text-[var(--creed-text-primary)]",
                   open ? "rotate-0" : "-rotate-90",
                 )}
               />
@@ -4661,6 +4810,8 @@ const ActivityRow = memo(function ActivityRow({
                   <DiffBadge tone="added" count={0} />
                   <DiffBadge tone="removed" count={1} />
                 </span>
+              ) : !diffReady ? (
+                <ActivityStatsSkeleton />
               ) : hasTextualChange && diffStats ? (
                 <span className="inline-flex items-center gap-1">
                   <span className="text-[var(--creed-text-tertiary)]">·</span>
@@ -4703,10 +4854,7 @@ const ActivityRow = memo(function ActivityRow({
                     Delete {entry.sectionName}
                   </span>
                 ) : !diffReady ? (
-                  <span className="inline-flex items-center gap-2 text-[var(--creed-text-tertiary)]">
-                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                    Preparing diff
-                  </span>
+                  <ActivityDiffSkeleton />
                 ) : hasTextualChange && diffParts ? (
                   diffParts.map((part, index) => {
                     if (part.added) {

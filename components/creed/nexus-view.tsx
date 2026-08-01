@@ -1000,6 +1000,27 @@ export function NexusView({
         foregroundWeight,
       );
 
+    // Selection normally reads as a lightened version of the node's own
+    // colour. A white node (the mono accent in dark theme) has no headroom
+    // left, so lightening it changed nothing on screen - for those we invert
+    // the treatment and darken the fill a little instead. The selected ring
+    // still strokes in the node's full colour either way.
+    const selectedNodeFill = (color: string) => {
+      const resolved = resolveDrawColor(color);
+      const channels = resolved.match(
+        /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i,
+      );
+      const luminance = channels
+        ? (0.2126 * Number.parseInt(channels[1], 16) +
+            0.7152 * Number.parseInt(channels[2], 16) +
+            0.0722 * Number.parseInt(channels[3], 16)) /
+          255
+        : 0;
+      return luminance > 0.82
+        ? mixDrawColors(resolved, "#000000", 0.88)
+        : mixDrawColors(resolved, "#ffffff", 0.68);
+    };
+
     function draw() {
       frameId = null;
       if (needsFitRef.current) {
@@ -1069,7 +1090,7 @@ export function NexusView({
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
         ctx.fillStyle = selected
-          ? mixDrawColors(node.color, "#ffffff", 0.68)
+          ? selectedNodeFill(node.color)
           : directlyConnected || hovered
             ? resolveDrawColor(node.color)
             : mixDrawColors(node.color, canvasBackground, 0.3);
@@ -1102,7 +1123,24 @@ export function NexusView({
 
     requestCanvasDrawRef.current = requestDraw;
     requestDraw();
+
+    // The theme toggle sets React state immediately but flips the `.dark`
+    // class inside a view transition callback, so this effect can re-run and
+    // cache every colour before the CSS variables have actually swapped -
+    // leaving the canvas drawing dark-theme fills on a light page. Watch the
+    // root element itself and repaint from freshly resolved values whenever
+    // the class really changes.
+    const themeObserver = new MutationObserver(() => {
+      resolvedColorCache.clear();
+      requestDraw();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
+    });
+
     return () => {
+      themeObserver.disconnect();
       requestCanvasDrawRef.current = () => {};
       if (frameId !== null) {
         window.cancelAnimationFrame(frameId);
@@ -1174,7 +1212,7 @@ export function NexusView({
         >
           <div
             className="min-w-0 max-w-[220px] truncate text-[17px] font-medium leading-tight tracking-[-0.01em]"
-            style={{ color: resolveCanvasColor(tooltip.color) }}
+            style={{ color: tooltip.color }}
           >
             {tooltip.name}
           </div>
@@ -1187,7 +1225,7 @@ export function NexusView({
           <div className="flex shrink-0 items-baseline gap-1.5">
             <span
               className="font-mono text-[20px] font-medium leading-none tracking-[-0.02em] tabular-nums"
-              style={{ color: resolveCanvasColor(tooltip.color) }}
+              style={{ color: tooltip.color }}
             >
               {tooltip.degree}
             </span>

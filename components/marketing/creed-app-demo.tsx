@@ -40,6 +40,7 @@ import {
   getActivityStatusStyles,
 } from "@/components/creed/activity-ui";
 import { CreedMark, CreedWordmark } from "@/components/creed/brand";
+import { LockLabel } from "@/components/creed/lock-label";
 import { ReviewPill } from "@/components/creed/review-pill";
 import { RichTextEditor } from "@/components/creed/rich-text-editor";
 import { DiffBadge, InlineProposalDiff } from "@/components/creed/inline-proposal-diff";
@@ -254,7 +255,7 @@ function LockButton({ locked, onToggle }: { locked: boolean; onToggle: () => voi
       ) : (
         <LockOpenIcon ref={openCtl.iconRef} size={14} className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none" />
       )}
-      <span className="hidden md:inline">{locked ? "Locked" : "Unlocked"}</span>
+      <LockLabel locked={locked} className="hidden md:grid" />
     </Button>
   );
 }
