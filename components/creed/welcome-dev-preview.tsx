@@ -8,10 +8,9 @@
 //   P - welcome tour preview
 //   O - "Get started" checklist card preview (click rows to toggle checks)
 //   V - "New version available" toast
-//   L - Creed first-load screen (any key or click dismisses, with its real fade)
+//   L - Creed first-load screen (any key or click dismisses)
 import { useEffect, useState } from "react";
 import { CreedLoader } from "@/components/creed/creed-loader";
-import { CREED_LOADER_EXIT_MS } from "@/components/creed/creed-loader-curtain";
 import { cn } from "@/lib/utils";
 import { WelcomeDialog } from "@/components/creed/welcome-dialog";
 import { WelcomeVideoPreloader } from "@/components/creed/welcome-video-preloader";
@@ -129,6 +128,11 @@ function VersionToastDevPreview() {
   return null;
 }
 
+// Matches nothing in production - the real screen is removed by the router
+// rather than faded - but dismissing the preview with a fade beats having it
+// blink out from under you.
+const PREVIEW_EXIT_MS = 380;
+
 function CreedLoaderDevPreview() {
   const [phase, setPhase] = useState<"hidden" | "showing" | "leaving">("hidden");
 
@@ -145,8 +149,6 @@ function CreedLoaderDevPreview() {
       }
       // While it's up, any key dismisses it - the real screen has nothing to
       // interact with, so trapping the keyboard behind it would just be annoying.
-      // Dismissing runs the same fade the real handoff uses, so L previews the
-      // exit as well as the loop.
       if (phase === "showing") {
         setPhase("leaving");
         return;
@@ -163,7 +165,7 @@ function CreedLoaderDevPreview() {
     if (phase !== "leaving") return;
     const timeoutId = window.setTimeout(
       () => setPhase("hidden"),
-      CREED_LOADER_EXIT_MS,
+      PREVIEW_EXIT_MS,
     );
     return () => window.clearTimeout(timeoutId);
   }, [phase]);
@@ -176,7 +178,7 @@ function CreedLoaderDevPreview() {
         "fixed inset-0 z-[100] cursor-pointer transition-opacity ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
         phase === "leaving" ? "pointer-events-none opacity-0" : "opacity-100",
       )}
-      style={{ transitionDuration: `${CREED_LOADER_EXIT_MS}ms` }}
+      style={{ transitionDuration: `${PREVIEW_EXIT_MS}ms` }}
       onClick={() => setPhase("leaving")}
     >
       <CreedLoader />

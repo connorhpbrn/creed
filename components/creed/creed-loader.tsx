@@ -6,8 +6,7 @@
 // as an <img>, so it takes the exact foreground colour in both themes and scales
 // to any size without a second asset. No client JS - the animation is CSS
 // (`creed-logo-spin` in globals.css), which is what lets this render inside a
-// route-level loading.tsx. CreedLoaderCurtain handles fading the screen out once
-// the real content has arrived.
+// route-level loading.tsx.
 //
 // `delayed` holds the whole screen at zero opacity for a beat before fading it
 // in, so a Creed that loads quickly never flashes a loader on the way past. Use
