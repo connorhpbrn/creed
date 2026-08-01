@@ -985,12 +985,11 @@
    the editor rather than on it, so the splash never pulls away over markup that
    is still arriving.
 
-   The exit holds before it moves. A fast server can deliver the editor a couple
-   of hundred milliseconds after the splash paints, and cutting straight to a
-   fade there reads as a flash followed by a long translucent smear over the
-   page. Holding at full opacity first gives the screen a floor of time on
-   screen, and the fade that follows is short enough that the editor is never
-   sitting half-visible behind it. */
+   Flashes are prevented on the way in rather than on the way out. Holding the
+   exit made the screen sit there after the editor was ready, which reads as
+   waiting; holding the entrance instead means a handover fast enough to look
+   like a flash simply never paints. Once the editor is here the screen leaves
+   straight away. */
 .creed-boot-splash {
   display: none;
 }
@@ -1003,11 +1002,23 @@ html.creed-booting .creed-boot-splash {
   /* Opaque on the splash itself, not only on the screen inside it: nothing
      behind should ever show through while it is up. */
   background: var(--creed-surface);
+  /* `both` holds it at zero through the delay, so a handover inside that window
+     is never seen at all. */
+  animation: creed-boot-splash-in 160ms linear 180ms both;
+}
+
+@keyframes creed-boot-splash-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 html.creed-booting:has([data-creed-editor]) .creed-boot-splash {
   pointer-events: none;
-  animation: creed-boot-splash-out 140ms linear 420ms forwards;
+  animation: creed-boot-splash-out 220ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
 }
 
 @keyframes creed-boot-splash-out {
