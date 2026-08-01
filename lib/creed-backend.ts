@@ -885,6 +885,17 @@ function buildConnectionDefinitions() {
   };
 }
 
+const CONNECTION_DEFINITIONS = buildConnectionDefinitions();
+
+const SECTION_SELECT =
+  "user_id, section_id, position, kind, name, accent, payload, agent_permission, archived_at, last_edited_by, last_edited_type, last_edited_at, revision, created_at, updated_at";
+const PROPOSAL_SELECT =
+  "id, user_id, section_id, section_name, accent, agent_name, change_type, reason, impact, confidence, draft, status, base_revision, created_at, updated_at, author_user_id";
+const ACTIVITY_SELECT =
+  "id, user_id, proposal_id, section_id, section_name, accent, actor, actor_type, summary, status, change_type, reason, impact, confidence, before_text, after_text, created_at, actor_user_id, event_kind";
+const CONNECTION_SELECT =
+  "user_id, connection_id, status, last_seen_at, last_agent_name, observed_via, created_at, updated_at";
+
 function serializeSectionPayload(section: CreedSection) {
   return {
     content: section.content,
@@ -1231,7 +1242,7 @@ export function createBlankCreedState(
   const readToken = tokenRow?.read_token ?? "";
   const proposalToken = tokenRow?.proposal_token ?? "";
   const directEditToken = tokenRow?.direct_edit_token ?? "";
-  const { definitions } = buildConnectionDefinitions();
+  const { definitions } = CONNECTION_DEFINITIONS;
 
   return {
     ...initialCreedState,
@@ -1358,25 +1369,25 @@ async function loadCreedStateImpl(
   ] = await Promise.all([
     db
       .from("creed_sections")
-      .select("*")
+      .select(SECTION_SELECT)
       .eq("creed_id", personalCreedId)
       .order("position", { ascending: true }),
     db
       .from("creed_proposals")
-      .select("*")
+      .select(PROPOSAL_SELECT)
       .eq("creed_id", personalCreedId)
       .order("created_at", { ascending: false })
       .limit(proposalLimit),
     db
       .from("creed_activity")
-      .select("*")
+      .select(ACTIVITY_SELECT)
       .eq("creed_id", personalCreedId)
       .gte("created_at", getActivityCutoffIso())
       .order("created_at", { ascending: false })
       .limit(activityLimit),
     db
       .from("creed_connections")
-      .select("*")
+      .select(CONNECTION_SELECT)
       .eq("creed_id", personalCreedId)
       .order("updated_at", { ascending: false }),
   ]);
@@ -1394,7 +1405,7 @@ async function loadCreedStateImpl(
   const readToken = tokenRow.read_token ?? "";
   const proposalToken = tokenRow.proposal_token ?? "";
   const directEditToken = tokenRow.direct_edit_token ?? "";
-  const { definitions } = buildConnectionDefinitions();
+  const { definitions } = CONNECTION_DEFINITIONS;
 
   const connectionMap = new Map(
     ((connectionRows as ConnectionRow[] | null) ?? []).map((row) => [
@@ -1535,32 +1546,23 @@ export async function loadCompanyCreedState(
   const admin = getSupabaseAdminClient() as unknown as SupabaseLikeClient;
   const proposalLimit = options?.proposalLimit ?? 500;
   const activityLimit = options?.activityLimit ?? 500;
-  const resolvedUser = await enrichUserForState(user);
-
-  const creedWithAvatar = (await admin
+  const resolvedUserPromise = enrichUserForState(user);
+  const creedResultPromise = admin
     .from("creeds")
     .select("name, company_email, avatar_url")
     .eq("id", creedId)
-    .maybeSingle()) as {
+    .maybeSingle() as unknown as Promise<{
     data: {
       name?: string;
       company_email?: string | null;
       avatar_url?: string | null;
     } | null;
     error: unknown;
-  };
-  const creedResult = creedWithAvatar.error
-    ? ((await admin
-        .from("creeds")
-        .select("name, company_email")
-        .eq("id", creedId)
-        .maybeSingle()) as {
-        data: { name?: string; company_email?: string | null } | null;
-        error: unknown;
-      })
-    : creedWithAvatar;
+  }>;
 
   const [
+    resolvedUser,
+    creedResult,
     sectionsResult,
     proposalsResult,
     activityResult,
@@ -1574,21 +1576,23 @@ export async function loadCompanyCreedState(
     companyGithubIntegration,
     companyVersionControlResult,
   ] = await Promise.all([
+    resolvedUserPromise,
+    creedResultPromise,
     admin
       .from("creed_sections")
-      .select("*")
+      .select(SECTION_SELECT)
       .eq("creed_id", creedId)
       .is("deleted_at", null)
       .order("position", { ascending: true }),
     admin
       .from("creed_proposals")
-      .select("*")
+      .select(PROPOSAL_SELECT)
       .eq("creed_id", creedId)
       .order("created_at", { ascending: false })
       .limit(proposalLimit),
     admin
       .from("creed_activity")
-      .select("*")
+      .select(ACTIVITY_SELECT)
       .eq("creed_id", creedId)
       .gte("created_at", getActivityCutoffIso())
       .order("created_at", { ascending: false })
@@ -1612,7 +1616,7 @@ export async function loadCompanyCreedState(
       .order("created_at", { ascending: true }),
     admin
       .from("creed_connections")
-      .select("*")
+      .select(CONNECTION_SELECT)
       .eq("creed_id", creedId)
       .order("updated_at", { ascending: false }),
     admin
@@ -1819,7 +1823,7 @@ export async function loadCompanyCreedState(
   const mcpClients = ((mcpClientRows.data as McpClientRow[] | null) ?? []).map(
     hydrateMcpClient,
   );
-  const { definitions } = buildConnectionDefinitions();
+  const { definitions } = CONNECTION_DEFINITIONS;
   const connectionMap = new Map(
     ((connectionsResult.data as ConnectionRow[] | null) ?? []).map((row) => [
       row.connection_id,
@@ -1940,14 +1944,32 @@ export async function persistCreedState(
   if (!creedId) {
     throw new Error("Could not resolve the personal Creed.");
   }
-  const [currentSectionsResult, existingProposalsResult] = await Promise.all([
+  const [
+    currentSectionsResult,
+    existingProposalsResult,
+    existingActivityResult,
+    tokenSettingsResult,
+  ] = await Promise.all([
     db
       .from("creed_sections")
       .select(
-        "section_id, kind, name, accent, payload, revision, last_edited_at, archived_at",
+        "section_id, position, kind, name, accent, payload, agent_permission, revision, last_edited_by, last_edited_type, last_edited_at, archived_at",
       )
       .eq("creed_id", creedId),
-    db.from("creed_proposals").select("id").eq("creed_id", creedId),
+    db
+      .from("creed_proposals")
+      .select("id, section_id, section_name, accent, agent_name, change_type, reason, impact, confidence, draft, status, base_revision, created_at")
+      .eq("creed_id", creedId),
+    db
+      .from("creed_activity")
+      .select("id")
+      .eq("creed_id", creedId)
+      .gte("created_at", getActivityCutoffIso()),
+    db
+      .from("creed_tokens")
+      .select("require_approval")
+      .eq("user_id", userId)
+      .maybeSingle(),
   ]);
 
   assertNoError(
@@ -1958,15 +1980,27 @@ export async function persistCreedState(
     existingProposalsResult.error,
     "Could not load current proposals.",
   );
+  assertNoError(
+    existingActivityResult.error,
+    "Could not load current activity ids.",
+  );
+  assertNoError(
+    tokenSettingsResult.error,
+    "Could not load Creed settings.",
+  );
 
   const currentSectionRows =
     (currentSectionsResult.data as Array<{
       section_id: string;
+      position: number;
       kind: CreedSection["kind"];
       name: string;
       accent: AccentKey;
       payload: Record<string, unknown>;
+      agent_permission?: string | null;
       revision: number;
+      last_edited_by?: string;
+      last_edited_type?: ActorType;
       last_edited_at?: string;
       archived_at?: string | null;
     }> | null) ?? [];
@@ -1974,10 +2008,14 @@ export async function persistCreedState(
     string,
     {
       kind: CreedSection["kind"];
+      position: number;
       name: string;
       accent: AccentKey;
       payload: Record<string, unknown>;
+      agentPermission?: string | null;
       revision: number;
+      lastEditedBy?: string;
+      lastEditedType?: ActorType;
       lastEditedAt?: string;
       archivedAt?: string | null;
     }
@@ -1986,32 +2024,65 @@ export async function persistCreedState(
       normalizeLegacySectionId(row.section_id),
       {
         kind: row.kind,
+        position: row.position,
         name: row.name,
         accent: row.accent,
         payload: row.payload,
+        agentPermission: row.agent_permission,
         revision: row.revision,
+        lastEditedBy: row.last_edited_by,
+        lastEditedType: row.last_edited_type,
         lastEditedAt: row.last_edited_at,
         archivedAt: row.archived_at,
       },
     ]),
   );
-  const existingProposalIds = new Set(
-    ((existingProposalsResult.data as Array<{ id: string }> | null) ?? []).map(
+  type ExistingProposal = {
+    id: string;
+    section_id: string;
+    section_name: string;
+    accent: string;
+    agent_name: string;
+    change_type: string;
+    reason: string;
+    impact: string;
+    confidence: string;
+    draft: unknown;
+    status: string;
+    base_revision: number | null;
+    created_at: string;
+  };
+  const existingProposalById = new Map(
+    ((existingProposalsResult.data as ExistingProposal[] | null) ?? []).map(
+      (row) => [row.id, row],
+    ),
+  );
+  const existingProposalIds = new Set(existingProposalById.keys());
+  const existingActivityIds = new Set(
+    ((existingActivityResult.data as Array<{ id: string }> | null) ?? []).map(
       (row) => row.id,
     ),
   );
 
   const now = new Date().toISOString();
-  const sectionRows = state.sections.map((section, index) => {
+  const sectionRows = state.sections.flatMap((section, index) => {
     const payload = serializeSectionPayload(section);
     const current = currentSections.get(section.id);
-    const changed =
+    const contentChanged =
       JSON.stringify(current?.payload ?? null) !== JSON.stringify(payload) ||
       current?.kind !== section.kind ||
       current?.name !== section.name ||
       current?.accent !== section.accent;
+    const metadataChanged =
+      current?.position !== index ||
+      current?.agentPermission !== section.agentPermission ||
+      current?.lastEditedBy !== section.lastEditedBy ||
+      current?.lastEditedType !== section.lastEditedType ||
+      Boolean(current?.archivedAt) !== section.archived;
 
-    return {
+    if (current && !contentChanged && !metadataChanged) return [];
+
+    return [{
       creed_id: creedId,
       user_id: userId,
       section_id: section.id,
@@ -2023,8 +2094,8 @@ export async function persistCreedState(
       agent_permission: section.agentPermission,
       last_edited_by: section.lastEditedBy,
       last_edited_type: section.lastEditedType,
-      last_edited_at: changed ? now : (current?.lastEditedAt ?? now),
-      revision: changed
+      last_edited_at: contentChanged ? now : (current?.lastEditedAt ?? now),
+      revision: contentChanged
         ? (current?.revision ?? 0) + 1
         : (current?.revision ?? 1),
       // Preserve the original archive time so "archived" ordering is stable;
@@ -2032,7 +2103,7 @@ export async function persistCreedState(
       archived_at: section.archived ? (current?.archivedAt ?? now) : null,
       created_at: now,
       updated_at: now,
-    };
+    }];
   });
 
   // Stale proposals are resolved, not persisted: they used to be written back
@@ -2042,7 +2113,8 @@ export async function persistCreedState(
   const persistableProposals = state.proposals.filter(
     (proposal) => proposal.status !== "stale",
   );
-  const proposalRows = persistableProposals.map((proposal) => ({
+  const proposalRows = persistableProposals
+    .map((proposal) => ({
     id: proposal.id,
     creed_id: creedId,
     user_id: userId,
@@ -2058,13 +2130,30 @@ export async function persistCreedState(
     status: proposal.status,
     base_revision: proposal.baseRevision ?? null,
     created_at: proposal.createdAt ?? now,
-    updated_at: now,
-  }));
+      updated_at: now,
+    }))
+    .filter((row) => {
+      const current = existingProposalById.get(row.id);
+      if (!current) return true;
+      return current.section_id !== row.section_id ||
+        current.section_name !== row.section_name ||
+        current.accent !== row.accent ||
+        current.agent_name !== row.agent_name ||
+        current.change_type !== row.change_type ||
+        current.reason !== row.reason ||
+        current.impact !== row.impact ||
+        current.confidence !== row.confidence ||
+        JSON.stringify(current.draft) !== JSON.stringify(row.draft) ||
+        current.status !== row.status ||
+        current.base_revision !== row.base_revision ||
+        current.created_at !== row.created_at;
+    });
 
   const proposalIds = persistableProposals.map((proposal) => proposal.id);
   const knownProposalIds = new Set(proposalIds);
   const activityRows = state.activity
     .filter((entry) => !isNoopActivityEntry(entry))
+    .filter((entry) => !existingActivityIds.has(entry.id))
     .map((entry) => ({
       id: entry.id,
       creed_id: creedId,
@@ -2108,7 +2197,7 @@ export async function persistCreedState(
   if (activityRows.length > 0) {
     const { error } = await db
       .from("creed_activity")
-      .upsert(activityRows, { onConflict: "id" });
+      .upsert(activityRows, { onConflict: "id", ignoreDuplicates: true });
     assertNoError(error, "Could not persist Creed activity.");
   }
 
@@ -2192,15 +2281,22 @@ export async function persistCreedState(
     assertNoError(removeError, "Could not remove resolved proposals.");
   }
 
-  await ensureTokenRow(db, userId);
-  const { error: tokenError } = await db
-    .from("creed_tokens")
-    .update({
-      require_approval: state.settings.requireApproval,
-      updated_at: now,
-    })
-    .eq("user_id", userId);
-  assertNoError(tokenError, "Could not persist Creed settings.");
+  const tokenSettings = tokenSettingsResult.data as {
+    require_approval: boolean;
+  } | null;
+  if (!tokenSettings) {
+    await ensureTokenRow(db, userId);
+  }
+  if (tokenSettings?.require_approval !== state.settings.requireApproval) {
+    const { error: tokenError } = await db
+      .from("creed_tokens")
+      .update({
+        require_approval: state.settings.requireApproval,
+        updated_at: now,
+      })
+      .eq("user_id", userId);
+    assertNoError(tokenError, "Could not persist Creed settings.");
+  }
 }
 
 export async function recordConnectionUsage(
@@ -2411,7 +2507,10 @@ export async function buildAgentPayloadForToken(
     throw new Error(userError?.message || "Could not load token owner.");
   }
 
-  const { state } = await loadCreedState(db, userData.user);
+  const { state } = await loadCreedState(db, userData.user, {
+    proposalLimit: 100,
+    activityLimit: 100,
+  });
   await recordConnectionUsage(
     db,
     userId,

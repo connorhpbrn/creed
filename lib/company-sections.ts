@@ -151,28 +151,33 @@ async function effectivePermission(
   asAgent: boolean,
 ): Promise<AgentPermission> {
   const db = admin();
-  let ceiling: AgentPermission;
-  if (role === "owner" || role === "admin") {
-    ceiling = "direct";
-  } else {
-    const { data } = (await db
+  const memberPermissionPromise = role === "owner" || role === "admin"
+    ? Promise.resolve({ data: null })
+    : db
       .from("creed_member_section_permissions")
       .select("permission")
       .eq("creed_id", creedId)
       .eq("user_id", userId)
       .eq("section_id", sectionId)
-      .maybeSingle()) as { data: { permission: AgentPermission } | null };
-    ceiling = resolveSectionPermission(role, data?.permission);
-  }
+      .maybeSingle();
+  const agentPermissionPromise = asAgent
+    ? db
+        .from("creed_member_agent_permissions")
+        .select("permission")
+        .eq("creed_id", creedId)
+        .eq("user_id", userId)
+        .eq("section_id", sectionId)
+        .maybeSingle()
+    : Promise.resolve({ data: null });
+  const [{ data: memberRow }, { data: agentRow }] = await Promise.all([
+    memberPermissionPromise,
+    agentPermissionPromise,
+  ]) as [
+    { data: { permission: AgentPermission } | null },
+    { data: { permission: AgentPermission } | null },
+  ];
+  const ceiling = resolveSectionPermission(role, memberRow?.permission);
   if (!asAgent) return ceiling;
-
-  const { data: agentRow } = (await db
-    .from("creed_member_agent_permissions")
-    .select("permission")
-    .eq("creed_id", creedId)
-    .eq("user_id", userId)
-    .eq("section_id", sectionId)
-    .maybeSingle()) as { data: { permission: AgentPermission } | null };
   return minPermission(ceiling, agentRow?.permission ?? "propose");
 }
 
@@ -204,9 +209,10 @@ async function writeVersion(params: {
   if (error) {
     throw new Error(error.message);
   }
-  // Lazy prune: keep the latest MAX_VERSIONS_PER_SECTION. Fetch the newest
+  // Lazy prune every 20 revisions: keep the latest MAX_VERSIONS_PER_SECTION. Fetch the newest
   // MAX+1 ids; if a (MAX+1)th exists, delete it and everything older (<= its id),
   // leaving exactly the newest MAX. Avoids offset/range (not on the query shim).
+  if (params.revision % 20 !== 0) return;
   const { data: recent } = (await db
     .from("creed_section_versions")
     .select("id")
@@ -333,13 +339,12 @@ async function renumberSections(
   now: string,
 ): Promise<void> {
   const db = admin();
-  for (let i = 0; i < orderedIds.length; i += 1) {
-    await db
-      .from("creed_sections")
-      .update({ position: i, updated_at: now })
-      .eq("creed_id", creedId)
-      .eq("section_id", orderedIds[i]);
-  }
+  const { error } = await db.rpc("update_creed_section_positions", {
+    p_creed_id: creedId,
+    p_section_ids: orderedIds,
+    p_updated_at: now,
+  });
+  if (error) throw new Error(error.message);
 }
 
 async function deleteSectionRows(
@@ -416,14 +421,17 @@ async function deleteSectionRows(
     "creed_activity",
   ];
 
-  for (const table of cleanupTargets) {
-    const { error } = await db
-      .from(table)
-      .delete()
-      .eq("creed_id", creedId)
-      .eq("section_id", sectionId);
-    if (error) return { ok: false, error: error.message };
-  }
+  const cleanupResults = await Promise.all(
+    cleanupTargets.map((table) =>
+      db
+        .from(table)
+        .delete()
+        .eq("creed_id", creedId)
+        .eq("section_id", sectionId),
+    ),
+  );
+  const cleanupError = cleanupResults.find((result) => result.error)?.error;
+  if (cleanupError) return { ok: false, error: cleanupError.message };
 
   const { error } = await db
     .from("creed_sections")
@@ -924,10 +932,19 @@ export async function updateCompanySection(params: {
   const { creedId, user, sectionId } = params;
   const db = admin();
 
-  const role = await getCreedRole(db, user.id, creedId);
+  const [role, access, currentResult] = await Promise.all([
+    getCreedRole(db, user.id, creedId),
+    companyAccess(creedId),
+    db
+      .from("creed_sections")
+      .select("section_id, name, accent, payload, revision")
+      .eq("creed_id", creedId)
+      .eq("section_id", sectionId)
+      .maybeSingle(),
+  ]);
   if (!role)
     return { ok: false, code: "forbidden", error: "You are not a member of this Creed." };
-  if ((await companyAccess(creedId)) === "frozen") {
+  if (access === "frozen") {
     return {
       ok: false,
       code: "frozen",
@@ -940,14 +957,13 @@ export async function updateCompanySection(params: {
     return { ok: false, code: "forbidden", error: "You cannot edit this section." };
   }
 
-  const { data: current } = (await db
-    .from("creed_sections")
-    .select("section_id, name, accent, payload, revision")
-    .eq("creed_id", creedId)
-    .eq("section_id", sectionId)
-    .maybeSingle()) as {
-    data: { section_id: string; name: string; accent: string; payload: { content?: string }; revision: number } | null;
-  };
+  const current = currentResult.data as {
+    section_id: string;
+    name: string;
+    accent: string;
+    payload: { content?: string };
+    revision: number;
+  } | null;
   if (!current) return { ok: false, code: "not_found", error: "Section not found." };
 
   if (params.baseRevision !== current.revision) {
@@ -1055,10 +1071,23 @@ export async function companyMcpWrite(params: {
   const { creedId, user, op } = params;
   const db = admin();
 
-  const role = await getCreedRole(db, user.id, creedId);
+  const sectionId = op.kind === "create" ? null : op.sectionId;
+  const [role, access, currentResult] = await Promise.all([
+    getCreedRole(db, user.id, creedId),
+    companyAccess(creedId),
+    sectionId
+      ? db
+          .from("creed_sections")
+          .select("section_id, name, accent, payload, revision")
+          .eq("creed_id", creedId)
+          .eq("section_id", sectionId)
+          .is("deleted_at", null)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
   if (!role)
     return { ok: false, code: "forbidden", error: "You are not a member of this Creed." };
-  if ((await companyAccess(creedId)) === "frozen") {
+  if (access === "frozen") {
     return {
       ok: false,
       code: "frozen",
@@ -1108,16 +1137,14 @@ export async function companyMcpWrite(params: {
     return { ok: true, revision: 0, filedProposal: true, proposalId };
   }
 
-  const sectionId = op.sectionId;
-  const { data: current } = (await db
-    .from("creed_sections")
-    .select("section_id, name, accent, payload, revision")
-    .eq("creed_id", creedId)
-    .eq("section_id", sectionId)
-    .is("deleted_at", null)
-    .maybeSingle()) as {
-    data: { section_id: string; name: string; accent: string; payload: { content?: string }; revision: number } | null;
-  };
+  const current = currentResult.data as {
+    section_id: string;
+    name: string;
+    accent: string;
+    payload: { content?: string };
+    revision: number;
+  } | null;
+  if (!sectionId) return { ok: false, code: "not_found", error: "Section not found." };
   if (!current) return { ok: false, code: "not_found", error: "Section not found." };
 
   // Deleting or reordering a section is a structural change reserved to owner/
@@ -1902,19 +1929,14 @@ export async function reorderCompanySections(params: {
     };
   }
 
-  const now = new Date().toISOString();
-  for (let i = 0; i < sectionIds.length; i += 1) {
-    const { error } = await db
-      .from("creed_sections")
-      .update({ position: i, updated_at: now })
-      .eq("creed_id", creedId)
-      .eq("section_id", sectionIds[i]);
-    if (error)
-      return {
-        ok: false,
-        code: "failed",
-        error: "Could not save the new order.",
-      };
+  try {
+    await renumberSections(creedId, sectionIds, new Date().toISOString());
+  } catch {
+    return {
+      ok: false,
+      code: "failed",
+      error: "Could not save the new order.",
+    };
   }
   return { ok: true };
 }

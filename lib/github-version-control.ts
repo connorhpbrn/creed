@@ -116,8 +116,12 @@ export async function requireAuthenticatedGitHubAccess() {
     throw new Error("Unauthorized");
   }
 
-  const enrichedUser = await enrichAuthenticatedUser(user);
-  let integration = await readGitHubIntegration(supabase, user.id);
+  const [enrichedUser, initialIntegration, versionControl] = await Promise.all([
+    enrichAuthenticatedUser(user),
+    readGitHubIntegration(supabase, user.id),
+    readVersionControlConfig(supabase, user.id),
+  ]);
+  let integration = initialIntegration;
   if (integration) {
     integration = await refreshGitHubIntegrationIfPossible(supabase, user.id, integration);
   }
@@ -134,8 +138,6 @@ export async function requireAuthenticatedGitHubAccess() {
 
     throw new Error("GitHub is not connected");
   }
-
-  const versionControl = await readVersionControlConfig(supabase, user.id);
 
   return {
     supabase,

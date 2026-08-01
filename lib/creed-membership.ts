@@ -65,24 +65,12 @@ export async function listUserCreeds(
   const roleByCreed = new Map(memberRows.map((row) => [row.creed_id, row.role]));
   const ids = [...roleByCreed.keys()];
 
-  let creedRows: CreedRow[] | null = null;
   const withAvatar = (await db
     .from("creeds")
     .select("id, type, name, owner_user_id, avatar_url, onboarding_stage")
     .in("id", ids)) as { data: CreedRow[] | null; error: unknown };
-
-  if (withAvatar.error) {
-    const fallback = (await db
-      .from("creeds")
-      .select("id, type, name, owner_user_id, onboarding_stage")
-      .in("id", ids)) as { data: CreedRow[] | null; error: unknown };
-    if (fallback.error || !fallback.data) {
-      return [];
-    }
-    creedRows = fallback.data;
-  } else {
-    creedRows = withAvatar.data;
-  }
+  if (withAvatar.error) return [];
+  const creedRows = withAvatar.data;
 
   if (!creedRows) {
     return [];

@@ -241,15 +241,30 @@ export async function getGitHubFileSnapshot(
   path: string,
   branch: string
 ) {
-  const file = await githubRequest<{
+  const [file, commits] = await Promise.all([
+    githubRequest<{
     sha: string;
     content?: string;
     encoding?: string;
-  }>(
-    accessToken,
-    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodePath(path)}?ref=${encodeURIComponent(branch)}`,
-    { allowNotFound: true }
-  );
+    }>(
+      accessToken,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodePath(path)}?ref=${encodeURIComponent(branch)}`,
+      { allowNotFound: true }
+    ),
+    githubRequest<
+      Array<{
+        sha: string;
+        commit?: {
+          message?: string;
+          committer?: { date?: string };
+        };
+      }>
+    >(
+      accessToken,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?path=${encodeURIComponent(path)}&sha=${encodeURIComponent(branch)}&per_page=1`,
+      { allowNotFound: true }
+    ),
+  ]);
 
   if (!file) {
     return null;
@@ -260,24 +275,7 @@ export async function getGitHubFileSnapshot(
       ? Buffer.from(file.content.replace(/\n/g, ""), "base64").toString("utf8")
       : "";
 
-  const commits =
-    (await githubRequest<
-      Array<{
-        sha: string;
-        commit?: {
-          message?: string;
-          committer?: {
-            date?: string;
-          };
-        };
-      }>
-    >(
-      accessToken,
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?path=${encodeURIComponent(path)}&sha=${encodeURIComponent(branch)}&per_page=1`,
-      { allowNotFound: true }
-    )) ?? [];
-
-  const latestCommit = commits[0];
+  const latestCommit = (commits ?? [])[0];
 
   return {
     sha: file.sha,

@@ -24,7 +24,7 @@ import {
 } from "@/lib/creed-backend";
 import { companyMcpWrite, type CompanyMcpOp } from "@/lib/company-sections";
 import { minPermission, resolveSectionPermission } from "@/lib/creed-permissions";
-import { hasCompanyAccess, listUserCreeds, getCreedRole } from "@/lib/creed-membership";
+import { hasCompanyAccess, listUserCreeds } from "@/lib/creed-membership";
 import { CREED_PROMPTS } from "@/lib/creed-prompts";
 import { findOAuthAccessToken, oauthResource } from "@/lib/oauth";
 import {
@@ -866,7 +866,7 @@ async function resolveMcpState(
   const permissionsOnly = requests.every((request) => request.method === "tools/list");
 
   if (target && target.type === "company") {
-    const role = await getCreedRole(admin, user.id, target.id);
+    const role = target.role;
     if (role) {
       if (permissionsOnly) {
         const sections = await loadActiveCreedSections(admin, user.id, {
