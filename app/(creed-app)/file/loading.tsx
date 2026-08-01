@@ -6,7 +6,10 @@ import { CreedLoader } from "@/components/creed/creed-loader";
 // of sections that may not match what loads reads worse than the mark. The shell
 // sidebar stays mounted around it.
 //
+// `delayed` keeps it off screen for the first beat, so a Creed that loads
+// quickly goes straight to the editor rather than blinking a loader on the way.
+//
 // Press L in development to preview this screen from any page.
 export default function FileLoading() {
-  return <CreedLoader />;
+  return <CreedLoader delayed />;
 }

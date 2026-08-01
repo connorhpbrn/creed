@@ -8,21 +8,30 @@
 // (`creed-logo-spin` in globals.css), which is what lets this render inside a
 // route-level loading.tsx. CreedLoaderCurtain handles fading the screen out once
 // the real content has arrived.
+//
+// `delayed` holds the whole screen at zero opacity for a beat before fading it
+// in, so a Creed that loads quickly never flashes a loader on the way past. Use
+// it wherever the screen might not be needed at all (the route fallback); leave
+// it off where the screen is already on show (the curtain's copy of it).
 
 const logo = "/assets/brand/logo.svg";
 
 export function CreedLoader({
   label = "Loading your Creed",
   size = 44,
+  delayed = false,
 }: {
   label?: string;
   size?: number;
+  delayed?: boolean;
 }) {
   return (
     <div
       role="status"
       aria-live="polite"
-      className="flex h-full min-h-full w-full items-center justify-center bg-[var(--creed-surface)]"
+      className={`flex h-full min-h-full w-full items-center justify-center bg-[var(--creed-surface)]${
+        delayed ? " creed-loader-appear" : ""
+      }`}
     >
       <span
         aria-hidden="true"

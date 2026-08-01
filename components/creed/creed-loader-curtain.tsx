@@ -6,16 +6,27 @@ import { cn } from "@/lib/utils";
 
 export const CREED_LOADER_EXIT_MS = 380;
 
+// The route fallback holds itself at zero opacity for this long before fading
+// in (`creed-loader-appear` in globals.css). A page that resolves inside that
+// window never showed a loader, so there is nothing for the curtain to dissolve
+// and putting one up would be the flash we are avoiding.
+const LOADER_VISIBLE_AFTER_MS = 320 + 240;
+
 // A route-level loading.tsx is swapped for the page in a single commit, so the
 // loader can never animate its own exit - it just vanishes. This renders the
 // same screen over the real content for one frame and fades it out, which turns
 // that hard swap into a dissolve. It never blocks input.
 //
-// It only covers a real document load. On a client-side navigation into /file
-// the page is usually ready immediately, and fading a curtain over content that
-// was never hidden would read as a delay rather than a polish.
-function isDocumentLoadHandoff() {
+// It is deliberately conservative about when to do that. Covering content that
+// was never hidden reads as a stall, not a polish, so the curtain stays out of
+// the way unless the loading screen was genuinely on show: the document must
+// have taken long enough for the loader to appear, and this must be that
+// document's own load rather than a later click through the app.
+function shouldCoverHandoff() {
   if (typeof performance === "undefined") return false;
+
+  const elapsed = performance.now();
+  if (elapsed < LOADER_VISIBLE_AFTER_MS) return false;
 
   const [navigation] = performance.getEntriesByType("navigation") as
     | PerformanceNavigationTiming[]
@@ -25,7 +36,7 @@ function isDocumentLoadHandoff() {
   // Time since the document's HTML finished arriving: small while the first
   // render is still settling, seconds-to-minutes by the time someone clicks
   // through the app.
-  return performance.now() - navigation.responseEnd < 4000;
+  return elapsed - navigation.responseEnd < 4000;
 }
 
 export function CreedLoaderCurtain() {
@@ -34,7 +45,7 @@ export function CreedLoaderCurtain() {
   const [phase, setPhase] = useState<"inert" | "covering" | "leaving">("inert");
 
   useEffect(() => {
-    if (!isDocumentLoadHandoff()) return;
+    if (!shouldCoverHandoff()) return;
     setPhase("covering");
   }, []);
 
