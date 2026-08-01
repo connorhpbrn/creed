@@ -978,10 +978,12 @@
    but only a fresh document load of /file gets `creed-booting` on <html> from
    /theme-init.js, so nothing else ever paints it.
 
-   It leaves on a pure CSS signal: `:has()` goes true the moment the editor's
-   root element arrives in the stream, which is before hydration and before the
-   router has anything to say. That is deliberate - a splash that waited for
-   hydration would still be up after the editor had painted. */
+   It leaves on a pure CSS signal: `:has()` goes true when the editor's trailing
+   marker arrives in the stream, which is before hydration and before the router
+   has anything to say. That is deliberate - a splash that waited for hydration
+   would still be up after the editor had painted. The marker is emitted after
+   the editor rather than on it, so the splash never pulls away over markup that
+   is still arriving. */
 .creed-boot-splash {
   display: none;
 }
@@ -991,6 +993,9 @@ html.creed-booting .creed-boot-splash {
   inset: 0;
   z-index: 60;
   display: block;
+  /* Opaque on the splash itself, not only on the screen inside it: nothing
+     behind should ever show through while it is up. */
+  background: var(--creed-surface);
 }
 
 html.creed-booting:has([data-creed-editor]) .creed-boot-splash {

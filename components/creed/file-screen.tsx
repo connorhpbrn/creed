@@ -2406,12 +2406,7 @@ export function FileScreen() {
 
   return (
     <>
-      {/* The boot splash keys off this attribute: it disappears the moment this
-          element lands in the stream, without waiting for hydration. */}
-      <div
-        data-creed-editor=""
-        className="relative flex h-full min-h-0 bg-[var(--creed-surface)] transition-colors duration-200"
-      >
+      <div className="relative flex h-full min-h-0 bg-[var(--creed-surface)] transition-colors duration-200">
         <div className="min-w-0 flex-1">
           <div
             ref={editorScrollRef}
