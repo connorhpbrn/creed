@@ -1000,3 +1000,18 @@
     opacity: 0.75;
   }
 }
+
+/* The panel's height follows its content, and the panel is pinned where it
+   opened, so the whole change happens at the bottom edge. Easing it turns a
+   jump - the results list filtering, the composer taking another line - into
+   the panel breathing to its new size. Applied only after the first
+   measurement, or it would animate up from nothing as the panel opens. */
+.creed-panel-resize {
+  transition: height 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .creed-panel-resize {
+    transition: none;
+  }
+}

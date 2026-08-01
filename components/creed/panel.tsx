@@ -1148,31 +1148,56 @@ export function CreedPanel({
   // Only Search shows an input-row spinner; Ask + Agent show progress in the
   // body (the chat "Thinking…" line / the Agent stage list).
   const showInputSpinner = mode === "search" && searchPhase === "working";
-  const contentRef = useRef<HTMLDivElement | null>(null);
+  const bodyRefForHeight = useRef<HTMLDivElement | null>(null);
   const [frozenOffset, setFrozenOffset] = useState<number | null>(null);
+  // The panel's own height is driven from the content's measured height so the
+  // change can be eased. `auto` cannot be transitioned.
+  const [panelHeight, setPanelHeight] = useState<number | null>(null);
+  // Off for the first measurement, or the panel would animate up from nothing
+  // as it opens.
+  const [easeHeight, setEaseHeight] = useState(false);
 
   useLayoutEffect(() => {
     if (!open) {
       setFrozenOffset(null);
+      setPanelHeight(null);
+      setEaseHeight(false);
       return;
     }
 
     let frame = 0;
-    const freeze = () => {
+    let observer: ResizeObserver | null = null;
+
+    const start = () => {
+      const node = bodyRefForHeight.current;
       // offsetHeight, not getBoundingClientRect: the open animation scales the
-      // panel to 95%, and measuring through that would bake the wrong offset in.
-      const height = contentRef.current?.offsetHeight;
-      if (height) {
-        setFrozenOffset(Math.round(height / 2));
+      // panel to 95%, and measuring through that would bake in the wrong
+      // numbers.
+      const height = node?.offsetHeight;
+      if (!node || !height) {
+        // Nothing to measure yet. Keep trying - failing here silently would
+        // leave the panel on percentage centring, which is the bug.
+        frame = window.requestAnimationFrame(start);
         return;
       }
-      // Nothing to measure yet. Keep trying - failing here silently would leave
-      // the panel on percentage centring, which is the bug.
-      frame = window.requestAnimationFrame(freeze);
+
+      // The height it opens at fixes where it sits, for good.
+      setFrozenOffset(Math.round(height / 2));
+      setPanelHeight(height);
+      frame = window.requestAnimationFrame(() => setEaseHeight(true));
+
+      observer = new ResizeObserver(() => {
+        const next = bodyRefForHeight.current?.offsetHeight;
+        if (next) setPanelHeight(next);
+      });
+      observer.observe(node);
     };
 
-    freeze();
-    return () => window.cancelAnimationFrame(frame);
+    start();
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
   }, [open]);
 
   const stageIndex = agentRun.stage ? AGENT_STAGES.indexOf(agentRun.stage) : -1;
@@ -1191,7 +1216,6 @@ export function CreedPanel({
           data-state={open ? "open" : "closed"}
         />
         <DialogPrimitive.Content
-          ref={contentRef}
           // Centred on open, then fixed. `-50%` is a share of the panel's own
           // height, so it re-centred on every resize - which is what moved the
           // input. Once measured this becomes a pixel offset and the panel is
@@ -1199,9 +1223,14 @@ export function CreedPanel({
           //
           // On `translate` rather than `transform`, because the open animation
           // owns `transform` and would drag the panel while it plays.
+          //
+          // Height is explicit for the same reason a transition needs it: the
+          // content sets the number, this eases to it, and `overflow-hidden`
+          // (already on the panel) keeps the difference tidy in between.
           style={{
             translate:
               frozenOffset === null ? "-50% -50%" : `-50% -${frozenOffset}px`,
+            height: panelHeight === null ? undefined : panelHeight,
           }}
           aria-describedby={undefined}
           onCloseAutoFocus={(event) => {
@@ -1225,12 +1254,15 @@ export function CreedPanel({
             if (target?.closest("[data-creed-mention-popup]"))
               event.preventDefault();
           }}
-          className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-[560px] overflow-hidden rounded-[var(--radius-lg)] bg-[var(--creed-surface)] p-0 text-popover-foreground ring-1 ring-foreground/8 shadow-[0_18px_48px_rgba(28,28,26,0.08)] outline-none duration-[160ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+          className={cn(
+            "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-[560px] overflow-hidden rounded-[var(--radius-lg)] bg-[var(--creed-surface)] p-0 text-popover-foreground ring-1 ring-foreground/8 shadow-[0_18px_48px_rgba(28,28,26,0.08)] outline-none duration-[160ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+            easeHeight && "creed-panel-resize",
+          )}
         >
           <DialogPrimitive.Title className="sr-only">
             Panel
           </DialogPrimitive.Title>
-          <motion.div animate={shakeControls}>
+          <motion.div ref={bodyRefForHeight} animate={shakeControls}>
             {/* Input row */}
             <div className="flex items-center gap-2.5 border-b border-[var(--creed-border)] px-4">
               <InputIcon
