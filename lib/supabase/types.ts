@@ -32,6 +32,10 @@ export type SupabaseLikeQuery = PromiseLike<SupabaseLikeQueryResult> & {
 };
 
 export type SupabaseLikeClient = {
+  rpc: (
+    functionName: string,
+    params?: Record<string, unknown>,
+  ) => Promise<SupabaseLikeQueryResult>;
   from: (table: string) => {
     select: (columns?: string, options?: Record<string, unknown>) => SupabaseLikeQuery;
     insert: (values: unknown, options?: Record<string, unknown>) => SupabaseLikeQuery;

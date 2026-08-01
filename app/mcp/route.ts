@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import type { User } from "@supabase/supabase-js";
 import type {
   AccentKey,
@@ -20,6 +20,7 @@ import {
   recordCliAgentUsage,
   createBlankCreedState,
   getAvatarInitials,
+  loadActiveCreedSections,
 } from "@/lib/creed-backend";
 import { companyMcpWrite, type CompanyMcpOp } from "@/lib/company-sections";
 import { minPermission, resolveSectionPermission } from "@/lib/creed-permissions";
@@ -38,6 +39,8 @@ import { getSiteUrl, isSupabaseAdminConfigured } from "@/lib/supabase/env";
 import { readLatestQualityReport, validateQualityReport } from "@/lib/ai/quality";
 import type { CreedQualityReport } from "@/lib/ai/quality";
 import { markdownToRichHtml } from "@/lib/rich-text";
+import { POST as postPersonalProposal } from "@/app/api/creed/proposals/route";
+import { POST as postPersonalWrite } from "@/app/api/creed/write/route";
 import {
   getAgentIconKind,
   isCliAttributableAgentId,
@@ -768,17 +771,17 @@ async function callInternalCreedRoute(
   writeToken: string,
   body: Record<string, unknown>
 ) {
-  const baseUrl = getSiteUrl();
-  const response = await fetch(new URL(path, baseUrl), {
+  const internalRequest = new Request(`http://creed.internal${path}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${writeToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
   });
+  const response = path === "/api/creed/write"
+    ? await postPersonalWrite(internalRequest)
+    : await postPersonalProposal(internalRequest);
   const payload = (await response.json()) as { error?: string };
 
   if (!response.ok) {
@@ -860,10 +863,28 @@ async function resolveMcpState(
     state: { ...createBlankCreedState(user as never), creeds: switcherCreeds },
     creeds,
   });
+  const permissionsOnly = requests.every((request) => request.method === "tools/list");
 
   if (target && target.type === "company") {
     const role = await getCreedRole(admin, user.id, target.id);
     if (role) {
+      if (permissionsOnly) {
+        const sections = await loadActiveCreedSections(admin, user.id, {
+          creedId: target.id,
+          role,
+          creeds,
+        });
+        return {
+          state: {
+            ...createBlankCreedState(user as never),
+            creedId: target.id,
+            creedType: "company",
+            creeds: switcherCreeds,
+            sections,
+          },
+          creeds,
+        };
+      }
       const result = await loadCompanyCreedState(
         user as never,
         target.id,
@@ -913,6 +934,24 @@ async function resolveMcpState(
   const personalGranted = personal && creeds.some((c) => c.id === personal.id);
   if (!personalGranted) {
     return emptyState();
+  }
+
+  if (permissionsOnly && personal) {
+    const sections = await loadActiveCreedSections(admin, user.id, {
+      creedId: personal.id,
+      role: personal.role,
+      creeds,
+    });
+    return {
+      state: {
+        ...createBlankCreedState(user as never),
+        creedId: personal.id,
+        creedType: "personal",
+        creeds: switcherCreeds,
+        sections,
+      },
+      creeds,
+    };
   }
 
   const { state } = await loadCreedState(admin as never, user as never, {
@@ -2215,6 +2254,46 @@ async function handleRpcRequest(
   return errorFor(rpcRequest.id, -32601, `Unsupported MCP method: ${rpcRequest.method}.`);
 }
 
+function handleStatelessRpcRequest(rpcRequest: JsonRpcRequest) {
+  if (rpcRequest.method === "initialize") {
+    return responseFor(rpcRequest.id, {
+      protocolVersion: "2025-06-18",
+      capabilities: {
+        tools: { listChanged: false },
+        resources: { listChanged: false },
+        prompts: { listChanged: false },
+      },
+      serverInfo: { name: "Creed", version: "0.1.0" },
+      instructions: MCP_INSTRUCTIONS,
+    });
+  }
+  if (rpcRequest.method === "notifications/initialized") return null;
+  if (rpcRequest.method === "resources/list") {
+    return responseFor(rpcRequest.id, {
+      resources: [{
+        uri: CREED_RESOURCE_URI,
+        name: "Your Creed",
+        description: "The user's personal context profile as Markdown.",
+        mimeType: "text/markdown",
+      }],
+    });
+  }
+  if (rpcRequest.method === "prompts/list") {
+    return responseFor(rpcRequest.id, { prompts: CREED_PROMPTS });
+  }
+  if (rpcRequest.method === "prompts/get") {
+    const promptName = (rpcRequest.params as { name?: unknown } | undefined)?.name;
+    const prompt = CREED_PROMPTS.find((entry) => entry.name === promptName);
+    return prompt
+      ? responseFor(rpcRequest.id, {
+          description: prompt.description,
+          messages: [{ role: "user", content: { type: "text", text: prompt.text } }],
+        })
+      : errorFor(rpcRequest.id, -32602, `Unknown prompt: ${String(promptName)}.`);
+  }
+  return undefined;
+}
+
 // 401 that triggers a spec-compliant client's OAuth discovery: the
 // WWW-Authenticate header points at our protected-resource metadata.
 function unauthorized() {
@@ -2348,6 +2427,16 @@ export async function POST(request: Request) {
       }
     );
   }
+  const statelessResults = requests.map(handleStatelessRpcRequest);
+  if (statelessResults.every((result) => result !== undefined)) {
+    const results = statelessResults.filter((result) => result !== null);
+    if (results.length === 0) {
+      return new NextResponse(null, { status: 202, headers: MCP_CORS_HEADERS });
+    }
+    return NextResponse.json(Array.isArray(body) ? results : results[0], {
+      headers: MCP_CORS_HEADERS,
+    });
+  }
   // Resolve which Creed this batch targets (personal by default, or a company
   // Creed named via the `creed` arg + granted to this token). Company Creeds
   // load read-only. MCP only needs recent activity + a tight proposal cap.
@@ -2378,25 +2467,30 @@ export async function POST(request: Request) {
   const clientName =
     resolveMcpAgentName(firstRequest ?? {}, firstToolArgs, resolved.clientName) ??
     resolved.clientName;
-  await recordMcpClientUsage(admin as never, userId, clientName, state.creedId);
   const cliAgentHeader = request.headers
     .get("x-creed-cli-agent")
     ?.trim()
     .toLowerCase();
+  const telemetry: Array<Promise<unknown>> = [
+    recordMcpClientUsage(admin as never, userId, clientName, state.creedId),
+  ];
   if (
     getAgentIconKind(resolved.clientName) === "cli" &&
     cliAgentHeader &&
     state.creedId &&
     isCliAttributableAgentId(cliAgentHeader)
   ) {
-    await recordCliAgentUsage(
+    telemetry.push(recordCliAgentUsage(
       admin as never,
       userId,
       resolved.tokenId,
       cliAgentHeader,
       state.creedId,
-    );
+    ));
   }
+  after(async () => {
+    await Promise.allSettled(telemetry);
+  });
 
   const results = (
     await Promise.all(requests.map((rpcRequest) => handleRpcRequest(

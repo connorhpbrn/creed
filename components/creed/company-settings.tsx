@@ -432,22 +432,14 @@ export function CompanySettings() {
     };
   }, [aiSettings.aiMode, aiSettings.keyStatus]);
 
-  // Keep the roster live without a manual refresh. Invite accepts happen on the
-  // invitee's device, so a manager watching this screen needs the change pulled
-  // in: poll while mounted, and refetch the moment the tab regains focus.
+  // The provider already syncs company state. A focus refresh covers invite
+  // accepts that happened while this tab was in the background without stacking
+  // a second roster interval on top of the provider poll.
   useEffect(() => {
     const onFocus = () => void refreshState();
     window.addEventListener("focus", onFocus);
-    // 15s, visible tabs only: an invite accept surfacing within a few seconds
-    // of the manager looking at the screen is what matters, not a hidden tab
-    // polling all day.
-    const interval = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void refreshState();
-    }, 15000);
     return () => {
       window.removeEventListener("focus", onFocus);
-      window.clearInterval(interval);
     };
   }, [refreshState]);
 

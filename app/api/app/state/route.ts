@@ -1,18 +1,27 @@
 import { NextResponse } from "next/server";
-import { loadActiveCreedState, persistCreedState } from "@/lib/creed-backend";
+import { getCreedStateTick, loadActiveCreedState, persistCreedState } from "@/lib/creed-backend";
 import { resolveActiveCreed } from "@/lib/creed-context";
 import { requireApiAuth } from "@/lib/api-auth";
 import { log } from "@/lib/observability";
 import { validateCreedState } from "@/lib/validation/creed-state";
 import { checkRateLimit } from "@/lib/rate-limit";
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireApiAuth();
   if (auth instanceof NextResponse) return auth;
 
   const active = await resolveActiveCreed(auth.supabase, auth.user);
+  const sinceValue = new URL(request.url).searchParams.get("since");
+  const since = sinceValue && /^\d{1,16}$/.test(sinceValue) ? Number(sinceValue) : null;
+  const tick = active?.creedId ? await getCreedStateTick(active.creedId) : null;
+  if (since !== null && tick !== null && tick <= since) {
+    return NextResponse.json({ changed: false, tick });
+  }
   const [result, gettingStartedResult] = await Promise.all([
-    loadActiveCreedState(auth.supabase, auth.user, active),
+    loadActiveCreedState(auth.supabase, auth.user, active, {
+      proposalLimit: 50,
+      activityLimit: 50,
+    }),
     // The "Get started" checklist rides along on every state GET (PK read,
     // sub-ms) so the client never needs a separate fetch or poll for it.
     auth.supabase
@@ -30,7 +39,7 @@ export async function GET() {
   result.state.gettingStarted = row
     ? { steps: row.steps ?? {}, completedAt: row.completed_at }
     : null;
-  return NextResponse.json(result);
+  return NextResponse.json({ ...result, changed: true, tick });
 }
 
 export async function PUT(request: Request) {

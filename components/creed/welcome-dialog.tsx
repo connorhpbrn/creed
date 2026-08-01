@@ -6,10 +6,10 @@
 // "Skip" on the first slide jumps to the last slide, it is not a dismissal.
 //
 // Two variants:
-//   personal - blue accent, 6 slides, videos from /assets/popups/personal.
+//   personal - blue accent, 6 slides, videos from /assets/popups/shared.
 //   company  - amber accent (matching the Company wordmark), same slides plus a
 //              "members" slide in second position, videos from
-//              /assets/popups/company.
+//              /assets/popups/company (the shared slides still use /shared).
 // The accent is a single CSS var (--tour-accent) set per variant on the dialog,
 // so every accented element (button, dots, links, media chip) follows it.
 //
@@ -58,6 +58,7 @@ import { fireWelcomeConfetti } from "@/lib/confetti";
 import {
   getWelcomePreviewVariant,
   WELCOME_MEDIA_VERSION,
+  getWelcomeMediaBase,
   type WelcomeVariant,
 } from "@/lib/welcome-preview";
 import { cn } from "@/lib/utils";
@@ -253,18 +254,16 @@ function SlideTitleIcon({ slide }: { slide: Slide }) {
 
 function MediaFrame({
   slide,
-  mediaBase,
   lineVariants,
 }: {
   slide: Slide;
-  mediaBase: string;
   lineVariants: Variants;
 }) {
   const [ready, setReady] = useState(false);
   const reduce = useReducedMotion();
   const Icon = slide.icon;
   const isDiscord = slide.key === "discord";
-  const base = `${mediaBase}/${slide.key}`;
+  const base = `${getWelcomeMediaBase(slide.key)}/${slide.key}`;
   // The redline annotation only makes sense where a video is expected, and only
   // in dev - real users never see file paths.
   const showRedline = IS_DEV && slide.hasVideo;
@@ -310,7 +309,7 @@ function MediaFrame({
               16:9 · placeholder
             </div>
             <div className="text-[var(--creed-text-secondary)]">
-              /public{mediaBase}/{slide.key}.mp4
+              {base}.mp4
             </div>
           </div>
         ) : null}
@@ -378,7 +377,6 @@ export function WelcomeDialog({
   }, [variantProp]);
 
   const slides = slidesFor(variant);
-  const mediaBase = `/assets/popups/${variant}`;
   const last = slides.length - 1;
 
   // Celebrate on appearance: a bright poof of confetti the moment the tour
@@ -569,7 +567,7 @@ export function WelcomeDialog({
                 {slide.body}
               </motion.p>
 
-              <MediaFrame slide={slide} mediaBase={mediaBase} lineVariants={lineVariants} />
+              <MediaFrame slide={slide} lineVariants={lineVariants} />
             </motion.div>
           </AnimatePresence>
         </div>

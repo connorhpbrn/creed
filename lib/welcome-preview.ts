@@ -13,6 +13,11 @@ export type WelcomeVariant = "personal" | "company";
 // dialog and the preloader so the warmed URLs match the played ones.
 export const WELCOME_MEDIA_VERSION = "2";
 
+export function getWelcomeMediaBase(key: string) {
+  const folder = key === "members" ? "company" : "shared";
+  return `/assets/popups/${folder}`;
+}
+
 let current: WelcomeVariant = "personal";
 
 export function setWelcomePreviewVariant(variant: WelcomeVariant) {

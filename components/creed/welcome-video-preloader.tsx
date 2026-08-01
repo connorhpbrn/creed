@@ -7,11 +7,12 @@
 // (same URLs + source order), so those requests are served straight from cache.
 //
 // Keys mirror the SLIDES in welcome-dialog.tsx. Files live in
-// /public/assets/popups/<variant>/<key>.mp4 (+ optional .webm). The company
-// variant adds the members slide and pulls from the company folder.
+// Shared clips live once under /public/assets/popups/shared. The company-only
+// members clip remains under /company.
 
 import {
   WELCOME_MEDIA_VERSION,
+  getWelcomeMediaBase,
   type WelcomeVariant,
 } from "@/lib/welcome-preview";
 
@@ -24,7 +25,6 @@ export function WelcomeVideoPreloader({
   variant?: WelcomeVariant;
 }) {
   const keys = variant === "company" ? COMPANY_KEYS : PERSONAL_KEYS;
-  const base = `/assets/popups/${variant}`;
   return (
     <div
       aria-hidden
@@ -32,8 +32,8 @@ export function WelcomeVideoPreloader({
     >
       {keys.map((key) => (
         <video key={key} muted playsInline preload="metadata" tabIndex={-1}>
-          <source src={`${base}/${key}.webm?v=${WELCOME_MEDIA_VERSION}`} type="video/webm" />
-          <source src={`${base}/${key}.mp4?v=${WELCOME_MEDIA_VERSION}`} type="video/mp4" />
+          <source src={`${getWelcomeMediaBase(key)}/${key}.webm?v=${WELCOME_MEDIA_VERSION}`} type="video/webm" />
+          <source src={`${getWelcomeMediaBase(key)}/${key}.mp4?v=${WELCOME_MEDIA_VERSION}`} type="video/mp4" />
         </video>
       ))}
     </div>

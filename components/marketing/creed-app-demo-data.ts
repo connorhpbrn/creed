@@ -655,7 +655,7 @@ const profile = (
 export const DEMO_PROFILES = [
   profile(
     "Steve",
-    "/assets/eggs/steve.png",
+    "/assets/eggs/steve.jpg",
     steveSections,
     steveProposals,
     { "steve-p-focus": { base: steveFocusPlain, html: bulletList(steveFocusApplied), score: 94, added: 11 } },
@@ -671,7 +671,7 @@ export const DEMO_PROFILES = [
   ),
   profile(
     "Marc",
-    "/assets/eggs/marc.png",
+    "/assets/eggs/marc.jpg",
     marcSections,
     marcProposals,
     {
@@ -692,7 +692,7 @@ export const DEMO_PROFILES = [
   ),
   profile(
     "Travis",
-    "/assets/eggs/travis.png",
+    "/assets/eggs/travis.jpg",
     travisSections,
     travisProposals,
     {
@@ -711,7 +711,7 @@ export const DEMO_PROFILES = [
   ),
   profile(
     "Jason",
-    "/assets/eggs/jason.png",
+    "/assets/eggs/jason.jpg",
     jasonSections,
     jasonProposals,
     {
@@ -734,7 +734,7 @@ export const DEMO_PROFILES = [
   ),
   profile(
     "Elon",
-    "/assets/eggs/elon.png",
+    "/assets/eggs/elon.jpg",
     elonSections,
     elonProposals,
     {

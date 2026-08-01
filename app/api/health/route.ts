@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getAppVersion } from "@/lib/app-version";
 import {
   isSupabaseAdminConfigured,
   isSupabaseConfigured,
 } from "@/lib/supabase/env";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // Run on the Node.js runtime so we can use the Supabase admin client for
 // the database probe. Force-dynamic + no-store so monitors never see a
@@ -18,7 +20,7 @@ export const dynamic = "force-dynamic";
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, X-Creed-Health-Secret",
 } as const;
 
 const NO_STORE_HEADERS = {
@@ -52,7 +54,31 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
-export async function HEAD() {
+function callerIp(request: Request) {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+
+async function limited(request: Request) {
+  return checkRateLimit({
+    scope: "public-health",
+    identifier: callerIp(request),
+    limit: 30,
+    windowMs: 60_000,
+  });
+}
+
+function mayReadDetails(request: Request) {
+  const expected = process.env.CREED_HEALTH_SECRET;
+  const received = request.headers.get("x-creed-health-secret");
+  if (!expected || !received) return false;
+  const left = Buffer.from(expected);
+  const right = Buffer.from(received);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+export async function HEAD(request: Request) {
+  const verdict = await limited(request);
+  if (!verdict.ok) return new NextResponse(null, { status: 429, headers: CORS_HEADERS });
   // HEAD is cheap and useful for plain uptime monitors that only care about
   // 2xx vs 5xx. We still run the full probe so the HTTP status reflects
   // real component health.
@@ -63,9 +89,19 @@ export async function HEAD() {
   });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const verdict = await limited(request);
+  if (!verdict.ok) {
+    return NextResponse.json({ status: "rate_limited" }, {
+      status: 429,
+      headers: { ...CORS_HEADERS, "Retry-After": String(verdict.retryAfterSeconds) },
+    });
+  }
   const { payload, httpStatus } = await buildPayload();
-  return NextResponse.json(payload, {
+  const body = mayReadDetails(request)
+    ? payload
+    : { status: payload.status, time: payload.time };
+  return NextResponse.json(body, {
     status: httpStatus,
     headers: { ...CORS_HEADERS, ...NO_STORE_HEADERS },
   });

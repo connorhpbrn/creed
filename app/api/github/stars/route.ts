@@ -7,6 +7,9 @@ import { NextResponse } from "next/server";
 import { GITHUB_URL } from "@/lib/branding";
 
 export const revalidate = 3600;
+const CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+};
 
 function repoSlug(): string | null {
   const match = GITHUB_URL.match(/github\.com\/([^/]+)\/([^/?#]+)/);
@@ -29,7 +32,7 @@ export async function GET() {
     }
     const data = (await res.json()) as { stargazers_count?: number };
     const stars = typeof data.stargazers_count === "number" ? data.stargazers_count : null;
-    return NextResponse.json({ stars });
+    return NextResponse.json({ stars }, { headers: CACHE_HEADERS });
   } catch {
     return NextResponse.json({ stars: null });
   }

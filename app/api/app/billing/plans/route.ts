@@ -83,11 +83,13 @@ export async function GET() {
   // Each company the caller OWNS.
   const creeds = await listUserCreeds(auth.supabase, auth.user.id);
   const ownedCompanies = creeds.filter((c) => c.type === "company" && c.role === "owner");
-  for (const creed of ownedCompanies) {
-    const billing = await getCompanyBilling(creed.id);
-    if (!billing) continue;
-    const credits = await getCompanyCreditsState(creed.id).catch(() => null);
-    plans.push({
+  const companyPlans = await Promise.all(ownedCompanies.map(async (creed): Promise<PlanCard | null> => {
+    const [billing, credits] = await Promise.all([
+      getCompanyBilling(creed.id),
+      getCompanyCreditsState(creed.id).catch(() => null),
+    ]);
+    if (!billing) return null;
+    return {
       scope: "company",
       creedId: creed.id,
       name: creed.name,
@@ -105,8 +107,9 @@ export async function GET() {
             purchasedUsd: credits.purchasedUsd,
           }
         : null,
-    });
-  }
+    };
+  }));
+  plans.push(...companyPlans.filter((plan) => plan !== null));
 
   return NextResponse.json({ plans }, { headers: NO_STORE_HEADERS });
 }

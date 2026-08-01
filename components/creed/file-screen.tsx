@@ -1612,12 +1612,12 @@ export function FileScreen() {
         // A transient read failure just leaves the current report in place.
       }
     }
-    // 60s cadence, visible tabs only - a shared report refresh isn't
+    // Five-minute cadence, visible tabs only. Quality is not latency-sensitive
     // latency-sensitive, and the focus refetch covers "just switched back".
     const interval = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void syncSharedReport();
-    }, 60000);
+    }, 300_000);
     const onFocus = () => void syncSharedReport();
     window.addEventListener("focus", onFocus);
     return () => {

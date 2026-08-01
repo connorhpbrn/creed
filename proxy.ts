@@ -5,8 +5,14 @@ import { getSupabasePublishableKey, getSupabaseUrl, isSupabaseConfigured } from 
 
 export const config = {
   // Run on every route except static assets and Next internals.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|assets|.*\\.(?:png|jpg|jpeg|svg|gif|webp|avif|ico|woff2?|ttf|otf|mp4)$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|assets|api/(?:status|version|health|github/stars|roadmap)(?:/|$)|.*\\.(?:png|jpg|jpeg|svg|gif|webp|avif|ico|woff2?|ttf|otf|mp4)$).*)"],
 };
+
+function hasSupabaseAuthCookie(request: NextRequest) {
+  return request.cookies.getAll().some(
+    ({ name }) => name.startsWith("sb-") && name.includes("auth-token"),
+  );
+}
 
 function contentSecurityPolicy(nonce: string) {
   const isDev = process.env.NODE_ENV !== "production";
@@ -35,6 +41,11 @@ function generateRequestId() {
 }
 
 export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const hasAuthCookie = hasSupabaseAuthCookie(request);
+  if (pathname === "/" && !hasAuthCookie) {
+    return NextResponse.redirect(new URL("/home", request.url), 307);
+  }
   const incomingId = request.headers.get("x-request-id");
   const requestId = incomingId && incomingId.length <= 80 ? incomingId : generateRequestId();
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
@@ -62,7 +73,12 @@ export async function proxy(request: NextRequest) {
   // a stale/expired session - login loops, the /pricing bounce, and the
   // seed/empty state that only resolves on a manual refresh. Marketing routes
   // are skipped to keep them fast; they don't gate on the session server-side.
-  if (isSupabaseConfigured() && !isMarketingPath(request.nextUrl.pathname)) {
+  if (
+    isSupabaseConfigured() &&
+    hasAuthCookie &&
+    !pathname.startsWith("/api/") &&
+    !isMarketingPath(pathname)
+  ) {
     const supabase = createServerClient(getSupabaseUrl(), getSupabasePublishableKey(), {
       cookies: {
         getAll() {

@@ -89,7 +89,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing or oversized request." }, { status: 400 });
     }
 
-    const { state } = await loadActiveCreedState(auth.supabase, auth.user, activeCreed);
+    const { state } = await loadActiveCreedState(auth.supabase, auth.user, activeCreed, {
+      proposalLimit: 50,
+      activityLimit: 1,
+    });
     // The in-app agent is the user's own tool, so it works over every live
     // section it can see (personal: all, including hidden; company: the member's
     // visible sections). How each edit lands (direct vs proposal) is decided

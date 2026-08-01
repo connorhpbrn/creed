@@ -86,7 +86,10 @@ export async function POST(request: Request) {
       active && active.creeds.find((c) => c.id === active.creedId)?.type === "company"
         ? active.creedId
         : null;
-    const { state } = await loadActiveCreedState(auth.supabase, auth.user, active);
+    const { state } = await loadActiveCreedState(auth.supabase, auth.user, active, {
+      proposalLimit: 50,
+      activityLimit: 1,
+    });
     if (companyId && state.company?.accessState === "frozen") {
       return NextResponse.json({ error: "This company Creed is read-only until billing is fixed." }, { status: 403 });
     }

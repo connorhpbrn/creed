@@ -13,6 +13,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 // every client-side navigation instead of flipping "Resume" -> "Get Started"
 // and reflowing the button. Background revalidation still runs on each mount.
 let cachedCanResume = false;
+const ONBOARDING_CACHE_PREFIX = "creed:onboarding-started:";
 
 export function useOnboardingResume(configured: boolean = true): boolean {
   const [canResume, setCanResume] = useState(cachedCanResume);
@@ -32,6 +33,12 @@ export function useOnboardingResume(configured: boolean = true): boolean {
         if (active) commit(false);
         return;
       }
+      const cacheKey = `${ONBOARDING_CACHE_PREFIX}${userId}`;
+      const cached = window.sessionStorage.getItem(cacheKey);
+      if (cached === "1" || cached === "0") {
+        if (active) commit(cached === "1");
+        return;
+      }
       try {
         const res = await fetch("/api/app/onboarding-status", {
           method: "GET",
@@ -42,7 +49,9 @@ export function useOnboardingResume(configured: boolean = true): boolean {
           return;
         }
         const data = (await res.json()) as { started?: boolean };
-        if (active) commit(Boolean(data.started));
+        const started = Boolean(data.started);
+        window.sessionStorage.setItem(cacheKey, started ? "1" : "0");
+        if (active) commit(started);
       } catch {
         if (active) commit(false);
       }

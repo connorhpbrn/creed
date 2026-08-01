@@ -114,7 +114,7 @@ type CreedContextValue = {
 
 const CreedContext = createContext<CreedContextValue | null>(null);
 const AUTOSAVE_DELAY_MS = 500;
-const EXTERNAL_SYNC_INTERVAL_MS = 30_000;
+const EXTERNAL_SYNC_INTERVAL_MS = 120_000;
 // Company Creeds are multi-user, so changes (proposals, edits, reviews) need to
 // surface on everyone's screen quickly. Member edits arrive instantly over the
 // realtime channel (see broadcastStateChanged); the poll only backstops writes
@@ -122,7 +122,7 @@ const EXTERNAL_SYNC_INTERVAL_MS = 30_000;
 // creed is active and decays when nothing has happened for a while - idle open
 // tabs were the dominant source of function invocations.
 const COMPANY_SYNC_INTERVAL_MS = 5_000;
-const COMPANY_IDLE_SYNC_INTERVAL_MS = 30_000;
+const COMPANY_IDLE_SYNC_INTERVAL_MS = 120_000;
 // How recently something must have happened (local save, remote broadcast,
 // refocus) for a company creed to keep polling at the fast cadence.
 const SYNC_ACTIVE_WINDOW_MS = 120_000;
@@ -593,6 +593,7 @@ export function CreedProvider({
   // syncFromServer.
   const syncInFlightRef = useRef(false);
   const lastSyncAtRef = useRef(0);
+  const stateTickRef = useRef<number | null>(null);
   const syncActivityRef = useRef(Date.now());
   const syncFromServerRef = useRef<() => void>(() => {});
   // The section we've announced (null once idle-cleared). Presence state
@@ -1152,10 +1153,14 @@ export function CreedProvider({
 
     let response: Response;
     try {
-      response = await fetch("/api/app/state", {
+      const since = stateTickRef.current;
+      response = await fetch(
+        since === null ? "/api/app/state" : `/api/app/state?since=${since}`,
+        {
         method: "GET",
         cache: "no-store",
-      });
+        },
+      );
     } catch {
       // Offline / network blip; the next poll retries.
       return;
@@ -1167,7 +1172,13 @@ export function CreedProvider({
       return;
     }
 
-    const payload = (await response.json()) as { state?: CreedState };
+    const payload = (await response.json()) as {
+      state?: CreedState;
+      changed?: boolean;
+      tick?: number | null;
+    };
+    if (typeof payload.tick === "number") stateTickRef.current = payload.tick;
+    if (payload.changed === false) return;
     if (!payload.state) {
       return;
     }
@@ -1411,6 +1422,7 @@ export function CreedProvider({
   // saves per section) so the right save path is used after the switch.
   const switchCreed = useCallback(
     async (creedId: string): Promise<{ ok: boolean; error?: string }> => {
+      stateTickRef.current = null;
       // Flush a pending personal autosave so leaving never drops an edit, then
       // cancel any debounced per-section company saves (we're leaving on purpose).
       if (saveTimerRef.current !== null) {
@@ -1461,12 +1473,14 @@ export function CreedProvider({
       const payload = (await stateResponse.json().catch(() => ({}))) as {
         state?: CreedState;
         hasPersistedCreed?: boolean;
+        tick?: number | null;
       };
       if (!payload.state) {
         return { ok: false, error: "Could not load that Creed." };
       }
 
       const next = payload.state;
+      if (typeof payload.tick === "number") stateTickRef.current = payload.tick;
       lastPersistedTickRef.current = next.mutationTick;
       latestStateRef.current = next;
       setState(next);

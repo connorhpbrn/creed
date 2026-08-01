@@ -17,7 +17,7 @@ import {
   TAB_MAX_BEFORE_CHARS,
   type TabMode,
 } from "@/lib/ai/tab";
-import { loadActiveCreedState } from "@/lib/creed-backend";
+import { loadActiveCreedSections } from "@/lib/creed-backend";
 import { resolveActiveCreed } from "@/lib/creed-context";
 import { getCompanyAccessState } from "@/lib/creed-membership";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -98,8 +98,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing or oversized request." }, { status: 400 });
     }
 
-    const { state } = await loadActiveCreedState(auth.supabase, auth.user, activeCreed);
-    const target = state.sections.find(
+    const sections = await loadActiveCreedSections(auth.supabase, auth.user.id, activeCreed);
+    const target = sections.find(
       (section) => section.id === sectionId && !section.archived,
     );
     if (!target) {
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     }
 
     const context = buildTabContext(
-      state.sections
+      sections
         .filter((section) => !section.archived)
         .map((section) => ({
           id: section.id,

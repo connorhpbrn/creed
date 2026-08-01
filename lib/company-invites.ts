@@ -63,22 +63,14 @@ export async function sweepExpiredInvites(creedId: string): Promise<void> {
  */
 async function emailBelongsToMember(creedId: string, normalizedEmail: string): Promise<boolean> {
   const db = admin();
-  const { data: members } = (await db
-    .from("creed_members")
-    .select("user_id")
-    .eq("creed_id", creedId)) as { data: Array<{ user_id: string }> | null };
-  if (!members || members.length === 0) return false;
-  const authAdmin = getSupabaseAdminClient();
-  // No per-call catch: a thrown or returned error propagates so the caller fails
-  // closed instead of treating an unknown member as "not a match".
-  const users = await Promise.all(
-    members.map((m) => authAdmin.auth.admin.getUserById(m.user_id))
-  );
-  if (users.some((r) => r.error)) {
+  const { data, error } = await db.rpc("get_member_profiles", {
+    p_creed_id: creedId,
+  });
+  if (error) {
     throw new Error("Could not verify existing members.");
   }
-  return users.some(
-    (r) => (r.data?.user?.email ?? "").trim().toLowerCase() === normalizedEmail
+  return ((data as Array<{ email?: string }> | null) ?? []).some(
+    (row) => (row.email ?? "").trim().toLowerCase() === normalizedEmail
   );
 }
 
@@ -240,13 +232,16 @@ type InviteRow = {
 };
 
 /** Display profile for the invite's sender, for the accept screen's avatars. */
-async function resolveInviterProfile(userId: string | null): Promise<InviterProfile | null> {
+async function resolveInviterProfile(userId: string | null, creedId: string): Promise<InviterProfile | null> {
   if (!userId) return null;
-  const { data } = await getSupabaseAdminClient()
-    .auth.admin.getUserById(userId)
-    .catch(() => ({ data: { user: null } }));
-  const user = data?.user ?? null;
-  if (!user) return null;
+  const { data } = await admin().rpc("get_member_profiles", { p_creed_id: creedId });
+  const row = ((data as Array<{
+    user_id: string;
+    email: string;
+    raw_user_meta_data: Record<string, unknown>;
+  }> | null) ?? []).find((member) => member.user_id === userId);
+  if (!row) return null;
+  const user = { id: row.user_id, email: row.email, user_metadata: row.raw_user_meta_data } as User;
   const name = getUserName(user);
   return { name, avatarUrl: getAvatarUrl(user), initials: getAvatarInitials(name) };
 }
@@ -268,7 +263,7 @@ export async function resolveInviteByToken(
   if (!data) return null;
   const [{ data: creed }, inviter] = await Promise.all([
     db.from("creeds").select("name").eq("id", data.creed_id).maybeSingle() as Promise<{ data: { name: string } | null }>,
-    resolveInviterProfile(data.invited_by),
+    resolveInviterProfile(data.invited_by, data.creed_id),
   ]);
   return {
     invite: data,

@@ -149,8 +149,12 @@ export function ConnectionsScreen() {
         }
       }
     };
+    let lastCheckAt = Date.now();
     const checkWhenVisible = () => {
       if (document.visibilityState === "visible") {
+        const now = Date.now();
+        if (now - lastCheckAt < 2_000) return;
+        lastCheckAt = now;
         void checkCliConnection();
       }
     };

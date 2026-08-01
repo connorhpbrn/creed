@@ -57,6 +57,17 @@ function getActivityCutoffIso() {
   return new Date(Date.now() - ACTIVITY_RETENTION_MS).toISOString();
 }
 
+export async function getCreedStateTick(creedId: string): Promise<number | null> {
+  const admin = getSupabaseAdminClient() as unknown as SupabaseLikeClient;
+  const { data, error } = await admin.rpc("get_creed_state_tick", {
+    p_creed_id: creedId,
+  });
+  if (error) throw new Error("Could not read Creed sync state.");
+  const value = Array.isArray(data) ? data[0] : data;
+  const tick = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(tick) ? tick : null;
+}
+
 type SectionRow = {
   user_id: string;
   section_id: string;
@@ -912,6 +923,37 @@ function hydrateSection(row: SectionRow): CreedSection {
   };
 }
 
+export async function loadActiveCreedSections(
+  client: unknown,
+  userId: string,
+  active: { creedId: string; role: CreedRole; creeds: CreedSummary[] } | null,
+): Promise<CreedSection[]> {
+  const activeEntry = active?.creeds.find((creed) => creed.id === active.creedId);
+  const company = active && activeEntry?.type === "company";
+  const db = (company ? getSupabaseAdminClient() : client) as SupabaseLikeClient;
+  const creedId = active?.creedId ?? (await getPersonalCreedId(db, userId));
+  if (!creedId) return [];
+
+  const [sectionsResult, overridesResult] = await Promise.all([
+    db.from("creed_sections").select("*").eq("creed_id", creedId).is("deleted_at", null).order("position", { ascending: true }),
+    company
+      ? db.from("creed_member_section_permissions").select("section_id, permission").eq("creed_id", creedId).eq("user_id", userId)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  assertNoError(sectionsResult.error, "Could not load Creed sections.");
+  assertNoError(overridesResult.error, "Could not load section permissions.");
+  const overrides = new Map(
+    ((overridesResult.data as Array<{ section_id: string; permission: AgentPermission }> | null) ?? [])
+      .map((row) => [normalizeLegacySectionId(row.section_id), row.permission]),
+  );
+  return ((sectionsResult.data as SectionRow[] | null) ?? [])
+    .map(hydrateSection)
+    .map((section) => company
+      ? { ...section, agentPermission: resolveSectionPermission(active.role, overrides.get(section.id)) }
+      : section)
+    .filter((section) => section.agentPermission !== "hidden");
+}
+
 function hydrateProposal(row: ProposalRow): Proposal {
   return {
     id: row.id,
@@ -1446,6 +1488,7 @@ export async function loadActiveCreedState(
     role: CreedRole;
     creeds: CreedSummary[];
   } | null,
+  options?: { proposalLimit?: number; activityLimit?: number },
 ): Promise<PersistResult> {
   const resolvedUser = await enrichUserForState(user);
   const creeds = enrichCreedSwitcherItems(active?.creeds ?? [], resolvedUser);
@@ -1459,10 +1502,11 @@ export async function loadActiveCreedState(
       active.creedId,
       active.role,
       creeds,
+      options,
     );
   }
 
-  const result = await loadCreedState(client, resolvedUser);
+  const result = await loadCreedState(client, resolvedUser, options);
   const personalId = creeds.find((c) => c.type === "personal")?.id;
   return {
     ...result,
@@ -1486,15 +1530,11 @@ export async function loadCompanyCreedState(
   creedId: string,
   role: CreedRole,
   creeds: CreedSwitcherItem[],
+  options?: { proposalLimit?: number; activityLimit?: number },
 ): Promise<PersistResult> {
   const admin = getSupabaseAdminClient() as unknown as SupabaseLikeClient;
-  const authAdmin = getSupabaseAdminClient() as unknown as {
-    auth: {
-      admin: {
-        getUserById: (id: string) => Promise<{ data: { user: User | null } }>;
-      };
-    };
-  };
+  const proposalLimit = options?.proposalLimit ?? 500;
+  const activityLimit = options?.activityLimit ?? 500;
   const resolvedUser = await enrichUserForState(user);
 
   const creedWithAvatar = (await admin
@@ -1524,7 +1564,7 @@ export async function loadCompanyCreedState(
     sectionsResult,
     proposalsResult,
     activityResult,
-    membersResult,
+    memberProfilesResult,
     overridesResult,
     billingResult,
     invitesResult,
@@ -1545,15 +1585,15 @@ export async function loadCompanyCreedState(
       .select("*")
       .eq("creed_id", creedId)
       .order("created_at", { ascending: false })
-      .limit(500),
+      .limit(proposalLimit),
     admin
       .from("creed_activity")
       .select("*")
       .eq("creed_id", creedId)
       .gte("created_at", getActivityCutoffIso())
       .order("created_at", { ascending: false })
-      .limit(500),
-    admin.from("creed_members").select("user_id, role").eq("creed_id", creedId),
+      .limit(activityLimit),
+    admin.rpc("get_member_profiles", { p_creed_id: creedId }),
     admin
       .from("creed_member_section_permissions")
       .select("section_id, permission")
@@ -1609,9 +1649,11 @@ export async function loadCompanyCreedState(
   const companyAvatarUrl = creedRow?.avatar_url ?? undefined;
   const allSectionRows = (sectionsResult.data as SectionRow[] | null) ?? [];
   const memberRows =
-    (membersResult.data as Array<{
+    (memberProfilesResult.data as Array<{
       user_id: string;
       role: CreedRole;
+      email: string;
+      raw_user_meta_data: Record<string, unknown>;
     }> | null) ?? [];
   const overrideRows =
     (overridesResult.data as Array<{
@@ -1660,23 +1702,22 @@ export async function loadCompanyCreedState(
   // Roster with display names + real profile pictures (per-member auth lookup;
   // rosters are small). Built before proposals so a manual (human) proposal can
   // borrow its author's avatar.
-  const members: CreedMemberSummary[] = await Promise.all(
-    memberRows.map(async (row) => {
-      const { data } = await authAdmin.auth.admin
-        .getUserById(row.user_id)
-        .catch(() => ({ data: { user: null } }));
-      const memberUser = data.user;
-      const name = memberUser ? getUserName(memberUser) : "Member";
+  const members: CreedMemberSummary[] = memberRows.map((row) => {
+      const memberUser = {
+        id: row.user_id,
+        email: row.email,
+        user_metadata: row.raw_user_meta_data,
+      } as User;
+      const name = getUserName(memberUser);
       return {
         userId: row.user_id,
         name,
-        email: memberUser?.email ?? "",
+        email: row.email,
         avatarInitials: getAvatarInitials(name),
-        avatarUrl: memberUser ? getAvatarUrl(memberUser) : undefined,
+        avatarUrl: getAvatarUrl(memberUser),
         role: row.role,
       };
-    }),
-  );
+    });
   const memberById = new Map(members.map((m) => [m.userId, m]));
 
   const proposals = ((proposalsResult.data as ProposalRow[] | null) ?? [])
