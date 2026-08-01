@@ -53,6 +53,12 @@ If you fork Creed and run your own instance, please:
 
 1. Generate a fresh `CREED_ENCRYPTION_SECRET` (32 random bytes,
    base64-encoded). Do not reuse the upstream value.
+   To rotate it without invalidating stored provider tokens, move the current
+   value to `CREED_ENCRYPTION_SECRET_PREVIOUS`, install the new value as
+   `CREED_ENCRYPTION_SECRET`, deploy, then remove the previous value after all
+   stored credentials have been refreshed. Versioned ciphertext is written
+   with the current key while legacy ciphertext remains readable during the
+   transition.
 2. Use distinct Supabase service-role keys per environment and never
    commit them.
 3. Keep `CREED_CSP_ENFORCE=1` set in production so the Content Security
