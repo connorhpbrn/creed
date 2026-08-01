@@ -15,7 +15,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, Plus, X } from "lucide-react";
-import { Reorder } from "framer-motion";
+import { Reorder } from "motion/react";
 import { AnimatedMenuIconItem } from "@/components/creed/animated-icon-action";
 import { FeedbackMenuItem } from "@/components/creed/feedback-menu";
 import { BookTextIcon } from "@/components/ui/book-text";

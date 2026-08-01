@@ -1,7 +1,7 @@
 "use client";
 
 import { type ComponentType, type Ref } from "react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { EyeIcon } from "@/components/ui/eye";
 import { EyeOffIcon } from "@/components/ui/eye-off";
 import { PenToolIcon } from "@/components/ui/pen-tool";

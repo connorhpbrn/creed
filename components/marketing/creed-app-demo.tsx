@@ -73,7 +73,7 @@ import { LockOpenIcon } from "@/components/ui/lock-open";
 import { SettingsIcon } from "@/components/ui/settings";
 import { SquarePenIcon } from "@/components/ui/square-pen";
 import { UploadIcon } from "@/components/ui/upload";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import {
   DEMO_PROFILES,
   type DemoActivity,

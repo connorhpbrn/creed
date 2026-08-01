@@ -18,7 +18,7 @@ import {
   Reorder,
   motion,
   useDragControls,
-} from "framer-motion";
+} from "motion/react";
 import {
   AlertTriangle,
   Check,

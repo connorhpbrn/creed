@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import { diffWords } from "diff";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import type { Proposal } from "@/lib/creed-data";
 import { accentColorMap, getProposalPreviewText } from "@/lib/creed-data";

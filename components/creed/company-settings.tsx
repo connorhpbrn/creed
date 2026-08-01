@@ -54,7 +54,7 @@ import { AnimatedIconButton } from "@/components/creed/animated-icon-action";
 import { useAnimatedIconControls } from "@/components/creed/animated-icon-controls";
 import { DownloadIcon } from "@/components/ui/download";
 import { SendIcon } from "@/components/ui/send";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { ArchivedSectionHeading } from "@/components/creed/archived-section-heading";
 import {
   type RepoOption,

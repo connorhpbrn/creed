@@ -11,7 +11,7 @@
 // Client-only mock state, mobile-first (everything stacks vertically), no backend.
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { Check } from "lucide-react";
 import { AnimatedIconButton } from "@/components/creed/animated-icon-action";
 import { AnimatedCheckmark } from "@/components/ui/animated-checkmark";

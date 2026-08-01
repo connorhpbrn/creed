@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import { ChevronDownIcon as AnimatedChevronDown } from "@/components/ui/chevron-down";
 import type { Proposal } from "@/lib/creed-data";

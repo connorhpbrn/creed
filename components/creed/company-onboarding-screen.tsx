@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Check, ChevronDown, LoaderCircle, Mail, User, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";

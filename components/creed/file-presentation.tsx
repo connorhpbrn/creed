@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { ChevronDown } from "lucide-react";
-import { motion, Reorder, useDragControls } from "framer-motion";
+import { motion, Reorder, useDragControls } from "motion/react";
 import { cn } from "@/lib/utils";
 
 const FILE_NAV_PRESS_CLASS =

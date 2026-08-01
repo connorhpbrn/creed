@@ -10,7 +10,7 @@
 // instantly.
 
 import { Fragment, type ReactNode } from "react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 const STAGGER = 0.018; // seconds between words - fast.

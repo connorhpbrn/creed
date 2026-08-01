@@ -25,7 +25,7 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { motion, useAnimation } from "framer-motion";
+import { motion, useAnimation } from "motion/react";
 import { Check, LoaderCircle } from "lucide-react";
 import { Dialog, DialogPortal } from "@/components/ui/dialog";
 import { ArchiveIcon } from "@/components/ui/archive";

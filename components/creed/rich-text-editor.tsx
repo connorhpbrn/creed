@@ -15,7 +15,13 @@ import { Extension, type Editor, type Range } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
-import { common, createLowlight } from "lowlight";
+import bash from "highlight.js/lib/languages/bash";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
+import typescript from "highlight.js/lib/languages/typescript";
+import yaml from "highlight.js/lib/languages/yaml";
+import { createLowlight } from "lowlight";
 import Suggestion, {
   exitSuggestion,
   type SuggestionKeyDownProps,
@@ -24,7 +30,7 @@ import Suggestion, {
 } from "@tiptap/suggestion";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { NodeSelection, PluginKey } from "@tiptap/pm/state";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import {
   Bold,
   Code2,
@@ -70,10 +76,16 @@ const slashPluginKey = new PluginKey("creedSlashCommand");
 const sectionTagPluginKey = new PluginKey("creedSectionTag");
 const sectionTagRefocusMetaKey = "creedSectionTagRefocus";
 
-// Pre-bundled curated language set: js/ts/jsx/tsx, python, ruby, go, rust,
-// java, c/cpp, cs, php, swift, kotlin, json, yaml, bash, sql, html, css,
-// markdown, etc. Auto-detects when no language is specified on the node.
-const lowlight = createLowlight(common);
+// Keep syntax highlighting intentionally narrow so every editor instance does
+// not carry lowlight's full common-language grammar bundle.
+const lowlight = createLowlight({
+  bash,
+  javascript,
+  json,
+  markdown,
+  typescript,
+  yaml,
+});
 
 type SlashCommand = {
   title: string;

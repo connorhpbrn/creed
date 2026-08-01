@@ -11,7 +11,7 @@ import {
 } from "react";
 import { SceneryImage } from "@/components/marketing/scenery-image";
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, ChevronLeft, LoaderCircle, Star } from "lucide-react";
 import { MenuIcon } from "@/components/ui/menu";
 import { CreedWordmark } from "@/components/creed/brand";

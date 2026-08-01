@@ -17,7 +17,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { AnimatePresence, motion, useDragControls, useMotionValue } from "framer-motion";
+import { AnimatePresence, motion, useDragControls, useMotionValue } from "motion/react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { GripVerticalIcon, type GripVerticalIconHandle } from "@/components/ui/grip-vertical";
 import { useCreed } from "@/components/creed/creed-provider";

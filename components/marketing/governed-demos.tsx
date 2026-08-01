@@ -12,7 +12,7 @@
 // Client-only mock state, no backend.
 
 import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronDown } from "lucide-react";
 import { DiffBadge, computeDiffParts, summarizeDiff } from "@/components/creed/inline-proposal-diff";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";

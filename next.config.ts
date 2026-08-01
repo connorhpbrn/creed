@@ -47,6 +47,9 @@ const nextConfig: NextConfig = {
   ...(distDir ? { distDir } : {}),
   reactStrictMode: true,
   poweredByHeader: false,
+  experimental: {
+    optimizePackageImports: ["radix-ui"],
+  },
   images: {
     formats: ["image/avif", "image/webp"],
     // Next 16 requires explicit allow-listing of any custom quality used via

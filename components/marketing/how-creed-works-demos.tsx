@@ -15,7 +15,7 @@
 // parks on a resting frame under reduced motion. No backend.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowUp, Check, ChevronDown, History, X } from "lucide-react";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
 import {
