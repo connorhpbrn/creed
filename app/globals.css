@@ -947,3 +947,37 @@
   background: rgba(59, 130, 246, 0.42);
   color: #f5f5f0;
 }
+
+/* First-load Creed mark. It breathes instead of blinking: the mark sinks and
+   contracts on the way down, then rises back, so a slow load reads as something
+   alive rather than a flashing placeholder. The dip is asymmetric - slower down
+   than up - which is what makes it feel like a breath rather than a bounce. */
+.creed-logo-breathe {
+  animation: creed-logo-breathe 1800ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+@keyframes creed-logo-breathe {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  55% {
+    transform: translateY(4px) scale(0.86);
+    opacity: 0.45;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Hold the mark still rather than swapping in a different motion: the point
+     of the screen is "we are working on it", which the logo alone still says. */
+  .creed-logo-breathe {
+    animation: none;
+    opacity: 0.75;
+  }
+}

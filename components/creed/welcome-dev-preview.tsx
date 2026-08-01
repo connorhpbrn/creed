@@ -8,7 +8,9 @@
 //   P - welcome tour preview
 //   O - "Get started" checklist card preview (click rows to toggle checks)
 //   V - "New version available" toast
+//   L - Creed first-load screen (any key or click dismisses)
 import { useEffect, useState } from "react";
+import { CreedLoader } from "@/components/creed/creed-loader";
 import { WelcomeDialog } from "@/components/creed/welcome-dialog";
 import { WelcomeVideoPreloader } from "@/components/creed/welcome-video-preloader";
 import { showVersionUpdateToast } from "@/components/creed/app-version-notifier";
@@ -125,6 +127,46 @@ function VersionToastDevPreview() {
   return null;
 }
 
+function CreedLoaderDevPreview() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.repeat ||
+        isEditableTarget(event.target)
+      ) {
+        return;
+      }
+      // While it's up, any key drops it again - the real screen has nothing to
+      // interact with, so trapping the keyboard behind it would just be annoying.
+      if (visible) {
+        setVisible(false);
+        return;
+      }
+      if (event.key.toLowerCase() === "l") {
+        setVisible(true);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] cursor-pointer"
+      onClick={() => setVisible(false)}
+    >
+      <CreedLoader />
+    </div>
+  );
+}
+
 export function WelcomeDevPreview() {
   if (process.env.NODE_ENV === "production") return null;
   return (
@@ -134,6 +176,7 @@ export function WelcomeDevPreview() {
       <WelcomeDialog show={false} paidAt={null} previewHotkey />
       <GettingStartedDevPreview />
       <VersionToastDevPreview />
+      <CreedLoaderDevPreview />
     </>
   );
 }
