@@ -27,6 +27,13 @@ export default function RouteError({
     });
   }, [error]);
 
+  useEffect(() => {
+    // The editor's boot splash only lifts when the editor's markup appears. If
+    // we are here, it never will - so drop the flag, or this page would render
+    // underneath a spinner that never goes away.
+    document.documentElement.classList.remove("creed-booting");
+  }, []);
+
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-6 text-center">
       <h1 className="t-section text-[var(--creed-text-primary)]">

@@ -974,6 +974,40 @@
   }
 }
 
+/* Editor boot splash. Inert by default - the markup sits in every page's shell,
+   but only a fresh document load of /file gets `creed-booting` on <html> from
+   /theme-init.js, so nothing else ever paints it.
+
+   It leaves on a pure CSS signal: `:has()` goes true the moment the editor's
+   root element arrives in the stream, which is before hydration and before the
+   router has anything to say. That is deliberate - a splash that waited for
+   hydration would still be up after the editor had painted. */
+.creed-boot-splash {
+  display: none;
+}
+
+html.creed-booting .creed-boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: block;
+}
+
+html.creed-booting:has([data-creed-editor]) .creed-boot-splash {
+  pointer-events: none;
+  animation: creed-boot-splash-out 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes creed-boot-splash-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
 /* Hold the loading screen back for a beat before showing it. A Creed that
    resolves quickly should never flash a loader on the way past - with `both`
    fill the screen sits at zero opacity through the delay, so a load that
