@@ -5,30 +5,6 @@ const distDir =
   process.env.CREED_DIST_DIR ||
   (isDev ? ".next-runtime.nosync" : undefined);
 
-// CSP — kept reasonable: blocks framing + restricts script origins. Inline
-// styles are allowed because Tailwind v4 + framer-motion both set them. To
-// tighten further, move to nonce-based scripts via middleware.
-const csp = [
-  "default-src 'self'",
-  // Scripts: same-origin + Next runtime needs eval in dev; loosen to unsafe-inline so we don't break inline boot
-  `script-src 'self' ${isDev ? "'unsafe-inline' 'unsafe-eval'" : ""} https://*.supabase.co https://js.stripe.com https://checkout.stripe.com`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co https://*.supabase.in https://api.openrouter.ai https://openrouter.ai https://api.github.com https://api.stripe.com https://checkout.stripe.com",
-  // Stripe Checkout embeds an iframe back to checkout.stripe.com on the
-  // redirect-based flow's intermediate states (3DS, etc.) — `frame-src`
-  // needs to allow it.
-  "frame-src 'self' https://js.stripe.com https://checkout.stripe.com https://hooks.stripe.com",
-  "frame-ancestors 'self'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-  "upgrade-insecure-requests",
-]
-  .filter(Boolean)
-  .join("; ");
-
 const baseSecurityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
@@ -37,12 +13,7 @@ const baseSecurityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
 ];
 
-// Production enforces CSP unless an emergency rollback explicitly disables it.
-const cspHeader = !isDev && process.env.CREED_CSP_ENFORCE !== "0"
-  ? { key: "Content-Security-Policy", value: csp }
-  : { key: "Content-Security-Policy-Report-Only", value: csp };
-
-const securityHeaders = [...baseSecurityHeaders, cspHeader];
+const securityHeaders = baseSecurityHeaders;
 
 // Routes whose HTML depends on the active user. We pin them to `private,
 // no-store` so a CDN / browser back-cache can never serve one user the

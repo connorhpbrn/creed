@@ -46,13 +46,16 @@ test("MCP rejects abusive bearer traffic before access-token lookup", () => {
   assert.ok(limiter < lookup);
 });
 
-test("root theme initialization stays static and same-origin", () => {
+test("strict CSP uses proxy nonces without a manual layout nonce", () => {
   const layout = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
   const proxy = readFileSync(new URL("../proxy.ts", import.meta.url), "utf8");
 
   assert.doesNotMatch(layout, /from ["']next\/headers["']/);
   assert.match(layout, /src="\/theme-init\.js"/);
-  assert.doesNotMatch(proxy, /x-nonce|nonce=/);
+  assert.match(layout, /dynamic = "force-dynamic"/);
+  assert.match(proxy, /requestHeaders\.set\("x-nonce", nonce\)/);
+  assert.match(proxy, /'nonce-\$\{nonce\}'/);
+  assert.doesNotMatch(proxy, /script-src[^\n]*unsafe-inline/);
 });
 
 test("OAuth follow-up migration keeps resources portable and cleanup serialized", () => {
