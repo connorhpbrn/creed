@@ -1,6 +1,6 @@
-// Branded first-load screen for a Creed. The mark turns a half-circle, rests,
-// turns the other half, rests - a continuous spin reads as a generic loader,
-// while the rests make it feel deliberate.
+// Branded first-load screen for a Creed. The mark turns a full circle, rests,
+// turns again, rests - a continuous spin reads as a generic loader, while the
+// rests make it feel deliberate.
 //
 // The logo is painted as a mask over --creed-text-primary rather than rendered
 // as an <img>, so it takes the exact foreground colour in both themes and scales
