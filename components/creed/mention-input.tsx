@@ -419,7 +419,10 @@ export const MentionInput = forwardRef<MentionInputHandle, MentionInputProps>(
             emitChange();
             detectMention();
           }}
-          className="min-h-[52px] w-full whitespace-pre-wrap break-words py-[15px] text-[15px] leading-[1.4] text-[var(--creed-text-primary)] outline-none"
+          // Grows with the prompt, but only so far: past this it scrolls
+          // internally, so a long paste can't push the panel off the bottom of
+          // the screen.
+          className="creed-scrollbar max-h-[168px] min-h-[52px] w-full overflow-y-auto whitespace-pre-wrap break-words py-[15px] text-[15px] leading-[1.4] text-[var(--creed-text-primary)] outline-none"
         />
 
         {showPopup

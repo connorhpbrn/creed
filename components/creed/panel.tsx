@@ -15,6 +15,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -163,6 +164,9 @@ const PLACEHOLDER: Record<Mode, string> = {
   ask: "Ask about your creed…",
   agent: "Tell Creed what to change…",
 };
+// Breathing room kept between the panel and the edge of the screen.
+const VIEWPORT_MARGIN = 16;
+
 const AGENT_STAGES: AgentStage[] = ["reading", "planning", "writing", "filing"];
 const AGENT_RESULT_REFRESH_DELAYS_MS = [400, 1200] as const;
 
@@ -1147,6 +1151,53 @@ export function CreedPanel({
   // Only Search shows an input-row spinner; Ask + Agent show progress in the
   // body (the chat "Thinking…" line / the Agent stage list).
   const showInputSpinner = mode === "search" && searchPhase === "working";
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [frozenOffset, setFrozenOffset] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setFrozenOffset(null);
+      return;
+    }
+
+    const measure = () => {
+      const height = contentRef.current?.getBoundingClientRect().height;
+      if (height) setFrozenOffset(Math.round(height / 2));
+    };
+
+    // Measured once the panel is up, then deliberately not re-centred: the
+    // whole point is that later growth moves the bottom edge, not the top.
+    measure();
+
+    // The one exception. A long prompt plus a full results list can outgrow the
+    // space below the panel, and content running off the bottom of the screen
+    // is worse than the input shifting - so lift it, but only by the amount it
+    // actually overflows, and never past the top of the viewport.
+    const node = contentRef.current;
+    const keepOnScreen = () => {
+      if (!node) return;
+      const rect = node.getBoundingClientRect();
+      const overflow = rect.bottom - (window.innerHeight - VIEWPORT_MARGIN);
+      if (overflow <= 0) return;
+      setFrozenOffset((current) => {
+        if (current === null) return current;
+        const lifted = current + overflow;
+        // Stop lifting once the top edge reaches the margin.
+        const maxLift = rect.height - VIEWPORT_MARGIN;
+        return Math.min(lifted, Math.max(current, maxLift));
+      });
+    };
+
+    const observer = node ? new ResizeObserver(keepOnScreen) : null;
+    if (node && observer) observer.observe(node);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+    // Re-centre when the panel changes shape for a reason other than typing.
+  }, [open, mode]);
+
   const stageIndex = agentRun.stage ? AGENT_STAGES.indexOf(agentRun.stage) : -1;
 
   return (
@@ -1163,6 +1214,16 @@ export function CreedPanel({
           data-state={open ? "open" : "closed"}
         />
         <DialogPrimitive.Content
+          ref={contentRef}
+          style={{
+            // The `translate` property, not `transform`: the open animation
+            // animates `transform` (zoom-in-95), and putting the positioning
+            // there too would let the animation drag the panel around while it
+            // plays. Until the first measurement lands this is the same -50%
+            // the CSS used, so the panel never opens off-centre for a frame.
+            translate:
+              frozenOffset === null ? "-50% -50%" : `-50% -${frozenOffset}px`,
+          }}
           aria-describedby={undefined}
           onCloseAutoFocus={(event) => {
             // Don't let Radix restore focus to the trigger on close - its
@@ -1185,8 +1246,14 @@ export function CreedPanel({
             if (target?.closest("[data-creed-mention-popup]"))
               event.preventDefault();
           }}
-          className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-[560px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[var(--radius-lg)] bg-[var(--creed-surface)] p-0 text-popover-foreground ring-1 ring-foreground/8 shadow-[0_18px_48px_rgba(28,28,26,0.08)] outline-none duration-[160ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+          className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-[560px] overflow-hidden rounded-[var(--radius-lg)] bg-[var(--creed-surface)] p-0 text-popover-foreground ring-1 ring-foreground/8 shadow-[0_18px_48px_rgba(28,28,26,0.08)] outline-none duration-[160ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
         >
+          {/* The panel opens centred, then stays put. Vertical centring is a
+              percentage of the panel's own height, so every line you type
+              re-centred it and slid the input - and the caret in it - up the
+              screen. Freezing that offset in pixels at the height it opened
+              at keeps the opening position identical and sends all later
+              growth downwards instead. */}
           <DialogPrimitive.Title className="sr-only">
             Panel
           </DialogPrimitive.Title>
