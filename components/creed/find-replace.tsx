@@ -20,7 +20,10 @@ import {
 import { AnimatePresence, motion, useDragControls, useMotionValue } from "motion/react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { GripVerticalIcon, type GripVerticalIconHandle } from "@/components/ui/grip-vertical";
-import { useCreed } from "@/components/creed/creed-provider";
+import {
+  useCreedActions,
+  useCreedStateSelector,
+} from "@/components/creed/creed-provider";
 import { cn } from "@/lib/utils";
 
 const FIND_HIGHLIGHT = "creed-find";
@@ -153,9 +156,12 @@ export function CreedFindReplace({
 }: {
   scrollRef: React.RefObject<HTMLElement | null>;
 }) {
-  const { state, updateRichTextSection } = useCreed();
-
   const [open, setOpen] = useState(false);
+  const { updateRichTextSection } = useCreedActions();
+  const state = useCreedStateSelector(
+    (snapshot) => snapshot,
+    (left, right) => !open || left.sections === right.sections,
+  );
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [replacement, setReplacement] = useState("");

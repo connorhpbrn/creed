@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import { qualityScoreColor } from "@/components/creed/file-quality-ui";
+import { useTheme } from "@/components/creed/theme-provider";
 import type { CreedSection } from "@/lib/creed-data";
 import {
   buildNexusGraph,
@@ -201,10 +202,6 @@ function mixCanvasColors(
   return `rgb(${mixChannel(foregroundMatch[1], backgroundMatch[1])}, ${mixChannel(foregroundMatch[2], backgroundMatch[2])}, ${mixChannel(foregroundMatch[3], backgroundMatch[3])})`;
 }
 
-function lightenCanvasColor(value: string) {
-  return mixCanvasColors(value, "#ffffff", 0.68);
-}
-
 function nodeRadiusFromContent(node: NexusGraphNode) {
   const contentWeight = Math.log1p(
     Math.max(node.characterCount, node.wordCount * 6),
@@ -276,6 +273,7 @@ export function NexusView({
   initialViewState = null,
   onViewStateChange,
 }: NexusViewProps) {
+  const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
@@ -971,6 +969,29 @@ export function NexusView({
       animationAlphaRef.current *= 0.985;
     }
 
+    const rootStyles = window.getComputedStyle(document.documentElement);
+    const resolvedColorCache = new Map<string, string>();
+    const resolveDrawColor = (value: string) => {
+      const cached = resolvedColorCache.get(value);
+      if (cached) return cached;
+      const match = value.match(/^var\((--[^),]+)\)$/);
+      const resolved = match?.[1]
+        ? rootStyles.getPropertyValue(match[1]).trim() || value
+        : value;
+      resolvedColorCache.set(value, resolved);
+      return resolved;
+    };
+    const mixDrawColors = (
+      foreground: string,
+      background: string,
+      foregroundWeight: number,
+    ) =>
+      mixCanvasColors(
+        resolveDrawColor(foreground),
+        resolveDrawColor(background),
+        foregroundWeight,
+      );
+
     function draw() {
       frameId = null;
       if (needsFitRef.current) {
@@ -1011,7 +1032,7 @@ export function NexusView({
           : Math.max(0.75, 1 / transform.k);
         ctx.strokeStyle =
           selectedEdge && selectedNode
-            ? resolveCanvasColor(selectedNode.color)
+            ? resolveDrawColor(selectedNode.color)
             : "rgba(148, 148, 148, 0.28)";
         ctx.globalAlpha = selectedNodeId && !selectedEdge ? 0.42 : 1;
         ctx.stroke();
@@ -1029,7 +1050,7 @@ export function NexusView({
           }
         }
       }
-      const canvasBackground = resolveCanvasColor("var(--creed-background)");
+      const canvasBackground = resolveDrawColor("var(--creed-background)");
 
       for (const node of nodes) {
         const hovered = hoveredNodeRef.current === node.id;
@@ -1040,17 +1061,17 @@ export function NexusView({
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
         ctx.fillStyle = selected
-          ? lightenCanvasColor(node.color)
+          ? mixDrawColors(node.color, "#ffffff", 0.68)
           : directlyConnected || hovered
-            ? resolveCanvasColor(node.color)
-            : mixCanvasColors(node.color, canvasBackground, 0.3);
+            ? resolveDrawColor(node.color)
+            : mixDrawColors(node.color, canvasBackground, 0.3);
         ctx.fill();
 
         if (hovered || selected) {
           ctx.lineWidth = selected
             ? Math.max(2.5, 3 / transform.k)
             : Math.max(1, 1.5 / transform.k);
-          ctx.strokeStyle = resolveCanvasColor(node.color);
+          ctx.strokeStyle = resolveDrawColor(node.color);
           ctx.stroke();
         }
       }
@@ -1079,7 +1100,7 @@ export function NexusView({
         window.cancelAnimationFrame(frameId);
       }
     };
-  }, [fitToGraph, selectedNodeId, size]);
+  }, [fitToGraph, selectedNodeId, size, theme]);
 
   return (
     <div

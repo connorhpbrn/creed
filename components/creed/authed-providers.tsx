@@ -4,6 +4,7 @@ import { CreedProvider } from "@/components/creed/creed-provider";
 import { initialCreedState } from "@/lib/creed-data";
 import { loadActiveCreedState } from "@/lib/creed-backend";
 import { resolveActiveCreed } from "@/lib/creed-context";
+import type { ActiveCreed } from "@/lib/creed-context";
 import { isSupabaseTableMissingError } from "@/lib/creed-backend-errors";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getRequestAuth } from "@/lib/request-auth";
@@ -14,18 +15,31 @@ import { getRequestAuth } from "@/lib/request-auth";
 // prerender as a static shell (so <Link> can fully prefetch them and
 // navigation is instant) while the app shell and onboarding still get live
 // user state. Used by the (creed-app) and onboarding layouts.
-export async function AuthedProviders({ children }: { children: ReactNode }) {
+type RequestAuth = Awaited<ReturnType<typeof getRequestAuth>>;
+
+export async function AuthedProviders({
+  children,
+  requestAuth,
+  activeCreed,
+}: {
+  children: ReactNode;
+  requestAuth?: RequestAuth;
+  activeCreed?: ActiveCreed | null;
+}) {
   let initialState = initialCreedState;
   let persistenceEnabled = false;
   let missingSchemaMessage: string | null = null;
 
   if (isSupabaseConfigured()) {
     // Shares the layout's cached client + getUser within this render.
-    const { supabase, user } = await getRequestAuth();
+    const { supabase, user } = requestAuth ?? (await getRequestAuth());
 
     if (user) {
       try {
-        const active = await resolveActiveCreed(supabase, user);
+        const active =
+          activeCreed === undefined
+            ? await resolveActiveCreed(supabase, user)
+            : activeCreed;
         const result = await loadActiveCreedState(supabase, user, active);
         initialState = result.state;
         persistenceEnabled = result.hasPersistedCreed;

@@ -6,10 +6,26 @@ import { GettingStartedCard } from "@/components/creed/getting-started-card";
 import { QualityToasts } from "@/components/creed/quality-toasts";
 import { WelcomeDialog } from "@/components/creed/welcome-dialog";
 import { WelcomeVideoPreloader } from "@/components/creed/welcome-video-preloader";
-import { useCreed } from "@/components/creed/creed-provider";
+import { useCreedStateSelector } from "@/components/creed/creed-provider";
+import type { CreedSection } from "@/lib/creed-data";
 import { setWelcomePreviewVariant } from "@/lib/welcome-preview";
 
 const IS_DEV = process.env.NODE_ENV !== "production";
+
+function sameShellSections(left: CreedSection[], right: CreedSection[]) {
+  return (
+    left.length === right.length &&
+    left.every((section, index) => {
+      const other = right[index];
+      return (
+        other?.id === section.id &&
+        other.name === section.name &&
+        other.accent === section.accent &&
+        other.archived === section.archived
+      );
+    })
+  );
+}
 
 export function AppShellLayout({
   children,
@@ -20,8 +36,13 @@ export function AppShellLayout({
   showWelcome?: boolean;
   welcomePaidAt?: string | null;
 }) {
-  const { state } = useCreed();
-  const variant = state.creedType === "company" ? "company" : "personal";
+  const creedType = useCreedStateSelector((state) => state.creedType);
+  const user = useCreedStateSelector((state) => state.user);
+  const sections = useCreedStateSelector(
+    (state) => state.sections,
+    sameShellSections,
+  );
+  const variant = creedType === "company" ? "company" : "personal";
 
   // Publish the active space's variant so the root P-preview shortcut opens the
   // matching tour (company inside a company space, personal otherwise).
@@ -45,10 +66,10 @@ export function AppShellLayout({
       {/* Post-onboarding checklist; renders nothing once every step is done. */}
       <GettingStartedCard />
       <CreedShell
-        userName={state.user.name}
-        avatarInitials={state.user.avatarInitials}
-        avatarUrl={state.user.avatarUrl}
-        sections={state.sections}
+        userName={user.name}
+        avatarInitials={user.avatarInitials}
+        avatarUrl={user.avatarUrl}
+        sections={sections}
       >
         {children}
       </CreedShell>

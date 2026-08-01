@@ -39,7 +39,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
-import { accentColorMap, type CreedSection } from "@/lib/creed-data";
+import {
+  accentColorMap,
+  type CreedSection,
+  type CreedState,
+} from "@/lib/creed-data";
 import { cn } from "@/lib/utils";
 import { CreedMark, CreedWordmark } from "@/components/creed/brand";
 import { CreedPanel, PANEL_OPEN_EVENT } from "@/components/creed/panel";
@@ -49,7 +53,10 @@ import {
   subscribeAgentRunner,
 } from "@/lib/panel/agent-runner";
 import { SearchIcon, type SearchIconHandle } from "@/components/ui/search";
-import { useCreed } from "@/components/creed/creed-provider";
+import {
+  useCreedActions,
+  useCreedStateSelector,
+} from "@/components/creed/creed-provider";
 import { preloadSettingsData } from "@/components/creed/settings-preload";
 import { preloadMcpHealth } from "@/components/creed/mcp-health-preload";
 import { ShortcutKey } from "@/components/creed/shortcut-key";
@@ -59,6 +66,17 @@ const FILE_NAV_INTENT_KEY = "creed:file-nav-intent";
 const SIDEBAR_COLLAPSED_KEY = "creed:sidebar-collapsed";
 const SIDEBAR_PRESS_CLASS =
   "transform-gpu transition-[color,background-color,transform,filter] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] active:translate-y-px active:scale-[0.98] active:brightness-[0.96]";
+
+function sameShellState(left: CreedState, right: CreedState) {
+  return (
+    left.creedId === right.creedId &&
+    left.creedType === right.creedType &&
+    left.company === right.company &&
+    left.proposals === right.proposals &&
+    left.settings === right.settings &&
+    left.user === right.user
+  );
+}
 
 type ShellProps = {
   children: ReactNode;
@@ -145,7 +163,11 @@ export function CreedShell({
 }: ShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { signOut, state, exportMarkdown, reorderSections } = useCreed();
+  const { signOut, exportMarkdown, reorderSections } = useCreedActions();
+  const state = useCreedStateSelector(
+    (snapshot) => snapshot,
+    sameShellState,
+  );
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   const [billingOpen, setBillingOpen] = useState(false);
   const [profilePressed, setProfilePressed] = useState(false);
@@ -325,15 +347,15 @@ export function CreedShell({
         repoName: state.settings.versionControl.repoName,
         // The markdown only feeds the GitHub version-status preload, so skip the
         // full export rebuild entirely when GitHub isn't connected.
-        markdown: githubConnected && state.sections.length ? exportMarkdown() : undefined,
+        markdown: githubConnected && sections.length ? exportMarkdown() : undefined,
       });
     }
-    if (state.sections.length) {
+    if (sections.length) {
       preloadMcpHealth("30d", state.creedId ?? "");
     }
   }, [
     exportMarkdown,
-    state.sections,
+    sections.length,
     state.creedId,
     state.creedType,
     state.user.email,

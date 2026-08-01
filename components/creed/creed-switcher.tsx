@@ -10,7 +10,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useCreed } from "@/components/creed/creed-provider";
+import {
+  useCreedActions,
+  useCreedStateSelector,
+} from "@/components/creed/creed-provider";
+import type { CreedState } from "@/lib/creed-data";
 import { ShortcutKey } from "@/components/creed/shortcut-key";
 import { ProfileAvatar } from "@/components/creed/profile-avatar";
 
@@ -23,8 +27,22 @@ const LAST_ACTIVE_CREED_KEY = "creed:last-active-creed";
 const TITLE_CLASS =
   "font-heading text-[1.22rem] font-medium tracking-[-0.03em] text-[var(--creed-text-primary)] md:text-[1.45rem]";
 
+function sameSwitcherState(left: CreedState, right: CreedState) {
+  return (
+    left.creedId === right.creedId &&
+    left.creedType === right.creedType &&
+    left.company === right.company &&
+    left.creeds === right.creeds &&
+    left.user === right.user
+  );
+}
+
 export function CreedSwitcher() {
-  const { state, switchCreed } = useCreed();
+  const { switchCreed } = useCreedActions();
+  const state = useCreedStateSelector(
+    (snapshot) => snapshot,
+    sameSwitcherState,
+  );
   const router = useRouter();
   const [switching, setSwitching] = useState(false);
   const [optimisticId, setOptimisticId] = useState<string | null>(null);

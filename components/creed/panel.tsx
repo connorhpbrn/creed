@@ -55,9 +55,16 @@ import {
   type MentionInputHandle,
 } from "@/components/creed/mention-input";
 import { RichAnswer } from "@/components/creed/rich-answer";
-import { useCreed } from "@/components/creed/creed-provider";
+import {
+  useCreedActions,
+  useCreedStateSelector,
+} from "@/components/creed/creed-provider";
 import { useTheme } from "@/components/creed/theme-provider";
-import { accentColorMap } from "@/lib/creed-data";
+import {
+  accentColorMap,
+  type CreedSection,
+  type CreedState,
+} from "@/lib/creed-data";
 import { fuzzyScore } from "@/lib/panel/fuzzy";
 import type {
   PanelAction,
@@ -82,6 +89,30 @@ import {
 import { cn } from "@/lib/utils";
 
 export const PANEL_OPEN_EVENT = "creed:panel-open";
+
+function samePanelSections(left: CreedSection[], right: CreedSection[]) {
+  return (
+    left.length === right.length &&
+    left.every((section, index) => {
+      const other = right[index];
+      return (
+        other?.id === section.id &&
+        other.name === section.name &&
+        other.accent === section.accent &&
+        other.archived === section.archived
+      );
+    })
+  );
+}
+
+function sameClosedPanelState(left: CreedState, right: CreedState) {
+  return (
+    left.creedType === right.creedType &&
+    left.company === right.company &&
+    left.proposals === right.proposals &&
+    samePanelSections(left.sections, right.sections)
+  );
+}
 
 type PanelProps = {
   onFileSection: (sectionId: string) => void;
@@ -274,14 +305,18 @@ export function CreedPanel({
 }: PanelProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
   const {
-    state,
     signOut,
     exportMarkdown,
     exportActivityJson,
     exportAllDataJson,
     refreshState,
-  } = useCreed();
+  } = useCreedActions();
+  const state = useCreedStateSelector(
+    (snapshot) => snapshot,
+    (left, right) => (open ? left === right : sameClosedPanelState(left, right)),
+  );
   const { toggleTheme } = useTheme();
 
   const agentRun = useSyncExternalStore(
@@ -290,7 +325,6 @@ export function CreedPanel({
     getAgentRunnerServerSnapshot,
   );
 
-  const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("search");
   const [query, setQuery] = useState("");
   const [mentionIds, setMentionIds] = useState<string[]>([]);

@@ -84,11 +84,19 @@ export function getCachedMcpHealth(range: McpHealthRange, creedKey = ""): McpHea
   return cache.get(cacheKey(creedKey, range))?.value ?? null;
 }
 
-/** Fetch (and cache) the health summary for a range. Dedupes in-flight calls. */
-export function loadMcpHealth(range: McpHealthRange, creedKey = ""): Promise<McpHealthSummary | null> {
+/** Fetch and cache a health range. Pass force only for an explicit revalidation. */
+export function loadMcpHealth(
+  range: McpHealthRange,
+  creedKey = "",
+  force = false,
+): Promise<McpHealthSummary | null> {
   const key = cacheKey(creedKey, range);
   const entry = cache.get(key) ?? { value: null, promise: null };
   cache.set(key, entry);
+
+  if (!force && entry.value) {
+    return Promise.resolve(entry.value);
+  }
 
   if (!entry.promise) {
     entry.promise = fetch(`/api/app/mcp/health?range=${range}`, { cache: "no-store" })

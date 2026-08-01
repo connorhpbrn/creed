@@ -43,6 +43,15 @@ export type ReviewPillProposal = {
   canReview?: boolean;
 };
 
+const proposalDiffCache = new Map<
+  string,
+  {
+    existingContent: string;
+    proposedContent: string;
+    parts: ReturnType<typeof computeDiffParts>;
+  }
+>();
+
 function ReviewAllActions({
   onAcceptAll,
   onRejectAll,
@@ -100,7 +109,19 @@ export const ReviewPill = memo(function ReviewPill({
   const perProposalStats = useMemo(() => {
     return proposals.map((item) => {
       const proposed = getProposalPreviewText(item.proposal.draft);
-      const parts = computeDiffParts(item.existingContent, proposed);
+      const cached = proposalDiffCache.get(item.proposal.id);
+      const parts =
+        cached?.existingContent === item.existingContent &&
+        cached.proposedContent === proposed
+          ? cached.parts
+          : computeDiffParts(item.existingContent, proposed);
+      if (parts !== cached?.parts) {
+        proposalDiffCache.set(item.proposal.id, {
+          existingContent: item.existingContent,
+          proposedContent: proposed,
+          parts,
+        });
+      }
       const summary = summarizeDiff(parts);
       // Override the +N/−N counts for structural proposals. The raw diff
       // between section content and the meta preview ("Delete section",

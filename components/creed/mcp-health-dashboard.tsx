@@ -256,7 +256,7 @@ export function McpHealthDashboard() {
       setSummary(null);
       setLoading(true);
     }
-    loadMcpHealth(range, creedKey)
+    loadMcpHealth(range, creedKey, true)
       .then((health) => {
         if (active && health) {
           setSummary(health);

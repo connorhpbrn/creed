@@ -17,9 +17,11 @@ import {
   useCallback,
   useEffect,
   useContext,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
@@ -112,7 +114,22 @@ type CreedContextValue = {
   markGettingStartedStep: (step: GettingStartedStepKey) => void;
 };
 
-const CreedContext = createContext<CreedContextValue | null>(null);
+export type CreedActions = Omit<
+  CreedContextValue,
+  "state" | "sectionPresence"
+>;
+
+type CreedStateStore = {
+  getSnapshot: () => CreedState;
+  getServerSnapshot: () => CreedState;
+  subscribe: (listener: () => void) => () => void;
+};
+
+const CreedStateStoreContext = createContext<CreedStateStore | null>(null);
+const CreedActionsContext = createContext<CreedActions | null>(null);
+const CreedPresenceContext = createContext<Record<string, string[]> | null>(
+  null,
+);
 const AUTOSAVE_DELAY_MS = 500;
 const EXTERNAL_SYNC_INTERVAL_MS = 120_000;
 // Company Creeds are multi-user, so changes (proposals, edits, reviews) need to
@@ -551,6 +568,23 @@ export function CreedProvider({
     initialPersistenceEnabled,
   );
   const latestStateRef = useRef(initialState);
+  const stateSnapshotRef = useRef(state);
+  stateSnapshotRef.current = state;
+  const stateListenersRef = useRef(new Set<() => void>());
+  const stateStore = useMemo<CreedStateStore>(
+    () => ({
+      getSnapshot: () => stateSnapshotRef.current,
+      getServerSnapshot: () => initialState,
+      subscribe: (listener) => {
+        stateListenersRef.current.add(listener);
+        return () => stateListenersRef.current.delete(listener);
+      },
+    }),
+    [initialState],
+  );
+  useLayoutEffect(() => {
+    for (const listener of stateListenersRef.current) listener();
+  }, [state]);
   const saveTimerRef = useRef<number | null>(null);
   const lastPersistedTickRef = useRef(initialState.mutationTick);
   // Proposal ids resolved locally whose resolution hasn't been confirmed by
@@ -2821,45 +2855,111 @@ export function CreedProvider({
     exportAllDataJson,
     markGettingStartedStep,
   };
-  type CreedActions = typeof actionsImpl;
-  const actionsImplRef = useRef<CreedActions>(actionsImpl);
+  type CreedActionsImpl = typeof actionsImpl;
+  const actionsImplRef = useRef<CreedActionsImpl>(actionsImpl);
   actionsImplRef.current = actionsImpl;
   const stableActions = useMemo(() => {
     const proxies = {} as Record<string, (...args: unknown[]) => unknown>;
     for (const key of Object.keys(actionsImplRef.current)) {
       proxies[key] = (...args: unknown[]) =>
         (
-          actionsImplRef.current[key as keyof CreedActions] as (
+          actionsImplRef.current[key as keyof CreedActionsImpl] as (
             ...a: unknown[]
           ) => unknown
         )(...args);
     }
-    return proxies as unknown as CreedActions;
+    return proxies as unknown as CreedActionsImpl;
     // The action set is static; only the implementations behind the ref move.
   }, []);
 
-  const contextValue = useMemo<CreedContextValue>(
-    () => ({
-      state,
-      sectionPresence,
-      ...stableActions,
-    }),
-    [state, sectionPresence, stableActions],
-  );
-
   return (
-    <CreedContext.Provider value={contextValue}>
-      {children}
-    </CreedContext.Provider>
+    <CreedStateStoreContext.Provider value={stateStore}>
+      <CreedActionsContext.Provider value={stableActions}>
+        <CreedPresenceContext.Provider value={sectionPresence}>
+          {children}
+        </CreedPresenceContext.Provider>
+      </CreedActionsContext.Provider>
+    </CreedStateStoreContext.Provider>
   );
 }
 
-export function useCreed() {
-  const context = useContext(CreedContext);
-
-  if (!context) {
-    throw new Error("useCreed must be used inside a CreedProvider");
+export function useCreedActions() {
+  const actions = useContext(CreedActionsContext);
+  if (!actions) {
+    throw new Error("useCreedActions must be used inside a CreedProvider");
   }
+  return actions;
+}
 
-  return context;
+export function useCreedStateSelector<T>(
+  selector: (state: CreedState) => T,
+  isEqual: (left: T, right: T) => boolean = Object.is,
+) {
+  const store = useContext(CreedStateStoreContext);
+  if (!store) {
+    throw new Error(
+      "useCreedStateSelector must be used inside a CreedProvider",
+    );
+  }
+  const selectionRef = useRef<{
+    state: CreedState;
+    value: T;
+    selector: (state: CreedState) => T;
+    isEqual: (left: T, right: T) => boolean;
+  } | null>(null);
+  const getSelection = useCallback(() => {
+    const snapshot = store.getSnapshot();
+    const previous = selectionRef.current;
+    if (
+      previous?.state === snapshot &&
+      previous.selector === selector &&
+      previous.isEqual === isEqual
+    ) {
+      return previous.value;
+    }
+    const selected = selector(snapshot);
+    if (previous && isEqual(previous.value, selected)) {
+      selectionRef.current = {
+        state: snapshot,
+        value: previous.value,
+        selector,
+        isEqual,
+      };
+      return previous.value;
+    }
+    selectionRef.current = {
+      state: snapshot,
+      value: selected,
+      selector,
+      isEqual,
+    };
+    return selected;
+  }, [isEqual, selector, store]);
+  const getServerSelection = useCallback(
+    () => selector(store.getServerSnapshot()),
+    [selector, store],
+  );
+  return useSyncExternalStore(
+    store.subscribe,
+    getSelection,
+    getServerSelection,
+  );
+}
+
+export function useCreedPresence() {
+  const presence = useContext(CreedPresenceContext);
+  if (!presence) {
+    throw new Error("useCreedPresence must be used inside a CreedProvider");
+  }
+  return presence;
+}
+
+export function useCreed() {
+  const state = useCreedStateSelector((snapshot) => snapshot);
+  const sectionPresence = useCreedPresence();
+  const actions = useCreedActions();
+  return useMemo(
+    () => ({ state, sectionPresence, ...actions }),
+    [actions, sectionPresence, state],
+  );
 }

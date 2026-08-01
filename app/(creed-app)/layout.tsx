@@ -133,7 +133,10 @@ export default async function CreedAppLayout({ children }: { children: ReactNode
   }
 
   return (
-    <AuthedProviders>
+    <AuthedProviders
+      requestAuth={{ supabase, user }}
+      activeCreed={active}
+    >
       <AppShellLayout showWelcome={showWelcome} welcomePaidAt={paidAt}>
         {children}
       </AppShellLayout>

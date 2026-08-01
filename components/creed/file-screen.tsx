@@ -143,7 +143,10 @@ import {
   type CreedSection,
   type Proposal,
 } from "@/lib/creed-data";
-import { richTextContentEquivalent } from "@/lib/rich-text";
+import {
+  richTextContentEquivalent,
+  sanitizeRichTextHtml,
+} from "@/lib/rich-text";
 import {
   canProposeToSection,
   resolveSectionPermission,
@@ -1155,11 +1158,6 @@ export function FileScreen() {
   const versionIcon = useAnimatedIconControls();
   const nexusIcon = useAnimatedIconControls(80, undefined, 900);
   const activityIcon = useAnimatedIconControls();
-  // `exportMarkdown` is identity-stable now (the provider hands out proxy
-  // actions), so the content dependency must be explicit: rebuild only when
-  // the sections actually change, not on every render.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const localMarkdown = useMemo(() => exportMarkdown(), [state.sections]);
   const sectionQualityById = useMemo(
     () =>
       new Map(
@@ -1181,7 +1179,7 @@ export function FileScreen() {
     [qualityReport],
   );
   const currentFullFingerprint = useMemo(
-    () => qualityFingerprint(state.sections),
+    () => state.sections.map(cachedSectionFingerprint).join("|"),
     [state.sections],
   );
   const sectionFingerprintById = useMemo(
@@ -1381,9 +1379,10 @@ export function FileScreen() {
 
       try {
         setVersionStatusBusy(true);
+        const markdown = exportMarkdown();
         const buffer = await crypto.subtle.digest(
           "SHA-256",
-          new TextEncoder().encode(localMarkdown),
+          new TextEncoder().encode(markdown),
         );
         const localHash = Array.from(new Uint8Array(buffer))
           .map((value) => value.toString(16).padStart(2, "0"))
@@ -1423,9 +1422,7 @@ export function FileScreen() {
       }
     }
 
-    // Trailing debounce: localMarkdown changes on every autosaved keystroke,
-    // and each run hashes the whole file and hits the GitHub status API. One
-    // check after the typing burst settles gives the same answer.
+    // Trigger on section commits, but serialize only after the typing burst.
     const debounce = window.setTimeout(() => void loadVersionStatus(), 1_500);
 
     return () => {
@@ -1433,7 +1430,8 @@ export function FileScreen() {
       window.clearTimeout(debounce);
     };
   }, [
-    localMarkdown,
+    exportMarkdown,
+    state.sections,
     state.settings.integrations.github.status,
     state.settings.versionControl.repoOwner,
     state.settings.versionControl.repoName,
@@ -1867,9 +1865,10 @@ export function FileScreen() {
 
     try {
       setPushPreviewBusy(true);
+      const markdown = exportMarkdown();
       const buffer = await crypto.subtle.digest(
         "SHA-256",
-        new TextEncoder().encode(localMarkdown),
+        new TextEncoder().encode(markdown),
       );
       const localHash = Array.from(new Uint8Array(buffer))
         .map((value) => value.toString(16).padStart(2, "0"))
@@ -1916,9 +1915,10 @@ export function FileScreen() {
     try {
       setSelectedVersionAction("push");
       setPushBusy(true);
+      const markdown = exportMarkdown();
       const buffer = await crypto.subtle.digest(
         "SHA-256",
-        new TextEncoder().encode(localMarkdown),
+        new TextEncoder().encode(markdown),
       );
       const localHash = Array.from(new Uint8Array(buffer))
         .map((value) => value.toString(16).padStart(2, "0"))
@@ -1929,7 +1929,7 @@ export function FileScreen() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          markdown: localMarkdown,
+          markdown,
           localHash,
           message: pushMessage.trim() || "Update Creed",
         }),
@@ -1959,9 +1959,10 @@ export function FileScreen() {
       setPullDialogOpen(true);
       setPullPreview(null);
 
+      const markdown = exportMarkdown();
       const buffer = await crypto.subtle.digest(
         "SHA-256",
-        new TextEncoder().encode(localMarkdown),
+        new TextEncoder().encode(markdown),
       );
       const localHash = Array.from(new Uint8Array(buffer))
         .map((value) => value.toString(16).padStart(2, "0"))
@@ -2260,36 +2261,23 @@ export function FileScreen() {
     );
     if (elements.length === 0) return;
 
-    function targetIdOf(element: HTMLElement) {
-      return element.dataset.sectionId ?? element.dataset.proposalId ?? null;
-    }
+    const targetIdByElement = new Map(
+      elements.map((element) => [
+        element,
+        element.dataset.sectionId ?? element.dataset.proposalId ?? null,
+      ]),
+    );
+    const visibleTargets = new Map<HTMLElement, IntersectionObserverEntry>();
 
     function update() {
-      const stickyHeader = container?.querySelector<HTMLElement>(
-        "[data-file-sticky-header]",
-      );
-      const offset = (stickyHeader?.getBoundingClientRect().height ?? 96) + 32;
-      let bestId: string | null = null;
-      let bestDistance = Infinity;
-      let firstVisibleId: string | null = null;
-
-      for (const element of elements) {
-        const rect = element.getBoundingClientRect();
-        if (!firstVisibleId && rect.bottom > offset) {
-          firstVisibleId = targetIdOf(element);
-        }
-        const distance = Math.abs(rect.top - offset);
-        if (rect.top - offset <= 0 && rect.bottom > offset) {
-          if (distance < bestDistance) {
-            bestDistance = distance;
-            bestId = targetIdOf(element);
-          }
-        }
-      }
-
-      if (!bestId) {
-        bestId = firstVisibleId;
-      }
+      const bestEntry = Array.from(visibleTargets.values()).sort(
+        (left, right) =>
+          Math.abs(left.boundingClientRect.top) -
+          Math.abs(right.boundingClientRect.top),
+      )[0];
+      const bestId = bestEntry
+        ? (targetIdByElement.get(bestEntry.target as HTMLElement) ?? null)
+        : null;
 
       const lock = scrollLockRef.current;
       if (lock) {
@@ -2303,25 +2291,24 @@ export function FileScreen() {
       setActiveShellSection(bestId);
     }
 
-    let frameId: number | null = null;
-    function scheduleUpdate() {
-      if (frameId !== null) return;
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) visibleTargets.set(entry.target as HTMLElement, entry);
+          else visibleTargets.delete(entry.target as HTMLElement);
+        }
         update();
-      });
-    }
-
-    update();
-    container.addEventListener("scroll", scheduleUpdate, { passive: true });
-    window.addEventListener("resize", scheduleUpdate);
+      },
+      {
+        root: container,
+        rootMargin: "-128px 0px -65% 0px",
+        threshold: [0, 0.01, 0.5, 1],
+      },
+    );
+    for (const element of elements) observer.observe(element);
 
     return () => {
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId);
-      }
-      container.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("resize", scheduleUpdate);
+      observer.disconnect();
       setActiveShellSection(null);
     };
   }, [
@@ -3113,14 +3100,16 @@ export function FileScreen() {
           </div>
         </div>
 
-        <ActivityRail
-          activity={state.activity}
-          creedType={state.creedType === "company" ? "company" : "personal"}
-          proposals={state.proposals}
-          sections={state.sections}
-          open={activityOpen}
-          onClose={closeActivity}
-        />
+        {activityOpen ? (
+          <ActivityRail
+            activity={state.activity}
+            creedType={state.creedType === "company" ? "company" : "personal"}
+            proposals={state.proposals}
+            sections={state.sections}
+            open
+            onClose={closeActivity}
+          />
+        ) : null}
       </div>
 
       <CreedFindReplace scrollRef={editorScrollRef} />
@@ -3618,6 +3607,8 @@ function SectionCard({
   onAddSectionAfter?: () => void;
 }) {
   const dragControls = useDragControls();
+  const sectionElementRef = useRef<HTMLElement | null>(null);
+  const [editorNearViewport, setEditorNearViewport] = useState(false);
   // Proposal-only draft buffer: null = clean (mirrors canonical section.content),
   // otherwise the member's unsent local edit. Reset whenever the section id
   // changes so a draft never leaks across sections.
@@ -3638,6 +3629,24 @@ function SectionCard({
   // Draft is only non-null when it genuinely differs from canonical (the editor
   // emits an onChange echo on init/normalize; we collapse those back to null).
   const proposalDirty = proposeMode && proposalDraft !== null;
+  useEffect(() => {
+    const element = sectionElementRef.current;
+    if (!element || editorNearViewport || (collapsed && !proposalDirty)) return;
+    if (!("IntersectionObserver" in window)) {
+      setEditorNearViewport(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setEditorNearViewport(true);
+        observer.disconnect();
+      },
+      { rootMargin: "600px 0px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [collapsed, editorNearViewport, proposalDirty]);
   async function submitProposal() {
     if (!proposalDirty || !onSubmitProposal || submittingProposal) return;
     setSubmittingProposal(true);
@@ -3694,7 +3703,7 @@ function SectionCard({
       id={section.id}
       className="relative scroll-mt-24"
     >
-      <section className="group relative">
+      <section ref={sectionElementRef} className="group relative">
         {/* Only reorderers (owner/admin, or the personal user) get the drag
             handle. Members can't reorder, so they get no icon at all on the
             left of the section name. */}
@@ -3986,10 +3995,10 @@ function SectionCard({
           </div>
         </div>
 
-        {/* Keep Tiptap mounted, but animate only this measured wrapper. The
-            layout-contained body avoids the repeated intrinsic measurement
-            that made the old grid-row collapse stutter on large files. */}
-        <motion.div
+        {/* A collapsed clean section does not need a live ProseMirror view.
+            Proposal drafts stay mounted so collapsing cannot discard work. */}
+        {!collapsed || proposalDirty ? (
+          <motion.div
           initial={false}
           animate={{ height: collapsed ? 0 : "auto" }}
           transition={{
@@ -4068,29 +4077,48 @@ function SectionCard({
                   : undefined
               }
             >
-              <RichTextEditor
-                sectionId={section.id}
-                content={editorContent}
-                readOnly={locked}
-                accentColor={accentColorMap[section.accent]}
-                sectionTagTargets={sectionTagTargets}
-                onChange={
-                  proposeMode
-                    ? (html) =>
-                        setProposalDraft(
-                          html === section.content ? null : html,
-                        )
-                    : onChangeRichText
-                }
-                onAddSectionAfter={onAddSectionAfter}
-              />
+              {editorNearViewport || proposalDirty ? (
+                <RichTextEditor
+                  sectionId={section.id}
+                  content={editorContent}
+                  readOnly={locked}
+                  accentColor={accentColorMap[section.accent]}
+                  sectionTagTargets={sectionTagTargets}
+                  onChange={
+                    proposeMode
+                      ? (html) =>
+                          setProposalDraft(
+                            html === section.content ? null : html,
+                          )
+                      : onChangeRichText
+                  }
+                  onAddSectionAfter={onAddSectionAfter}
+                />
+              ) : (
+                <StaticSectionPreview content={editorContent} />
+              )}
             </div>
           </motion.div>
-        </motion.div>
+          </motion.div>
+        ) : null}
       </section>
     </Reorder.Item>
   );
 }
+
+const StaticSectionPreview = memo(function StaticSectionPreview({
+  content,
+}: {
+  content: string;
+}) {
+  const sanitized = useMemo(() => sanitizeRichTextHtml(content), [content]);
+  return (
+    <div
+      className="ProseMirror"
+      dangerouslySetInnerHTML={{ __html: sanitized }}
+    />
+  );
+});
 
 // Animated Lock / LockOpen button shared by the header (master) and per-section.
 // The lucide-animated icons fire `startAnimation()` on demand - the button
@@ -4367,6 +4395,14 @@ const ActivityRailContent = memo(function ActivityRailContent({
       ),
     [proposals],
   );
+  const proposalsById = useMemo(
+    () => new Map(proposals.map((proposal) => [proposal.id, proposal])),
+    [proposals],
+  );
+  const sectionsById = useMemo(
+    () => new Map(sections.map((section) => [section.id, section])),
+    [sections],
+  );
 
   const filteredAll = useMemo(
     () =>
@@ -4487,13 +4523,9 @@ const ActivityRailContent = memo(function ActivityRailContent({
                         // sidebar diff was off by 1–2 tokens because it used a
                         // stale snapshot stored at proposal-creation time.
                         const liveProposal = entry.proposalId
-                          ? proposals.find(
-                              (proposal) => proposal.id === entry.proposalId,
-                            )
+                          ? proposalsById.get(entry.proposalId)
                           : undefined;
-                        const liveSection = sections.find(
-                          (section) => section.id === entry.sectionId,
-                        );
+                        const liveSection = sectionsById.get(entry.sectionId);
                         const liveExistingContent =
                           entry.status === "pending"
                             ? liveSection?.content
@@ -4546,7 +4578,12 @@ const ActivityRailContent = memo(function ActivityRailContent({
   );
 });
 
-function ActivityRow({
+const activityDiffCache = new Map<
+  string,
+  { before: string; after: string; parts: ReturnType<typeof computeDiffParts> }
+>();
+
+const ActivityRow = memo(function ActivityRow({
   entry,
   liveExistingContent,
   liveProposedText,
@@ -4579,9 +4616,21 @@ function ActivityRow({
     ? liveProposedText
     : (entry.afterText ?? "");
   const diffParts = useMemo(
-    () =>
-      diffReady ? computeDiffParts(beforeForDiff, afterForDiff) : null,
-    [afterForDiff, beforeForDiff, diffReady],
+    () => {
+      if (!diffReady) return null;
+      const cached = activityDiffCache.get(entry.id);
+      if (cached?.before === beforeForDiff && cached.after === afterForDiff) {
+        return cached.parts;
+      }
+      const parts = computeDiffParts(beforeForDiff, afterForDiff);
+      activityDiffCache.set(entry.id, {
+        before: beforeForDiff,
+        after: afterForDiff,
+        parts,
+      });
+      return parts;
+    },
+    [afterForDiff, beforeForDiff, diffReady, entry.id],
   );
   const diffStats = useMemo(
     () => (diffParts ? summarizeDiff(diffParts) : null),
@@ -4748,4 +4797,4 @@ function ActivityRow({
       </AnimatePresence>
     </div>
   );
-}
+});

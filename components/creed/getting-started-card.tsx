@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
-import { useCreed } from "@/components/creed/creed-provider";
+import { useCreedStateSelector } from "@/components/creed/creed-provider";
 import {
   GETTING_STARTED_STEPS,
   type GettingStartedStepKey,
@@ -157,8 +157,9 @@ export function GettingStartedCardView({
 }
 
 export function GettingStartedCard() {
-  const { state } = useCreed();
-  const gettingStarted = state.gettingStarted;
+  const gettingStarted = useCreedStateSelector(
+    (state) => state.gettingStarted,
+  );
 
   const [expanded, setExpanded] = useState(false);
   // The completion confirmation shows once the last step lands on screen and
