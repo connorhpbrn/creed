@@ -23,14 +23,21 @@ test("Creed consumers can subscribe to state slices independently", () => {
   assert.match(panel, /sameClosedPanelState/);
 });
 
-test("hidden and offscreen file surfaces avoid eager expensive work", () => {
+test("file performance work preserves section and rail animation lifecycles", () => {
   const file = source("../components/creed/file-screen.tsx");
-  assert.match(file, /activityOpen \? \(/);
-  assert.match(file, /editorNearViewport \|\| proposalDirty/);
-  assert.match(file, /StaticSectionPreview/);
+  const nexus = source("../components/creed/nexus-view.tsx");
+  assert.match(file, /<ActivityRail[\s\S]*open=\{activityOpen\}/);
+  assert.match(file, /Keep Tiptap mounted/);
+  assert.match(file, /stiffness: 340,[\s\S]*damping: 32,[\s\S]*mass: 0\.85/);
+  assert.match(file, /height: \{ duration: 0\.44, ease:/);
+  assert.doesNotMatch(file, /StaticSectionPreview/);
+  assert.doesNotMatch(file, /editorNearViewport/);
   assert.match(file, /activityDiffCache/);
   assert.match(file, /proposalsById/);
   assert.match(file, /new IntersectionObserver/);
+  assert.doesNotMatch(file, /requestIdleCallback\(mountNexus/);
+  assert.match(file, /active=\{fileViewMode === "nexus"\}/);
+  assert.match(nexus, /animationAlphaRef\.current = Math\.max\(animationAlphaRef\.current, 0\.5\)/);
 });
 
 test("active Creed resolution is passed through the app layout", () => {

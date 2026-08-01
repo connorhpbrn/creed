@@ -26,6 +26,7 @@ type NexusViewProps = {
   sections: CreedSection[];
   scoresBySectionId?: ReadonlyMap<string, number>;
   className?: string;
+  active?: boolean;
   initialViewState?: NexusViewState | null;
   onViewStateChange?: (state: NexusViewState) => void;
 };
@@ -270,6 +271,7 @@ export function NexusView({
   sections,
   scoresBySectionId = EMPTY_SCORES,
   className,
+  active = true,
   initialViewState = null,
   onViewStateChange,
 }: NexusViewProps) {
@@ -333,6 +335,12 @@ export function NexusView({
   const restoredSizeRef = useRef(initialViewState?.size ?? null);
   const onViewStateChangeRef = useRef(onViewStateChange);
   onViewStateChangeRef.current = onViewStateChange;
+
+  useEffect(() => {
+    if (!active) return;
+    animationAlphaRef.current = Math.max(animationAlphaRef.current, 0.5);
+    requestCanvasDrawRef.current();
+  }, [active]);
 
   useEffect(() => {
     return () => {

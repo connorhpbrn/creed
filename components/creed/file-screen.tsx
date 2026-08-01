@@ -143,10 +143,7 @@ import {
   type CreedSection,
   type Proposal,
 } from "@/lib/creed-data";
-import {
-  richTextContentEquivalent,
-  sanitizeRichTextHtml,
-} from "@/lib/rich-text";
+import { richTextContentEquivalent } from "@/lib/rich-text";
 import {
   canProposeToSection,
   resolveSectionPermission,
@@ -1086,20 +1083,6 @@ export function FileScreen() {
     "editor",
   );
   const [nexusMounted, setNexusMounted] = useState(false);
-  useEffect(() => {
-    setNexusMounted(false);
-    const mountNexus = () => {
-      startTransition(() => setNexusMounted(true));
-    };
-    if (typeof window.requestIdleCallback === "function") {
-      const idleId = window.requestIdleCallback(mountNexus, {
-        timeout: 1_200,
-      });
-      return () => window.cancelIdleCallback(idleId);
-    }
-    const timeoutId = window.setTimeout(mountNexus, 400);
-    return () => window.clearTimeout(timeoutId);
-  }, [state.creedId]);
   const toggleNexusView = useCallback(() => {
     setNexusMounted(true);
     setFileViewMode((current) =>
@@ -2825,6 +2808,7 @@ export function FileScreen() {
                     key={`nexus-${state.creedId ?? "unscoped"}`}
                     sections={visibleSections}
                     scoresBySectionId={nexusScoresBySectionId}
+                    active={fileViewMode === "nexus"}
                     initialViewState={nexusViewStateRef.current.viewState}
                     onViewStateChange={preserveNexusViewState}
                   />
@@ -3100,16 +3084,14 @@ export function FileScreen() {
           </div>
         </div>
 
-        {activityOpen ? (
-          <ActivityRail
-            activity={state.activity}
-            creedType={state.creedType === "company" ? "company" : "personal"}
-            proposals={state.proposals}
-            sections={state.sections}
-            open
-            onClose={closeActivity}
-          />
-        ) : null}
+        <ActivityRail
+          activity={state.activity}
+          creedType={state.creedType === "company" ? "company" : "personal"}
+          proposals={state.proposals}
+          sections={state.sections}
+          open={activityOpen}
+          onClose={closeActivity}
+        />
       </div>
 
       <CreedFindReplace scrollRef={editorScrollRef} />
@@ -3607,8 +3589,6 @@ function SectionCard({
   onAddSectionAfter?: () => void;
 }) {
   const dragControls = useDragControls();
-  const sectionElementRef = useRef<HTMLElement | null>(null);
-  const [editorNearViewport, setEditorNearViewport] = useState(false);
   // Proposal-only draft buffer: null = clean (mirrors canonical section.content),
   // otherwise the member's unsent local edit. Reset whenever the section id
   // changes so a draft never leaks across sections.
@@ -3629,24 +3609,6 @@ function SectionCard({
   // Draft is only non-null when it genuinely differs from canonical (the editor
   // emits an onChange echo on init/normalize; we collapse those back to null).
   const proposalDirty = proposeMode && proposalDraft !== null;
-  useEffect(() => {
-    const element = sectionElementRef.current;
-    if (!element || editorNearViewport || (collapsed && !proposalDirty)) return;
-    if (!("IntersectionObserver" in window)) {
-      setEditorNearViewport(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting) return;
-        setEditorNearViewport(true);
-        observer.disconnect();
-      },
-      { rootMargin: "600px 0px" },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [collapsed, editorNearViewport, proposalDirty]);
   async function submitProposal() {
     if (!proposalDirty || !onSubmitProposal || submittingProposal) return;
     setSubmittingProposal(true);
@@ -3685,9 +3647,9 @@ function SectionCard({
       transition={{
         layout: {
           type: "spring",
-          stiffness: 520,
-          damping: 38,
-          mass: 0.7,
+          stiffness: 340,
+          damping: 32,
+          mass: 0.85,
         },
       }}
       onDragStart={() => {
@@ -3703,7 +3665,7 @@ function SectionCard({
       id={section.id}
       className="relative scroll-mt-24"
     >
-      <section ref={sectionElementRef} className="group relative">
+      <section className="group relative">
         {/* Only reorderers (owner/admin, or the personal user) get the drag
             handle. Members can't reorder, so they get no icon at all on the
             left of the section name. */}
@@ -3995,14 +3957,14 @@ function SectionCard({
           </div>
         </div>
 
-        {/* A collapsed clean section does not need a live ProseMirror view.
-            Proposal drafts stay mounted so collapsing cannot discard work. */}
-        {!collapsed || proposalDirty ? (
-          <motion.div
+        {/* Keep Tiptap mounted, but animate only this measured wrapper. The
+            layout-contained body avoids the repeated intrinsic measurement
+            that made the old grid-row collapse stutter on large files. */}
+        <motion.div
           initial={false}
           animate={{ height: collapsed ? 0 : "auto" }}
           transition={{
-            height: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
+            height: { duration: 0.44, ease: [0.22, 1, 0.36, 1] },
           }}
           className="overflow-hidden"
           aria-hidden={collapsed}
@@ -4015,7 +3977,7 @@ function SectionCard({
               y: collapsed ? -4 : 0,
             }}
             transition={{
-              duration: collapsed ? 0.2 : 0.26,
+              duration: collapsed ? 0.3 : 0.34,
               ease: [0.22, 1, 0.36, 1],
             }}
             className={cn(
@@ -4077,48 +4039,29 @@ function SectionCard({
                   : undefined
               }
             >
-              {editorNearViewport || proposalDirty ? (
-                <RichTextEditor
-                  sectionId={section.id}
-                  content={editorContent}
-                  readOnly={locked}
-                  accentColor={accentColorMap[section.accent]}
-                  sectionTagTargets={sectionTagTargets}
-                  onChange={
-                    proposeMode
-                      ? (html) =>
-                          setProposalDraft(
-                            html === section.content ? null : html,
-                          )
-                      : onChangeRichText
-                  }
-                  onAddSectionAfter={onAddSectionAfter}
-                />
-              ) : (
-                <StaticSectionPreview content={editorContent} />
-              )}
+              <RichTextEditor
+                sectionId={section.id}
+                content={editorContent}
+                readOnly={locked}
+                accentColor={accentColorMap[section.accent]}
+                sectionTagTargets={sectionTagTargets}
+                onChange={
+                  proposeMode
+                    ? (html) =>
+                        setProposalDraft(
+                          html === section.content ? null : html,
+                        )
+                    : onChangeRichText
+                }
+                onAddSectionAfter={onAddSectionAfter}
+              />
             </div>
           </motion.div>
-          </motion.div>
-        ) : null}
+        </motion.div>
       </section>
     </Reorder.Item>
   );
 }
-
-const StaticSectionPreview = memo(function StaticSectionPreview({
-  content,
-}: {
-  content: string;
-}) {
-  const sanitized = useMemo(() => sanitizeRichTextHtml(content), [content]);
-  return (
-    <div
-      className="ProseMirror"
-      dangerouslySetInnerHTML={{ __html: sanitized }}
-    />
-  );
-});
 
 // Animated Lock / LockOpen button shared by the header (master) and per-section.
 // The lucide-animated icons fire `startAnimation()` on demand - the button
