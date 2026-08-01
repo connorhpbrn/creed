@@ -19,6 +19,7 @@ interface WaypointsIconProps extends HTMLAttributes<HTMLDivElement> {
 const PATH_TRANSITION: Transition = {
   duration: 0.62,
   ease: [0.22, 1, 0.36, 1],
+  times: [0, 0.28, 1],
 };
 
 const PATH_VARIANTS: Variants = {
@@ -26,7 +27,7 @@ const PATH_VARIANTS: Variants = {
     pathLength: 1,
   },
   animate: {
-    pathLength: [0.68, 1],
+    pathLength: [1, 0.68, 1],
   },
 };
 

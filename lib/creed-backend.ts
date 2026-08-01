@@ -51,6 +51,12 @@ import { richTextContentEquivalent } from "@/lib/rich-text";
 import type { CreedSummary } from "@/lib/creed-membership";
 import { getPersonalCreedId } from "@/lib/creed-membership";
 
+const ACTIVITY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+function getActivityCutoffIso() {
+  return new Date(Date.now() - ACTIVITY_RETENTION_MS).toISOString();
+}
+
 type SectionRow = {
   user_id: string;
   section_id: string;
@@ -1254,9 +1260,9 @@ export async function hasPersistedCreed(
 // in a server action), the cache treats it as a different call.
 //
 // `proposalLimit` / `activityLimit` let non-display callers (MCP, proposal
-// submissions, GitHub sync) avoid pulling 500 historical rows they'll never
-// look at. The defaults match the previous behaviour so display surfaces
-// keep their full history without any opt-in.
+// submissions, GitHub sync) avoid pulling rows they'll never inspect. Activity
+// is also bounded to the product's seven-day retention window at query time, so
+// a delayed cleanup job can never make the UI hydrate stale history.
 export const loadCreedState = cache(
   async (
     client: unknown,
@@ -1323,6 +1329,7 @@ async function loadCreedStateImpl(
       .from("creed_activity")
       .select("*")
       .eq("creed_id", personalCreedId)
+      .gte("created_at", getActivityCutoffIso())
       .order("created_at", { ascending: false })
       .limit(activityLimit),
     db
@@ -1543,6 +1550,7 @@ export async function loadCompanyCreedState(
       .from("creed_activity")
       .select("*")
       .eq("creed_id", creedId)
+      .gte("created_at", getActivityCutoffIso())
       .order("created_at", { ascending: false })
       .limit(500),
     admin.from("creed_members").select("user_id, role").eq("creed_id", creedId),

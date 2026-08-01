@@ -2,6 +2,7 @@
 
 import {
   memo,
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -196,6 +197,7 @@ function useJsonStable<T>(value: T): T {
 }
 
 const EMPTY_PROPOSALS: Proposal[] = [];
+const ACTIVITY_PAGE_SIZE = 20;
 
 function formatRelativeTime(timestamp?: string, fallbackLabel?: string) {
   if (!timestamp) {
@@ -997,6 +999,7 @@ export function FileScreen() {
   }
   const reviewPillProposals = reviewPillProposalsRef.current;
   const [activityOpen, setActivityOpen] = useState(false);
+  const closeActivity = useCallback(() => setActivityOpen(false), []);
   // Watching the state covers every open path at once (the A shortcut, the
   // header buttons, shell intents), so the "Check activity" getting-started
   // step can't be missed by a new entry point.
@@ -1079,6 +1082,27 @@ export function FileScreen() {
   const [fileViewMode, setFileViewMode] = useState<"editor" | "nexus">(
     "editor",
   );
+  const [nexusMounted, setNexusMounted] = useState(false);
+  useEffect(() => {
+    setNexusMounted(false);
+    const mountNexus = () => {
+      startTransition(() => setNexusMounted(true));
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(mountNexus, {
+        timeout: 1_200,
+      });
+      return () => window.cancelIdleCallback(idleId);
+    }
+    const timeoutId = window.setTimeout(mountNexus, 400);
+    return () => window.clearTimeout(timeoutId);
+  }, [state.creedId]);
+  const toggleNexusView = useCallback(() => {
+    setNexusMounted(true);
+    setFileViewMode((current) =>
+      current === "nexus" ? "editor" : "nexus",
+    );
+  }, []);
   const nexusViewStateRef = useRef<{
     creedId: string | undefined;
     viewState: NexusViewState | null;
@@ -1129,7 +1153,7 @@ export function FileScreen() {
   const sectionsRef = useRef(state.sections);
   sectionsRef.current = state.sections;
   const versionIcon = useAnimatedIconControls();
-  const nexusIcon = useAnimatedIconControls(80, undefined, 800);
+  const nexusIcon = useAnimatedIconControls(80, undefined, 900);
   const activityIcon = useAnimatedIconControls();
   // `exportMarkdown` is identity-stable now (the provider hands out proxy
   // actions), so the content dependency must be explicit: rebuild only when
@@ -2388,7 +2412,7 @@ export function FileScreen() {
             ref={editorScrollRef}
             className="h-full overflow-y-auto overscroll-contain creed-scrollbar"
           >
-            <div className="mx-auto max-w-[920px] px-4 py-6 pb-28 md:px-12 md:py-10 md:pb-10 xl:px-16">
+            <div className="relative mx-auto max-w-[920px] px-4 py-6 pb-28 md:px-12 md:py-10 md:pb-10 xl:px-16">
               <FileStickyHeader>
                 <FileStickyHeaderRow>
                   <div>
@@ -2584,11 +2608,7 @@ export function FileScreen() {
                       )}
                       onMouseEnter={nexusIcon.start}
                       onMouseLeave={nexusIcon.settle}
-                      onClick={() => {
-                        setFileViewMode((current) =>
-                          current === "nexus" ? "editor" : "nexus",
-                        );
-                      }}
+                      onClick={toggleNexusView}
                     >
                       <WaypointsIcon
                         ref={nexusIcon.iconRef}
@@ -2608,11 +2628,7 @@ export function FileScreen() {
                       )}
                       onMouseEnter={nexusIcon.start}
                       onMouseLeave={nexusIcon.settle}
-                      onClick={() => {
-                        setFileViewMode((current) =>
-                          current === "nexus" ? "editor" : "nexus",
-                        );
-                      }}
+                      onClick={toggleNexusView}
                     >
                       <WaypointsIcon
                         ref={nexusIcon.iconRef}
@@ -2810,16 +2826,27 @@ export function FileScreen() {
                 ) : null}
               </FileStickyHeader>
 
-              {fileViewMode === "nexus" ? (
-                <NexusView
-                  key={`nexus-${state.creedId ?? "unscoped"}`}
-                  sections={visibleSections}
-                  scoresBySectionId={nexusScoresBySectionId}
-                  initialViewState={nexusViewStateRef.current.viewState}
-                  onViewStateChange={preserveNexusViewState}
-                />
-              ) : (
-                <>
+              {nexusMounted ? (
+                <div
+                  className={cn(
+                    fileViewMode !== "nexus" &&
+                      "pointer-events-none invisible absolute top-0 right-4 left-4 select-none md:right-12 md:left-12 xl:right-16 xl:left-16",
+                  )}
+                  aria-hidden={fileViewMode !== "nexus"}
+                >
+                  <NexusView
+                    key={`nexus-${state.creedId ?? "unscoped"}`}
+                    sections={visibleSections}
+                    scoresBySectionId={nexusScoresBySectionId}
+                    initialViewState={nexusViewStateRef.current.viewState}
+                    onViewStateChange={preserveNexusViewState}
+                  />
+                </div>
+              ) : null}
+              <div
+                className={cn(fileViewMode === "nexus" && "hidden")}
+                aria-hidden={fileViewMode === "nexus"}
+              >
                   <Reorder.Group
                     axis="y"
                     values={reorderOrder ?? canonicalVisibleOrder}
@@ -3081,8 +3108,7 @@ export function FileScreen() {
                       )}
                     </div>
                   ) : null}
-                </>
-              )}
+              </div>
             </div>
           </div>
         </div>
@@ -3093,7 +3119,7 @@ export function FileScreen() {
           proposals={state.proposals}
           sections={state.sections}
           open={activityOpen}
-          onClose={() => setActivityOpen(false)}
+          onClose={closeActivity}
         />
       </div>
 
@@ -3699,7 +3725,6 @@ function SectionCard({
           className={cn(
             "group/header flex cursor-pointer items-start justify-between gap-4 transition-opacity duration-150 ease-[cubic-bezier(0.22,1,0.36,1)]",
             dragging && "opacity-60",
-            collapsed ? "mb-0" : "mb-6",
           )}
         >
           <div className="min-w-0 flex-1">
@@ -3961,86 +3986,107 @@ function SectionCard({
           </div>
         </div>
 
-        <div className={collapsed ? "hidden" : "block"}>
-          <div>
-            <div
-              className="animate-in fade-in-0 duration-150"
-              aria-hidden={collapsed}
-            >
-              {proposals.length > 0 ? (
-                <div className="mb-4 space-y-3">
-                  {proposals.map((p) => {
-                    const kind = p.draft.kind;
-                    if (
-                      kind === "delete-section" ||
-                      kind === "rename-section" ||
-                      kind === "recolor-section"
-                    ) {
-                      return (
-                        <InlineMetaProposal
-                          key={p.id}
-                          proposal={p}
-                          existingName={section.name}
-                          existingAccent={accentColorMap[section.accent]}
-                          agentName={p.agentName}
-                          canReview={canReview}
-                          onAccept={() => onAcceptProposal(p.id)}
-                          onReject={() => onRejectProposal(p.id)}
-                        />
-                      );
-                    }
+        {/* Keep Tiptap mounted, but animate only this measured wrapper. The
+            layout-contained body avoids the repeated intrinsic measurement
+            that made the old grid-row collapse stutter on large files. */}
+        <motion.div
+          initial={false}
+          animate={{ height: collapsed ? 0 : "auto" }}
+          transition={{
+            height: { duration: 0.34, ease: [0.22, 1, 0.36, 1] },
+          }}
+          className="overflow-hidden"
+          aria-hidden={collapsed}
+          inert={collapsed}
+        >
+          <motion.div
+            initial={false}
+            animate={{
+              opacity: collapsed ? 0 : 1,
+              y: collapsed ? -4 : 0,
+            }}
+            transition={{
+              duration: collapsed ? 0.2 : 0.26,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className={cn(
+              "pt-6 [contain:layout]",
+              collapsed && "pointer-events-none",
+            )}
+          >
+            {proposals.length > 0 ? (
+              <div className="mb-4 space-y-3">
+                {proposals.map((p) => {
+                  const kind = p.draft.kind;
+                  if (
+                    kind === "delete-section" ||
+                    kind === "rename-section" ||
+                    kind === "recolor-section"
+                  ) {
                     return (
-                      <InlineProposalDiff
+                      <InlineMetaProposal
                         key={p.id}
                         proposal={p}
-                        existingContent={section.content}
+                        existingName={section.name}
+                        existingAccent={accentColorMap[section.accent]}
                         agentName={p.agentName}
                         canReview={canReview}
-                        mine={Boolean(p.mine)}
                         onAccept={() => onAcceptProposal(p.id)}
                         onReject={() => onRejectProposal(p.id)}
-                        onEdit={() => editProposal(p)}
-                        onDelete={() => onWithdrawProposal(p.id)}
                       />
                     );
-                  })}
-                </div>
-              ) : null}
-
-              <div
-                // Read-only for this member: nothing is greyed, but a click on the
-                // body (as if to edit) surfaces an amber "read-only" nudge. Text
-                // selection still works, so we skip the toast mid-selection.
-                onClick={
-                  readOnlyMember
-                    ? () => {
-                        if ((window.getSelection()?.toString() ?? "") === "") {
-                          toast.warning("This section is read-only.");
-                        }
-                      }
-                    : undefined
-                }
-              >
-                <RichTextEditor
-                  sectionId={section.id}
-                  content={editorContent}
-                  readOnly={locked}
-                  accentColor={accentColorMap[section.accent]}
-                  sectionTagTargets={sectionTagTargets}
-                  onChange={
-                    proposeMode
-                      ? (html) =>
-                          setProposalDraft(
-                            html === section.content ? null : html,
-                          )
-                      : onChangeRichText
                   }
-                  onAddSectionAfter={onAddSectionAfter}
-                />
+                  return (
+                    <InlineProposalDiff
+                      key={p.id}
+                      proposal={p}
+                      existingContent={section.content}
+                      agentName={p.agentName}
+                      canReview={canReview}
+                      mine={Boolean(p.mine)}
+                      onAccept={() => onAcceptProposal(p.id)}
+                      onReject={() => onRejectProposal(p.id)}
+                      onEdit={() => editProposal(p)}
+                      onDelete={() => onWithdrawProposal(p.id)}
+                    />
+                  );
+                })}
               </div>
+            ) : null}
+
+            <div
+              // Read-only for this member: nothing is greyed, but a click on the
+              // body (as if to edit) surfaces an amber "read-only" nudge. Text
+              // selection still works, so we skip the toast mid-selection.
+              onClick={
+                readOnlyMember
+                  ? () => {
+                      if ((window.getSelection()?.toString() ?? "") === "") {
+                        toast.warning("This section is read-only.");
+                      }
+                    }
+                  : undefined
+              }
+            >
+              <RichTextEditor
+                sectionId={section.id}
+                content={editorContent}
+                readOnly={locked}
+                accentColor={accentColorMap[section.accent]}
+                sectionTagTargets={sectionTagTargets}
+                onChange={
+                  proposeMode
+                    ? (html) =>
+                        setProposalDraft(
+                          html === section.content ? null : html,
+                        )
+                    : onChangeRichText
+                }
+                onAddSectionAfter={onAddSectionAfter}
+              />
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </section>
     </Reorder.Item>
   );
@@ -4145,7 +4191,8 @@ function HeaderLockButton({
         }}
         className={cn(
           "border-[var(--creed-border)] bg-[var(--creed-surface)] md:hidden",
-          locked && "bg-[var(--creed-surface-raised)]",
+          locked &&
+            "bg-[var(--creed-surface-raised)]! hover:bg-[var(--creed-surface-raised)]! dark:bg-input/50! dark:hover:bg-input/50!",
         )}
         onClick={() => trigger({ lock: mobileLockRef, open: mobileOpenRef })}
       >
@@ -4168,7 +4215,11 @@ function HeaderLockButton({
         size="sm"
         aria-pressed={locked}
         style={{ borderRadius: 13, height: 32, minHeight: 32 }}
-        className="hidden border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[12px] md:inline-flex md:px-3.5 md:text-sm"
+        className={cn(
+          "hidden border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[12px] md:inline-flex md:px-3.5 md:text-sm",
+          locked &&
+            "bg-[var(--creed-surface-raised)]! hover:bg-[var(--creed-surface-raised)]! dark:bg-input/50! dark:hover:bg-input/50!",
+        )}
         onClick={() => trigger({ lock: desktopLockRef, open: desktopOpenRef })}
       >
         {locked ? (
@@ -4244,7 +4295,7 @@ function ActivityActorAvatar({
   );
 }
 
-function ActivityRail({
+const ActivityRail = memo(function ActivityRail({
   activity,
   creedType,
   proposals,
@@ -4262,32 +4313,30 @@ function ActivityRail({
   const [statusFilter, setStatusFilter] = useState<"all" | ActivityStatus>(
     "all",
   );
-  const [visibleCount, setVisibleCount] = useState(50);
+  const [visibleCount, setVisibleCount] = useState(ACTIVITY_PAGE_SIZE);
 
   useEffect(() => {
-    setVisibleCount(50);
+    setVisibleCount(ACTIVITY_PAGE_SIZE);
   }, [statusFilter]);
 
   return (
     <FileActivityRailFrame open={open}>
-      {open ? (
-        <ActivityRailContent
-          activity={activity}
-          creedType={creedType}
-          proposals={proposals}
-          sections={sections}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          visibleCount={visibleCount}
-          setVisibleCount={setVisibleCount}
-          onClose={onClose}
-        />
-      ) : null}
+      <ActivityRailContent
+        activity={activity}
+        creedType={creedType}
+        proposals={proposals}
+        sections={sections}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        visibleCount={visibleCount}
+        setVisibleCount={setVisibleCount}
+        onClose={onClose}
+      />
     </FileActivityRailFrame>
   );
-}
+});
 
-function ActivityRailContent({
+const ActivityRailContent = memo(function ActivityRailContent({
   activity,
   creedType,
   proposals,
@@ -4470,7 +4519,11 @@ function ActivityRailContent({
                 <div className="mt-3">
                   <button
                     type="button"
-                    onClick={() => setVisibleCount((current) => current + 50)}
+                    onClick={() =>
+                      setVisibleCount(
+                        (current) => current + ACTIVITY_PAGE_SIZE,
+                      )
+                    }
                     className="w-full rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 py-2 text-sm font-medium text-[var(--creed-text-secondary)] transition-colors hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
                   >
                     Load more · {filteredAll.length - visibleCount} remaining
@@ -4491,7 +4544,7 @@ function ActivityRailContent({
         </ScrollArea>
     </div>
   );
-}
+});
 
 function ActivityRow({
   entry,
@@ -4503,6 +4556,8 @@ function ActivityRow({
   liveProposedText?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [diffReady, setDiffReady] = useState(false);
+  const diffFrameRef = useRef<number | null>(null);
   const agentNames =
     entry.actorType === "agent" ? uniqueAgentNames([entry.actor]) : [];
 
@@ -4524,11 +4579,33 @@ function ActivityRow({
     ? liveProposedText
     : (entry.afterText ?? "");
   const diffParts = useMemo(
-    () => computeDiffParts(beforeForDiff, afterForDiff),
-    [beforeForDiff, afterForDiff],
+    () =>
+      diffReady ? computeDiffParts(beforeForDiff, afterForDiff) : null,
+    [afterForDiff, beforeForDiff, diffReady],
   );
-  const diffStats = useMemo(() => summarizeDiff(diffParts), [diffParts]);
-  const hasTextualChange = diffParts.some((part) => part.added || part.removed);
+  const diffStats = useMemo(
+    () => (diffParts ? summarizeDiff(diffParts) : null),
+    [diffParts],
+  );
+  const hasTextualChange =
+    diffParts?.some((part) => part.added || part.removed) ?? false;
+  useEffect(
+    () => () => {
+      if (diffFrameRef.current !== null) {
+        window.cancelAnimationFrame(diffFrameRef.current);
+      }
+    },
+    [],
+  );
+  const toggleOpen = useCallback(() => {
+    const nextOpen = !open;
+    setOpen(nextOpen);
+    if (!nextOpen || diffReady || diffFrameRef.current !== null) return;
+    diffFrameRef.current = window.requestAnimationFrame(() => {
+      diffFrameRef.current = null;
+      startTransition(() => setDiffReady(true));
+    });
+  }, [diffReady, open]);
   // Activity entries from delete-section operations carry a "Keep X" →
   // "Delete X" before/after pair. The outer card stays neutral (full-card
   // red wash felt heavy); we tint only the expanded diff body red below
@@ -4542,7 +4619,7 @@ function ActivityRow({
       <button
         type="button"
         className="group w-full text-left"
-        onClick={() => setOpen((current) => !current)}
+        onClick={toggleOpen}
       >
         <div className="flex items-start gap-3">
           {entry.actorType === "agent" ? (
@@ -4592,7 +4669,7 @@ function ActivityRow({
                   <DiffBadge tone="added" count={0} />
                   <DiffBadge tone="removed" count={1} />
                 </span>
-              ) : hasTextualChange ? (
+              ) : hasTextualChange && diffStats ? (
                 <span className="inline-flex items-center gap-1">
                   <span className="text-[var(--creed-text-tertiary)]">·</span>
                   <DiffBadge tone="added" count={diffStats.added} />
@@ -4633,7 +4710,12 @@ function ActivityRow({
                   <span className="creed-diff-remove">
                     Delete {entry.sectionName}
                   </span>
-                ) : hasTextualChange ? (
+                ) : !diffReady ? (
+                  <span className="inline-flex items-center gap-2 text-[var(--creed-text-tertiary)]">
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    Preparing diff
+                  </span>
+                ) : hasTextualChange && diffParts ? (
                   diffParts.map((part, index) => {
                     if (part.added) {
                       return (

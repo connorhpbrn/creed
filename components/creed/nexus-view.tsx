@@ -365,6 +365,9 @@ export function NexusView({
       }
       const width = Math.max(0, rect.width);
       const height = Math.max(0, rect.height);
+      if (width === 0 || height === 0) {
+        return;
+      }
       setSize((current) => {
         if (current.width === width && current.height === height) {
           return current;
