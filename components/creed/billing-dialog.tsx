@@ -29,14 +29,14 @@ import {
 } from "@/lib/marketing/pricing";
 import { cn } from "@/lib/utils";
 
-type PlanCredits = {
+export type PlanCredits = {
   balanceUsd: number;
   allowanceUsd: number;
   allowanceResets: boolean;
   purchasedUsd: number;
 };
 
-type PlanCard = {
+export type PlanCard = {
   scope: "personal" | "company";
   creedId: string | null;
   name: string;
@@ -52,6 +52,9 @@ type PlanCard = {
 type BillingDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  // Dev-only: renders these rows instead of fetching, so every plan shape can
+  // be looked at side by side. See the B shortcut in welcome-dev-preview.
+  previewPlans?: PlanCard[];
 };
 
 const COMPANY_ACCENT = "#D97706";
@@ -101,7 +104,6 @@ function allowanceState(credits: PlanCredits) {
   return {
     remaining,
     allowance: credits.allowanceUsd,
-    fraction: credits.allowanceUsd > 0 ? remaining / credits.allowanceUsd : 0,
     extra: credits.purchasedUsd,
   };
 }
@@ -115,20 +117,28 @@ function PlanRowSkeleton() {
           <div className="h-3.5 w-28 rounded-[6px] bg-[var(--creed-surface-raised)]" />
           <div className="h-3.5 w-14 rounded-[6px] bg-[var(--creed-surface-raised)]" />
         </div>
-        <div className="mt-3 h-1 w-full rounded-full bg-[var(--creed-surface-raised)]" />
-        <div className="mt-3 h-3 w-24 rounded-[6px] bg-[var(--creed-surface-raised)]" />
+        <div className="mt-2.5 h-3 w-44 rounded-[6px] bg-[var(--creed-surface-raised)]" />
       </div>
     </div>
   );
 }
 
-export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
+export function BillingDialog({
+  open,
+  onOpenChange,
+  previewPlans,
+}: BillingDialogProps) {
   const [plans, setPlans] = useState<PlanCard[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [portalBusyKey, setPortalBusyKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    if (previewPlans) {
+      setPlans(previewPlans);
+      setLoading(false);
+      return;
+    }
     let active = true;
     setLoading(true);
     fetch("/api/app/billing/plans", { cache: "no-store" })
@@ -145,7 +155,7 @@ export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
     return () => {
       active = false;
     };
-  }, [open]);
+  }, [open, previewPlans]);
 
   // Manage billing opens the Stripe portal for the right customer: the personal
   // entitlement's, or a specific company's.
@@ -154,6 +164,10 @@ export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
       const key = plan.creedId ?? "personal";
       if (portalBusyKey) return;
       setPortalBusyKey(key);
+      if (previewPlans) {
+        window.setTimeout(() => setPortalBusyKey(null), 1200);
+        return;
+      }
       try {
         const res =
           plan.scope === "company"
@@ -177,7 +191,7 @@ export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
         );
       }
     },
-    [portalBusyKey],
+    [portalBusyKey, previewPlans],
   );
 
   return (
@@ -190,7 +204,9 @@ export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="divide-y divide-[var(--creed-border)]">
+        {/* Own enough company Creeds and the list outgrows a short window, and
+            the dialog itself does not scroll. */}
+        <div className="creed-scrollbar max-h-[60vh] divide-y divide-[var(--creed-border)] overflow-y-auto">
           {loading ? (
             // Same geometry as a real row, so the dialog does not resize under
             // the cursor when the plans land.
@@ -217,6 +233,12 @@ export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
                 plan.credits && plan.credits.allowanceUsd > 0
                   ? allowanceState(plan.credits)
                   : null;
+              const metaNote =
+                isSubscription && renewal
+                  ? `${plan.cancelAtPeriodEnd ? "Ends" : "Renews"} ${renewal}`
+                  : plan.paid && plan.billingMode === "lifetime"
+                    ? "Yours forever"
+                    : null;
 
               return (
                 <div key={key} className="flex gap-3 py-3.5">
@@ -250,46 +272,48 @@ export function BillingDialog({ open, onOpenChange }: BillingDialogProps) {
                       ) : null}
                     </div>
 
-                    {allowance ? (
-                      <div className="mt-2.5">
-                        <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--creed-surface-raised)]">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${Math.round(allowance.fraction * 100)}%`,
-                              backgroundColor: accent,
-                            }}
-                          />
-                        </div>
-                        <div className="mt-1.5 flex items-center gap-1.5 text-[12px] text-[var(--creed-text-secondary)]">
-                          <span className="tabular-nums">
+                    {/* One meta line: what is left, what is extra, when it
+                        renews. Kept as plain figures - a bar per row turned a
+                        list of numbers into a chart nobody asked for. */}
+                    <div className="mt-1.5 flex items-center justify-between gap-3 text-[12px]">
+                      <div className="flex min-w-0 items-center gap-1.5 truncate">
+                        {allowance ? (
+                          <span className="tabular-nums text-[var(--creed-text-secondary)]">
                             {formatUsd(allowance.remaining)} of{" "}
                             {formatUsd(allowance.allowance)} left
                           </span>
-                          {/* Top-ups roll over and are not part of the
-                              allowance, so they sit beside the meter rather
-                              than pushing it past full. */}
-                          {allowance.extra > 0 ? (
-                            <span className="tabular-nums text-[var(--creed-text-tertiary)]">
-                              + {formatUsd(allowance.extra)} extra
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    ) : plan.credits ? (
-                      <div className="mt-1.5 text-[12px] tabular-nums text-[var(--creed-text-secondary)]">
-                        {formatUsd(plan.credits.balanceUsd)} in credits
-                      </div>
-                    ) : null}
+                        ) : plan.credits ? (
+                          <span className="tabular-nums text-[var(--creed-text-secondary)]">
+                            {formatUsd(plan.credits.balanceUsd)} in credits
+                          </span>
+                        ) : null}
 
-                    <div className="mt-2 flex items-center justify-between gap-3 text-[12px]">
-                      <span className="truncate text-[var(--creed-text-tertiary)]">
-                        {isSubscription && renewal
-                          ? `${plan.cancelAtPeriodEnd ? "Ends" : "Renews"} ${renewal}`
-                          : plan.paid && plan.billingMode === "lifetime"
-                            ? "Yours forever"
-                            : ""}
-                      </span>
+                        {/* Top-ups roll over and are not part of the allowance,
+                            so they are counted beside it, never inside it. */}
+                        {allowance && allowance.extra > 0 ? (
+                          <>
+                            <span className="text-[var(--creed-text-tertiary)]">
+                              &middot;
+                            </span>
+                            <span className="tabular-nums text-[var(--creed-text-tertiary)]">
+                              {formatUsd(allowance.extra)} extra
+                            </span>
+                          </>
+                        ) : null}
+
+                        {metaNote ? (
+                          <>
+                            {allowance || plan.credits ? (
+                              <span className="text-[var(--creed-text-tertiary)]">
+                                &middot;
+                              </span>
+                            ) : null}
+                            <span className="truncate text-[var(--creed-text-tertiary)]">
+                              {metaNote}
+                            </span>
+                          </>
+                        ) : null}
+                      </div>
 
                       {/* One quiet link per row. Three plans used to mean three
                           full-width buttons stacked down the dialog. */}

@@ -9,8 +9,13 @@
 //   O - "Get started" checklist card preview (click rows to toggle checks)
 //   V - "New version available" toast
 //   L - Creed first-load screen (any key or click dismisses)
+//   B - Billing dialog carrying every plan state at once
 import { useEffect, useState } from "react";
 import { CreedLoader } from "@/components/creed/creed-loader";
+import {
+  BillingDialog,
+  type PlanCard,
+} from "@/components/creed/billing-dialog";
 import { cn } from "@/lib/utils";
 import { WelcomeDialog } from "@/components/creed/welcome-dialog";
 import { WelcomeVideoPreloader } from "@/components/creed/welcome-video-preloader";
@@ -186,6 +191,158 @@ function CreedLoaderDevPreview() {
   );
 }
 
+
+// Every shape the billing dialog can be handed, in one list: the two personal
+// billing modes, a healthy company plan, one past due, one with no credits at
+// all, and the unpaid row. Deliberately impossible as real data - nobody owns
+// two personal plans - because the point is to see the states together.
+const BILLING_PREVIEW_PLANS: PlanCard[] = [
+  {
+    scope: "personal",
+    creedId: null,
+    name: "Personal",
+    paid: true,
+    billingMode: "subscription",
+    interval: "month",
+    status: "active",
+    currentPeriodEnd: "2026-09-03T00:00:00.000Z",
+    cancelAtPeriodEnd: false,
+    // Part spent, and topped up: the case where balance exceeds the allowance.
+    credits: {
+      balanceUsd: 32.4,
+      allowanceUsd: 20,
+      allowanceResets: true,
+      purchasedUsd: 20,
+    },
+  },
+  {
+    scope: "personal",
+    creedId: "preview-personal-annual",
+    name: "Personal",
+    paid: true,
+    billingMode: "subscription",
+    interval: "year",
+    status: "active",
+    currentPeriodEnd: "2027-03-12T00:00:00.000Z",
+    // Cancelled but still running: the row reads "Ends" rather than "Renews".
+    cancelAtPeriodEnd: true,
+    credits: {
+      balanceUsd: 4.15,
+      allowanceUsd: 20,
+      allowanceResets: true,
+      purchasedUsd: 0,
+    },
+  },
+  {
+    scope: "personal",
+    creedId: "preview-personal-lifetime",
+    name: "Personal",
+    paid: true,
+    billingMode: "lifetime",
+    interval: null,
+    status: "active",
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+    // One-time credits: no reset, no Manage link.
+    credits: {
+      balanceUsd: 180,
+      allowanceUsd: 200,
+      allowanceResets: false,
+      purchasedUsd: 0,
+    },
+  },
+  {
+    scope: "company",
+    creedId: "preview-company-annual",
+    name: "Northwind Labs",
+    paid: true,
+    billingMode: "subscription",
+    interval: "year",
+    status: "active",
+    currentPeriodEnd: "2027-01-08T00:00:00.000Z",
+    cancelAtPeriodEnd: false,
+    credits: {
+      balanceUsd: 42,
+      allowanceUsd: 50,
+      allowanceResets: true,
+      purchasedUsd: 0,
+    },
+  },
+  {
+    scope: "company",
+    creedId: "preview-company-past-due",
+    name: "A company with a name long enough to truncate",
+    paid: true,
+    billingMode: "subscription",
+    interval: "month",
+    status: "past_due",
+    currentPeriodEnd: "2026-08-19T00:00:00.000Z",
+    cancelAtPeriodEnd: false,
+    // Allowance exhausted, top-ups keeping it alive.
+    credits: {
+      balanceUsd: 6.5,
+      allowanceUsd: 50,
+      allowanceResets: true,
+      purchasedUsd: 6.5,
+    },
+  },
+  {
+    scope: "company",
+    creedId: "preview-company-lifetime",
+    name: "Halcyon",
+    paid: true,
+    billingMode: "lifetime",
+    interval: null,
+    status: "active",
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+    // Credits failed to load: the row must not claim a zero balance.
+    credits: null,
+  },
+  {
+    scope: "personal",
+    creedId: "preview-personal-free",
+    name: "Personal",
+    paid: false,
+    billingMode: null,
+    interval: null,
+    status: null,
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+    credits: null,
+  },
+];
+
+function BillingDevPreview() {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.key.toLowerCase() !== "b" ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.repeat ||
+        isEditableTarget(event.target)
+      ) {
+        return;
+      }
+      setOpen((current) => !current);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  return (
+    <BillingDialog
+      open={open}
+      onOpenChange={setOpen}
+      previewPlans={BILLING_PREVIEW_PLANS}
+    />
+  );
+}
+
 export function WelcomeDevPreview() {
   if (process.env.NODE_ENV === "production") return null;
   return (
@@ -196,6 +353,7 @@ export function WelcomeDevPreview() {
       <GettingStartedDevPreview />
       <VersionToastDevPreview />
       <CreedLoaderDevPreview />
+      <BillingDevPreview />
     </>
   );
 }
