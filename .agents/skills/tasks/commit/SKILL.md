@@ -9,9 +9,12 @@ Create one intentional commit containing only the completed work in scope.
 
 ## Hard Rules
 
-- Never add agent, assistant, model, or AI attribution to a commit.
+- Commit authorship belongs solely to the repository user's existing Git
+  identity. Never attribute a commit to an agent, assistant, model, or AI.
 - Never add `Co-Authored-By`, `Generated-By`, or any equivalent trailer or message.
 - Never change Git author identity to an agent identity. If author identity is missing, stop and report it.
+- Never attribute branch ownership to an agent, assistant, model, AI, or tool.
+  Use a neutral, purpose-based branch name with no automated-author prefix or suffix.
 - Never stage unrelated user changes, secrets, generated artifacts, or temporary files.
 - Never push, amend, rebase, force-push, or alter earlier commits unless the user explicitly requests it.
 - Never bypass a failed commit hook.
@@ -19,7 +22,8 @@ Create one intentional commit containing only the completed work in scope.
 ## Workflow
 
 1. Read the repository instructions that govern commits and verification.
-2. Inspect `git status --short`, unstaged and staged diffs, and recent commit titles.
+2. Inspect `git status --short`, the current branch, the configured Git author
+   identity, unstaged and staged diffs, and recent commit titles.
 3. Determine the exact files belonging to the completed task. Preserve every unrelated user change.
 4. Confirm the relevant verification has passed. Run missing checks when repository instructions require them and their cost is proportionate to the change.
 5. Stage only the intended paths. Do not use a broad staging command without first proving every affected path belongs to the commit.

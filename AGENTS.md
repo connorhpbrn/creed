@@ -139,6 +139,12 @@ These are non-negotiable. Don't cross them without asking.
 
 ## Working defaults
 
+### Temporary working documents
+- Put one-off plans, audits, scratch reports, and similar agent-created
+  Markdown in the repository-root `dispolable/` folder.
+- `dispolable/` is local and gitignored. Keep durable product, architecture,
+  and contributor documentation in its canonical tracked location.
+
 ### Style + motion
 - Easing: `cubic-bezier(0.22, 1, 0.36, 1)`.
 - Durations: 160ms (popovers, dropdowns), 200ms (chevrons), 220-280ms (accordions).

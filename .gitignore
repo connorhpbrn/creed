@@ -58,6 +58,9 @@ yarn-error.log*
 /design.md
 /docs.md
 
+# disposable agent working documents
+/dispolable/
+
 # legacy / accidental git working trees
 .git.backup-*
 

@@ -56,6 +56,8 @@ Durable decisions that future agents should not reopen casually.
 
 - Code is canonical when docs drift.
 - Update project context only for durable truths.
+- Keep one-off plans, audits, and scratch reports in the gitignored root
+  `dispolable/` folder rather than committing them as repository documentation.
 - Historical plans belong in Git history or the relevant issue, not durable
   agent context.
 - Commits use lowercase titles and no AI co-author attribution.
