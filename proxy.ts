@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { contentSecurityPolicy, requiresCspNonce } from "@/lib/csp-policy";
 import { isMarketingPath } from "@/lib/marketing-routes";
+import { sessionNeedsRefresh } from "@/lib/supabase/session-freshness";
 import { getSupabasePublishableKey, getSupabaseUrl, isSupabaseConfigured } from "@/lib/supabase/env";
 
 export const config = {
@@ -69,7 +70,12 @@ export async function proxy(request: NextRequest) {
     isSupabaseConfigured() &&
     hasAuthCookie &&
     !pathname.startsWith("/api/") &&
-    !isMarketingPath(pathname)
+    !isMarketingPath(pathname) &&
+    // The expiry is sitting in the cookie, so read it there instead of asking
+    // Supabase on every request. Refreshing only near expiry takes the auth
+    // round trip off every in-app navigation; an unreadable cookie refreshes
+    // as before.
+    sessionNeedsRefresh(request.cookies.getAll())
   ) {
     const supabase = createServerClient(getSupabaseUrl(), getSupabasePublishableKey(), {
       cookies: {

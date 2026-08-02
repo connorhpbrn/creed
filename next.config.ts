@@ -49,6 +49,17 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   experimental: {
     optimizePackageImports: ["radix-ui"],
+    // The app routes are force-dynamic (the CSP nonce needs request-time
+    // rendering), and since Next 15 dynamic pages get ZERO client router cache
+    // - so every sidebar click refetched the page from the server, through the
+    // proxy's session refresh, before anything moved. Three minutes of cache
+    // makes switching between recently visited pages fully client-side. Safe
+    // here because everything live on those pages (Creed state, proposals,
+    // activity) comes from CreedProvider's own polling in the layout, which
+    // never unmounts between them - the cached RSC payloads are static shells.
+    staleTimes: {
+      dynamic: 180,
+    },
   },
   images: {
     formats: ["image/avif", "image/webp"],
