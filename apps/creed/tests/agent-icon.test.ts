@@ -4,7 +4,7 @@ import {
   CLI_ATTRIBUTABLE_AGENT_IDS,
   getAgentIconKind,
 } from "../lib/agent-icon.ts";
-import { ATTRIBUTABLE_AGENT_IDS } from "../packages/creed-cli/src/agent-ids.ts";
+import { ATTRIBUTABLE_AGENT_IDS } from "../../../packages/creed-cli/src/agent-ids.ts";
 
 test("agent icon inference keeps specific clients ahead of broad brands", () => {
   assert.equal(getAgentIconKind("Claude Code"), "claudecode");

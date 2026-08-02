@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -12,13 +12,13 @@
 
 # testing
 /coverage
-/bench/runs/
-/bench/results/
+/apps/creed/bench/runs/
+/apps/creed/bench/results/
 
 # next.js
-/.next/
-/.next-runtime*/
-/.next-preview*/
+.next/
+.next-runtime*/
+.next-preview*/
 /out/
 
 # production
@@ -39,7 +39,7 @@ yarn-error.log*
 !.env.example
 
 # vercel
-.vercel
+.vercel/
 
 # typescript
 *.tsbuildinfo
@@ -62,7 +62,7 @@ yarn-error.log*
 .git.backup-*
 
 # Supabase CLI temp state (contains the linked project ref + org)
-supabase/.temp/
+apps/creed/supabase/.temp/
 
 # OS / editor cruft
 *.log

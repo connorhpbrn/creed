@@ -58,7 +58,6 @@
     ".next-preview-pill/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules",
-    "packages/creed-cli"
+    "node_modules"
   ]
 }
