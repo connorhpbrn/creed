@@ -32,53 +32,31 @@ Supabase (Postgres + RLS + auth)   OpenRouter (credits + BYOK)
 ## Repo layout
 
 ```
-app/                Next routes
-├── (creed-app)/    signed-in product: /file, /connections, /settings
-├── api/app/        session-authed APIs (requireApiAuth)
-├── api/creed/*     token-authed agent APIs (hash compare)
-├── auth/callback/  OAuth callback
-├── mcp/route.ts    MCP protocol endpoint
-├── home/           public landing (/home)
-├── docs|pricing|privacy|terms|stack/   marketing
-├── onboarding/     guided onboarding flow
-├── layout.tsx      root layout — skips loadCreedState for marketing
-└── proxy.ts        sets x-request-id + x-pathname
-
-components/
-├── creed/          product UI (editor, sidebars, settings)
-├── marketing/      public site
-├── auth/           sign-in / landing-hero
-└── ui/             shadcn primitives + animated icons
-
-lib/
-├── creed-data.ts             types, section IDs, accent maps, agent contract
-├── creed-backend.ts          Supabase reads/writes
-├── creed-markdown.ts         Markdown ↔ section parser
-├── rich-text.ts              Tiptap content normalization
-├── ai/quality{,-runner,-rubric}.ts   quality analysis
-├── ai/openrouter.ts          OpenRouter call helper (credits + BYOK)
-├── ai/model-catalog.ts       OpenRouter model list + tier scoring
-├── onboarding/{compile,refine,validate}.ts   synthesizer pipeline
-├── supabase/{server,browser,admin}.ts        per-runtime clients
-├── secret-crypto.ts          AES-256-GCM token storage
-├── audit-log.ts              creed_audit_events writer
-├── rate-limit.ts             per-token rate limiting
-├── observability.ts          structured log helpers
-├── api-auth.ts               requireApiAuth helper
-└── branding.ts               env-driven contact / social URLs
-
-supabase/migrations/    canonical schema (forward-only, idempotent)
-public/                 static assets
+apps/
+├── creed/                    main Next.js product and marketing site
+│   ├── app/                  routes, APIs, MCP, OAuth, and onboarding
+│   ├── components/           product, marketing, auth, and UI components
+│   ├── lib/                  domain, persistence, integrations, and AI
+│   ├── public/               static assets
+│   ├── supabase/migrations/  canonical schema (forward-only, idempotent)
+│   ├── tests/                node:test suites
+│   └── proxy.ts              request ID, pathname, and session refresh
+└── status/                   independent status.creed.md Next.js app
+packages/
+└── creed-cli/                published first-party terminal client
 .agents/
 ├── context/            versioned internal context pack (read this first)
 └── skills/             task-triggered agent workflows
 ```
 
+Unless a path explicitly starts with `apps/status/`, `packages/`, or
+`.agents/`, application paths in this file are relative to `apps/creed/`.
+
 The four "god" files to be careful in:
-- `components/creed/file-screen.tsx` (~2700L) — the editor
-- `lib/creed-backend.ts` (~1750L) — Supabase glue
-- `lib/creed-data.ts` (~1620L) — types + agent contract + seed
-- `components/creed/settings-screen.tsx` (~1570L) — settings tabs
+- `apps/creed/components/creed/file-screen.tsx` (~2700L), the editor
+- `apps/creed/lib/creed-backend.ts` (~1750L), Supabase glue
+- `apps/creed/lib/creed-data.ts` (~1620L), types + agent contract + seed
+- `apps/creed/components/creed/settings-screen.tsx` (~1570L), settings tabs
 
 ---
 
@@ -146,7 +124,7 @@ These are non-negotiable. Don't cross them without asking.
    `loadCreedState` based on the `x-pathname` header set by `proxy.ts`.
    Don't reintroduce a fan-out without that gate.
 5. **Don't touch `lib/creed-data.ts:collaborationRules`** without
-   thinking carefully — it ships to every connected agent on every
+   thinking carefully. It ships to every connected agent on every
    read. Test across at least 2 models if you do.
 6. **No em dashes in product copy** unless the user explicitly asked for
    them. Em dashes in code comments are fine.
@@ -173,12 +151,12 @@ These are non-negotiable. Don't cross them without asking.
 - Client fetches go through `lib/ai/quality-runner.ts`-style module
   singletons when state must survive navigation.
 - No `next/dynamic({ ssr: false })` for heavy public-route components
-  — known to hang in Next 16 dev.
+  because it is known to hang in Next 16 dev.
 
 ### Animations
 - `framer-motion` (older imports) and `motion/react` (newer) are the
   same library aliased. Match the surrounding file.
-- Don't double up `layout` and `AnimatePresence mode="popLayout"` —
+- Don't double up `layout` and `AnimatePresence mode="popLayout"`;
   pick one.
 - Don't reintroduce `contentVisibility: auto`. It breaks the document
   `load` event.
@@ -188,7 +166,7 @@ These are non-negotiable. Don't cross them without asking.
   `quality={100}` without confirming `next.config.ts:images.qualities`
   allowlists it AND restarting the dev server.
 - Marketing page MediaSlots show a clean placeholder card when an
-  image file is missing — see the comment block at the top of
+  image file is missing. See the comment block at the top of
   `MediaSlot` in `components/marketing/below-hero-sections.tsx` for
   the canonical naming convention.
 
@@ -197,14 +175,15 @@ These are non-negotiable. Don't cross them without asking.
 ## Verification before claiming "done"
 
 ```bash
-npx tsc --noEmit -p .   # zero new type errors
+npm run typecheck       # zero new type errors across workspaces
 npm run lint            # zero new ESLint errors
+npm test                # every workspace test suite passes
 npm run build           # production build must succeed
 ```
 
-If you touched a Supabase migration, `supabase db reset` against a
-local Supabase before pushing — schema-only PRs that haven't been
-applied will not be merged.
+If you touched a Supabase migration, run `supabase db reset` from
+`apps/creed/` against a local Supabase before pushing. Schema-only PRs that
+haven't been applied will not be merged.
 
 If you touched the agent contract, paste the universal connection
 prompt into Claude Code or Codex and confirm the agent reads + proposes
@@ -243,14 +222,14 @@ If all three are "no", just stop. Don't add a postscript.
 - TypeScript clean.
 - No new ESLint errors (warnings on pre-existing patterns are fine).
 - The user's intent is met.
-- The codebase is no worse than before — and ideally a little better.
+- The codebase is no worse than before, and ideally a little better.
 
 ---
 
 ## A word on legacy paths
 
 Creed pivoted from a developer-context product to a personal-context
-product. Some legacy code paths still reference the old framing —
+product. Some legacy code paths still reference the old framing:
 `conventions` section ID, "operating principles" naming, chips/rules/
 focus payload variants in the markdown parser.
 

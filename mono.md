@@ -128,14 +128,14 @@ For each project:
 
 1. Settings → General → Root Directory as above. Leave **"Include files
    outside Root Directory" ON** (required for the root lockfile/workspaces).
-2. Settings → Git → **Ignored Build Step**, command:
-   `git diff --quiet HEAD^ HEAD -- .`
-   (exit 0 skips the build, so a creed-only push doesn't rebuild status.
-   If shared `packages/` are added later, extend to
-   `git diff --quiet HEAD^ HEAD -- . ../../packages`.)
+2. Settings → Build and Deployment → Root Directory: enable **Skip deployment**.
+   Vercel understands npm workspaces and the root lockfile, so it skips an app
+   when neither its source nor its internal dependencies changed. This avoids
+   manual ignored-build commands while still rebuilding affected apps after a
+   lockfile change.
 3. Env vars: status secrets (`BLOB_READ_WRITE_TOKEN`, `CRON_SECRET`,
    `STATUS_PROBE_SECRET`, KV vars) live only on the status project. The main
-   app's env stays on the creed project. Docs needs nothing yet.
+   app's env stays on the creed project.
 4. The status project's cron/pinger hitting `/api/probe` keeps working
    unchanged: same domain, same route.
 

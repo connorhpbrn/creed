@@ -1,7 +1,7 @@
 # Changelog policy
 
 Public changelog entries live in
-[`lib/marketing/changelog.ts`](./lib/marketing/changelog.ts) and render on
+[`apps/creed/lib/marketing/changelog.ts`](./apps/creed/lib/marketing/changelog.ts) and render on
 `/changelog`. This file is the rule for when to add one.
 
 ## When to add an entry
@@ -32,7 +32,7 @@ honest than a busy one.
 
 ## How to write an entry
 
-1. Edit `lib/marketing/changelog.ts` (not this file).
+1. Edit `apps/creed/lib/marketing/changelog.ts` (not this file).
 2. Use today's ISO date (`YYYY-MM-DD`).
 3. Title: short product name, not a commit subject.
 4. Body: one or two sentences of what changed and why it matters.

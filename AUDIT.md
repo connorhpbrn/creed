@@ -1,6 +1,6 @@
 # Creed Production Audit
 
-Date: 2026-07-31. Scope: all first-party code (`app/`, `components/`, `lib/`, `supabase/`, `proxy.ts`, configs), plus live Supabase advisor data. Every finding below was verified against the actual code at the cited file and line. Line numbers reflect the working tree on this date and may drift as files change; the symbol names cited will not.
+Date: 2026-07-31. Scope: all first-party code (`app/`, `components/`, `lib/`, `supabase/`, `proxy.ts`, configs), plus live Supabase advisor data. Every finding below was verified against the actual code at the cited file and line. Line numbers reflect the working tree on this date and may drift as files change; the symbol names cited will not. Since the monorepo migration, every application path in this historical audit is relative to `apps/creed/`.
 
 **How to use this document.** Each finding is self-contained: an ID, a severity, the problem with file:line evidence, why it matters, and the exact fix. Any model or engineer can pick a finding and implement it without reading the rest. Findings are grouped by domain; the execution order at the end sequences them by leverage. Severity scale: **Critical** (money or data loss possible today), **High** (major cost, lag, or risk), **Medium** (real but bounded), **Low** (hygiene).
 

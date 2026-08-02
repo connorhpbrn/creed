@@ -2,6 +2,19 @@
 
 This file is about current implementation truth, not aspiration.
 
+## Repository layout
+
+The repository is an npm workspace monorepo with one root lockfile:
+
+- `apps/creed/` owns the main product, marketing site, API, MCP server, and
+  Supabase migrations deployed to `creed.md`.
+- `apps/status/` owns the independent status application deployed to
+  `status.creed.md`.
+- `packages/creed-cli/` owns the published terminal client.
+
+Unless stated otherwise, main application paths in this file are relative to
+`apps/creed/`. Root commands run checks across every workspace.
+
 ## Stack
 
 - **Next.js 16** (App Router, Turbopack dev)
@@ -22,10 +35,9 @@ This file is about current implementation truth, not aspiration.
 ## Routes
 
 ```
-app/
+apps/creed/app/
 ├── layout.tsx              # root layout, static (holds no user state)
 ├── page.tsx                # `/` - auth + redirect to /file or /onboarding
-├── proxy.ts                # request-id + x-pathname forwarding + Supabase session refresh
 ├── (creed-app)/            # signed-in product shell
 │   ├── layout.tsx          # AppShellLayout wrapper
 │   ├── file/page.tsx       # /file - the editor
@@ -68,7 +80,7 @@ app/
     └── health/             # /api/health (edge runtime)
 ```
 
-The proxy at the repo root (`proxy.ts`, the new Next 16 name for
+The proxy at the main app root (`apps/creed/proxy.ts`, the new Next 16 name for
 middleware) sets two request headers:
 - `x-request-id` - for log correlation
 - `x-pathname` - so server components can branch on route
@@ -132,7 +144,7 @@ can link both. GitHub stays a separate `creed_integrations`-backed row. The
 connect / disconnect buttons are shared (`ConnectButton` / `DisconnectButton`
 in `settings-screen.tsx`).
 
-## Top-of-tree files
+## Main app files
 
 ```
 app/                       Routes
@@ -164,14 +176,14 @@ lib/
 ├── branding.ts            env-driven contact / social URLs
 └── ...
 supabase/migrations/       SQL migrations (canonical)
-.agents/context/           versioned durable agent context
+../../.agents/context/     versioned durable agent context at repository root
 public/                    static assets (landing + agent icons)
 ```
 
 ## Creed Bench
 
 `/bench` is the public Creed tool-use benchmark. Its implementation lives under
-`bench/` and is deliberately separate from user state:
+`apps/creed/bench/` and is deliberately separate from user state:
 
 - `tool-contract.ts` mirrors the production MCP tool names and schemas; a test
   fails if the production route adds or removes a tool without benchmark
@@ -632,7 +644,7 @@ Optional:
 - `MEDIAN_API_KEY` - required only for the in-app feedback widget
 - `NEXT_PUBLIC_RELEASE_SHA` - surfaced in the system-status pill
 
-See `README.md` + `.env.example` for full setup.
+See `README.md` + `apps/creed/.env.example` for full setup.
 
 ## Company plan
 

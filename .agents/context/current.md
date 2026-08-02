@@ -170,8 +170,15 @@ The public content surface was built out for search and AI-answer visibility:
 
 ## Known Local Caveats
 
+- The repository is an npm workspace monorepo. `apps/creed/` is the main app,
+  `apps/status/` is the independent status site, and `packages/creed-cli/` is
+  the published CLI. Dependency resolution is owned by the root lockfile.
+- Run workspace-wide checks from the repository root with `npm run typecheck`,
+  `npm run lint`, `npm test`, and `npm run build`. Use `npm run dev` for Creed
+  and `npm run dev:status` for the status site.
+
 - The repo currently has no formal CI workflow. Local verification remains
-  `npm run lint`, `npx tsc --noEmit -p .`, and `npm run build`.
+  the root workspace-wide commands above.
 - Local development defaults to `.next-runtime.nosync` because the maintainer's
   Desktop is managed by iCloud Drive. Keep high-churn local Next caches on a
   `.nosync` path so File Provider does not synchronize every Turbopack write.
@@ -182,10 +189,11 @@ The public content surface was built out for search and AI-answer visibility:
   files, remove `.next` and retry before changing source.
 ## Active Risk Areas
 
-- `components/creed/file-screen.tsx`, `components/creed/creed-provider.tsx`,
-  `lib/creed-backend.ts`, `lib/creed-data.ts`, and
-  `components/creed/company-settings.tsx` are large, shared, and easy to
-  regress. Read around the exact path before editing.
+- `apps/creed/components/creed/file-screen.tsx`,
+  `apps/creed/components/creed/creed-provider.tsx`,
+  `apps/creed/lib/creed-backend.ts`, `apps/creed/lib/creed-data.ts`, and
+  `apps/creed/components/creed/company-settings.tsx` are large, shared, and
+  easy to regress. Read around the exact path before editing.
 - Company behaviour often needs optimistic UI plus backend reconciliation.
   Prefer making the UI feel immediate, then syncing or reverting on failure.
 - Activity and version rows are user-visible audit surfaces. Do not create

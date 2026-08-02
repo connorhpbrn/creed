@@ -2,8 +2,8 @@
 
 <h1>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="public/assets/brand/brandmark-email-dark.png">
-    <img alt="Creed" src="public/assets/brand/brandmark-email.png" width="208">
+    <source media="(prefers-color-scheme: dark)" srcset="apps/creed/public/assets/brand/brandmark-email-dark.png">
+    <img alt="Creed" src="apps/creed/public/assets/brand/brandmark-email.png" width="208">
   </picture>
 </h1>
 
@@ -53,8 +53,8 @@ Prerequisites: **Node 20+** and a free **Supabase** project. (OpenRouter key onl
 ```bash
 git clone https://github.com/connorhpbrn/creed.git
 cd creed && npm install
-cp .env.example .env.local   # fill in the five required vars below
-supabase link --project-ref <your-project-ref> && supabase db push
+cp apps/creed/.env.example apps/creed/.env.local
+(cd apps/creed && supabase link --project-ref <your-project-ref> && supabase db push)
 npm run dev                  # → http://localhost:3000
 ```
 
@@ -68,12 +68,12 @@ SUPABASE_SECRET_KEY=<service-role-key>
 CREED_ENCRYPTION_SECRET=$(openssl rand -base64 32)
 ```
 
-Every other variable (OpenRouter, Stripe, GitHub sync, branding, feedback) is documented inline in [`.env.example`](./.env.example). `supabase db push` creates the full schema: sections, proposals, activity, tokens, MCP, GitHub, AI usage, audit log, rate limits, entitlements, all behind row-level security.
+Every other variable (OpenRouter, Stripe, GitHub sync, branding, feedback) is documented inline in [`apps/creed/.env.example`](./apps/creed/.env.example). `supabase db push` creates the full schema: sections, proposals, activity, tokens, MCP, GitHub, AI usage, audit log, rate limits, entitlements, all behind row-level security.
 
 <details>
 <summary><b>Wire up Stripe for the paid flows (optional)</b></summary>
 
-The hosted app gates `/file` behind a paid entitlement. Locally you can skip Stripe entirely (unentitled users land on `/pricing`), or run the full flow: set the four `STRIPE_*` vars from `.env.example` with sandbox keys, then
+The hosted app gates `/file` behind a paid entitlement. Locally you can skip Stripe entirely (unentitled users land on `/pricing`), or run the full flow: set the four `STRIPE_*` vars from `apps/creed/.env.example` with sandbox keys, then
 
 ```bash
 stripe listen --forward-to localhost:3000/api/stripe/webhook
@@ -125,31 +125,27 @@ Full tour at [creed.md/stack](https://creed.md/stack).
 ## Repository map
 
 ```
-app/
-├── (creed-app)/        signed-in product (/file, /connections, /settings)
-├── api/                session-authed + token-authed APIs (incl. /api/creed, MCP, OAuth)
-├── home/, onboarding/  public landing and first-run flow
-components/
-├── creed/              product UI        marketing/   public site
-├── auth/               sign-in           ui/          shadcn primitives
-lib/
-├── creed-data.ts       types, sections, agent contract
-├── creed-backend.ts    Supabase reads/writes
-├── creed-markdown.ts   push/pull Markdown parser (lossless round-trip)
-├── ai/                 OpenRouter client, model catalog, quality scoring
-├── company-*.ts        Company roles, seats, billing, invites
-supabase/migrations/    canonical schema (RLS everywhere)
-tests/                  node:test suites
+apps/
+├── creed/              main product and marketing site
+│   ├── app/            routes, APIs, MCP, OAuth, and onboarding
+│   ├── components/     product, marketing, auth, and UI components
+│   ├── lib/            domain, persistence, integrations, and AI
+│   ├── supabase/       canonical migrations and email templates
+│   └── tests/          node:test suites
+└── status/             independently deployed public status site
+packages/
+└── creed-cli/          published first-party terminal client
 ```
 
 ## Commands
 
 ```bash
-npm run dev          # dev server (Turbopack)
-npm test             # test suite (node:test)
-npx tsc --noEmit     # typecheck
-npm run lint         # ESLint
-npm run build        # production build
+npm run dev          # Creed on http://localhost:3000
+npm run dev:status -- --port 3001 # status site on http://localhost:3001
+npm run test         # every workspace test suite
+npm run typecheck    # every workspace typecheck
+npm run lint         # every workspace lint
+npm run build        # every workspace production build
 ```
 
 ## Contributing

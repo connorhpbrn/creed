@@ -15,6 +15,12 @@ Durable decisions that future agents should not reopen casually.
 
 ## Architecture
 
+- The repository uses npm workspaces with one root lockfile. The main app lives
+  in `apps/creed/`, the status site in `apps/status/`, and the published CLI in
+  `packages/creed-cli/`.
+- Creed and status deploy as separate Vercel projects from the same repository.
+  Do not introduce Turborepo or extract shared packages until repeated use
+  proves the boundary.
 - `app/layout.tsx` stays static and does not load user state.
 - User state is loaded in `components/creed/authed-providers.tsx` for app and
   onboarding layouts only.

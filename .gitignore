@@ -11,7 +11,7 @@ node_modules/
 !.yarn/versions
 
 # testing
-/coverage
+coverage/
 /apps/creed/bench/runs/
 /apps/creed/bench/results/
 
@@ -19,10 +19,10 @@ node_modules/
 .next/
 .next-runtime*/
 .next-preview*/
-/out/
+out/
 
 # production
-/build
+build/
 
 # misc
 .DS_Store
