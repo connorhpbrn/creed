@@ -1,19 +1,21 @@
 "use client";
 
-// Billing modal, opened from the profile dropdown. Lists every plan the user
-// owns - their personal plan plus each company Creed they own - as one statement
-// of rows rather than a wall of cards: what the plan is, what it costs, how much
-// of its credit allowance is left, and the one action that belongs to it. It is
-// not scoped to the active Creed: you see everything you own from one place, no
-// matter where you are.
+// Billing modal, opened from the profile dropdown. One row per plan the user
+// owns - their personal plan plus each company Creed they own - saying what the
+// plan is, what it costs, when it next charges, and giving the one button that
+// belongs to it. It is not scoped to the active Creed: you see everything you
+// own from one place, no matter where you are.
 //
-// Personal and company are told apart by a 3px accent rail, the same device the
-// file sections use, rather than by tinting the whole row. The tint encoded one
-// bit that the row's own label already carries, and it was the loudest thing in
-// a dialog whose job is to show numbers.
+// Credits are deliberately not here. They move constantly and they already have
+// a home next to the usage chart in Settings; repeating them turned a plan list
+// into a dashboard. This answers "what am I paying for" and nothing else.
+//
+// Only paid plans are listed. There is no free tier to describe, so an unpaid
+// personal row - what the API returns for a company member with no plan of their
+// own - would be inventing one. The endpoint also returns each plan's credits;
+// this screen reads none of it, so PlanCard does not carry it.
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -22,19 +24,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   COMPANY_PRICING,
   PERSONAL_PRICING,
   type BillingCycle,
 } from "@/lib/marketing/pricing";
-import { cn } from "@/lib/utils";
-
-export type PlanCredits = {
-  balanceUsd: number;
-  allowanceUsd: number;
-  allowanceResets: boolean;
-  purchasedUsd: number;
-};
 
 export type PlanCard = {
   scope: "personal" | "company";
@@ -46,7 +42,6 @@ export type PlanCard = {
   status: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
-  credits: PlanCredits | null;
 };
 
 type BillingDialogProps = {
@@ -57,7 +52,14 @@ type BillingDialogProps = {
   previewPlans?: PlanCard[];
 };
 
-const COMPANY_ACCENT = "#D97706";
+// Blue for your own plan, amber for a company's - the same pairing the rest of
+// the app uses to tell the two apart.
+const CADENCE_TAG_CLASS = {
+  personal:
+    "bg-[#DBEAFE] text-[var(--creed-accent-hover)] dark:bg-[#1E3A8A]/50 dark:text-[#60A5FA]",
+  company:
+    "bg-[#FEF3C7] text-[#92400E] dark:bg-[#78350F]/50 dark:text-[#FBBF24]",
+} as const;
 
 function billingCycle(plan: PlanCard): BillingCycle {
   if (plan.billingMode === "lifetime") return "lifetime";
@@ -65,7 +67,6 @@ function billingCycle(plan: PlanCard): BillingCycle {
 }
 
 function cadenceLabel(plan: PlanCard): string {
-  if (!plan.paid) return "Free";
   const cycle = billingCycle(plan);
   if (cycle === "lifetime") return "Lifetime";
   return cycle === "yearly" ? "Annual" : "Monthly";
@@ -75,50 +76,43 @@ function cadenceLabel(plan: PlanCard): string {
 // the two can never disagree. Deliberately the list price and not the invoice:
 // a company's actual charge includes extra seats, which this endpoint does not
 // return, so the row states the plan's price and stays quiet about the rest.
-function listPrice(plan: PlanCard): string | null {
-  if (!plan.paid) return null;
+function listPrice(plan: PlanCard): string {
   const table = plan.scope === "company" ? COMPANY_PRICING : PERSONAL_PRICING;
   const { price, cadence } = table[billingCycle(plan)];
   return cadence === "one-time" ? price : `${price}${cadence}`;
-}
-
-function formatUsd(value: number): string {
-  return `$${value.toFixed(2)}`;
 }
 
 function formatDate(iso: string | null): string | null {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return date.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
-// What is left of the plan's own allowance, kept apart from topped-up credits.
-// `balanceUsd` is granted + purchased, so spending it straight against the
-// allowance would read as over 100% for anyone who has ever topped up.
-function allowanceState(credits: PlanCredits) {
-  const remaining = Math.max(
-    0,
-    Math.min(credits.balanceUsd - credits.purchasedUsd, credits.allowanceUsd),
-  );
-  return {
-    remaining,
-    allowance: credits.allowanceUsd,
-    extra: credits.purchasedUsd,
-  };
-}
-
+// Measured against a real row rather than approximated: a 22.5px name line, a
+// 4px gap, a 19.5px detail line, and the same 32px of vertical padding, so the
+// list does not change height when the plans arrive. Bar heights follow the
+// convention used by the route skeletons - roughly 0.72x the text they stand in
+// for, inside a box of the text's real line height.
 function PlanRowSkeleton() {
   return (
-    <div className="flex gap-3 py-3.5">
-      <div className="w-[3px] shrink-0 rounded-full bg-[var(--creed-surface-raised)]" />
+    <div className="flex items-center justify-between gap-4 px-5 py-4 last:pb-0">
       <div className="min-w-0 flex-1 animate-pulse motion-reduce:animate-none">
-        <div className="flex items-center justify-between gap-3">
-          <div className="h-3.5 w-28 rounded-[6px] bg-[var(--creed-surface-raised)]" />
-          <div className="h-3.5 w-14 rounded-[6px] bg-[var(--creed-surface-raised)]" />
+        <div className="flex h-[22.5px] items-center gap-2">
+          <div className="h-[11px] w-28 rounded-[6px] bg-[var(--creed-surface-raised)]" />
+          {/* The cadence tag: 11px text in a px-1.5 py-0.5 chip. */}
+          <div className="h-[20.5px] w-[54px] rounded-[6px] bg-[var(--creed-surface-raised)]" />
         </div>
-        <div className="mt-2.5 h-3 w-44 rounded-[6px] bg-[var(--creed-surface-raised)]" />
+        <div className="mt-1 flex h-[19.5px] items-center">
+          <div className="h-[9px] w-44 rounded-[6px] bg-[var(--creed-surface-raised)]" />
+        </div>
       </div>
+      {/* Manage, at its rendered width. */}
+      <div className="h-8 w-[77px] shrink-0 animate-pulse rounded-md bg-[var(--creed-surface-raised)] motion-reduce:animate-none" />
     </div>
   );
 }
@@ -194,155 +188,126 @@ export function BillingDialog({
     [portalBusyKey, previewPlans],
   );
 
+  const paidPlans = (plans ?? []).filter((plan) => plan.paid);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="border-[var(--creed-border)] bg-[var(--creed-surface)] sm:max-w-lg">
+      <DialogContent className="rounded-[var(--radius-xl)] border-[var(--creed-border)] bg-[var(--creed-surface)]">
         <DialogHeader>
           <DialogTitle>Billing</DialogTitle>
-          <DialogDescription>
-            The plans you own and the credits they include.
-          </DialogDescription>
+          <DialogDescription>The plans you own.</DialogDescription>
         </DialogHeader>
 
-        {/* Own enough company Creeds and the list outgrows a short window, and
-            the dialog itself does not scroll. */}
-        <div className="creed-scrollbar max-h-[60vh] divide-y divide-[var(--creed-border)] overflow-y-auto">
-          {loading ? (
-            // Same geometry as a real row, so the dialog does not resize under
-            // the cursor when the plans land.
-            <>
-              <PlanRowSkeleton />
-              <PlanRowSkeleton />
-            </>
-          ) : (plans ?? []).length === 0 ? (
-            <p className="py-8 text-center text-[13px] text-[var(--creed-text-tertiary)]">
-              No plans yet.
-            </p>
-          ) : (
-            (plans ?? []).map((plan) => {
-              const key = plan.creedId ?? "personal";
-              const isCompany = plan.scope === "company";
-              const accent = isCompany
-                ? COMPANY_ACCENT
-                : "var(--creed-accent)";
-              const isSubscription =
-                plan.paid && plan.billingMode === "subscription";
-              const renewal = formatDate(plan.currentPeriodEnd);
-              const price = listPrice(plan);
-              const allowance =
-                plan.credits && plan.credits.allowanceUsd > 0
-                  ? allowanceState(plan.credits)
-                  : null;
-              const metaNote =
-                isSubscription && renewal
-                  ? `${plan.cancelAtPeriodEnd ? "Ends" : "Renews"} ${renewal}`
-                  : plan.paid && plan.billingMode === "lifetime"
-                    ? "Yours forever"
-                    : null;
+        {/* Every rule runs the full width of the panel: the block is pulled out
+            through the dialog's padding and the rows put it back on themselves,
+            so the lines reach both edges while the text stays aligned with the
+            header above it.
 
-              return (
-                <div key={key} className="flex gap-3 py-3.5">
+            min-w-0 because the dialog lays its children out in a grid, and a
+            grid item will not shrink below its content unless told to - a long
+            company name would push the rows, and the buttons on the end of
+            them, straight out of the panel. */}
+        <div className="-mx-5 min-w-0">
+          <div aria-hidden="true" className="h-px bg-[var(--creed-border)]" />
+          <div className="divide-y divide-[var(--creed-border)]">
+            {loading ? (
+              // Same geometry as a real row, so the dialog does not resize under
+              // the cursor when the plans land.
+              <>
+                <PlanRowSkeleton />
+                <PlanRowSkeleton />
+              </>
+            ) : paidPlans.length === 0 ? (
+              <p className="px-5 py-8 text-center text-[13px] text-[var(--creed-text-tertiary)]">
+                No plans yet.
+              </p>
+            ) : (
+              paidPlans.map((plan) => {
+                const key = plan.creedId ?? "personal";
+                // Every row here is paid, so the shape alone decides.
+                const isSubscription = plan.billingMode === "subscription";
+                const renewal = formatDate(plan.currentPeriodEnd);
+                const price = listPrice(plan);
+                // Amber warns, red ends: past due is recoverable, cancelled is
+                // the plan on its way out.
+                const flag =
+                  plan.status === "past_due"
+                    ? {
+                        label: "Past due",
+                        className: "text-[#B45309] dark:text-[#F5A623]",
+                      }
+                    : isSubscription && plan.cancelAtPeriodEnd
+                      ? {
+                          label: "Cancelled",
+                          className: "text-[#DC2626] dark:text-[#F87171]",
+                        }
+                      : null;
+
+                // One line of context under the name: the price, then what
+                // happens next. A lifetime plan has no next charge to describe.
+                const detail = [
+                  price,
+                  isSubscription && renewal
+                    ? `${plan.cancelAtPeriodEnd ? "Ends" : "Renews"} ${renewal}`
+                    : plan.billingMode === "lifetime"
+                      ? "Yours forever"
+                      : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
+
+                return (
                   <div
-                    aria-hidden="true"
-                    className="w-[3px] shrink-0 rounded-full"
-                    style={{ backgroundColor: accent }}
-                  />
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
+                    key={key}
+                    className="flex items-center justify-between gap-4 px-5 py-4 last:pb-0"
+                  >
+                    <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-[14px] font-medium text-[var(--creed-text-primary)]">
+                        <span className="truncate text-[15px] font-medium text-[var(--creed-text-primary)]">
                           {/* The company's own name. Every company row used to
-                              read "Company", which made two of them identical. */}
+                            read "Company", which made two of them identical. */}
                           {plan.name}
                         </span>
-                        <span className="shrink-0 rounded-[6px] bg-[var(--creed-surface-raised)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--creed-text-secondary)]">
-                          {cadenceLabel(plan)}
-                        </span>
-                        {plan.status === "past_due" ? (
-                          <span className="shrink-0 text-[12px] font-medium text-[#B45309] dark:text-[#F5A623]">
-                            Past due
-                          </span>
-                        ) : null}
-                      </div>
-                      {price ? (
-                        <span className="shrink-0 text-[14px] font-medium tabular-nums text-[var(--creed-text-primary)]">
-                          {price}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {/* One meta line: what is left, what is extra, when it
-                        renews. Kept as plain figures - a bar per row turned a
-                        list of numbers into a chart nobody asked for. */}
-                    <div className="mt-1.5 flex items-center justify-between gap-3 text-[12px]">
-                      <div className="flex min-w-0 items-center gap-1.5 truncate">
-                        {allowance ? (
-                          <span className="tabular-nums text-[var(--creed-text-secondary)]">
-                            {formatUsd(allowance.remaining)} of{" "}
-                            {formatUsd(allowance.allowance)} left
-                          </span>
-                        ) : plan.credits ? (
-                          <span className="tabular-nums text-[var(--creed-text-secondary)]">
-                            {formatUsd(plan.credits.balanceUsd)} in credits
-                          </span>
-                        ) : null}
-
-                        {/* Top-ups roll over and are not part of the allowance,
-                            so they are counted beside it, never inside it. */}
-                        {allowance && allowance.extra > 0 ? (
-                          <>
-                            <span className="text-[var(--creed-text-tertiary)]">
-                              &middot;
-                            </span>
-                            <span className="tabular-nums text-[var(--creed-text-tertiary)]">
-                              {formatUsd(allowance.extra)} extra
-                            </span>
-                          </>
-                        ) : null}
-
-                        {metaNote ? (
-                          <>
-                            {allowance || plan.credits ? (
-                              <span className="text-[var(--creed-text-tertiary)]">
-                                &middot;
-                              </span>
-                            ) : null}
-                            <span className="truncate text-[var(--creed-text-tertiary)]">
-                              {metaNote}
-                            </span>
-                          </>
-                        ) : null}
-                      </div>
-
-                      {/* One quiet link per row. Three plans used to mean three
-                          full-width buttons stacked down the dialog. */}
-                      {isSubscription ? (
-                        <button
-                          type="button"
-                          onClick={() => void openPortal(plan)}
-                          disabled={portalBusyKey === key}
+                        <span
                           className={cn(
-                            "shrink-0 font-medium text-[var(--creed-text-secondary)] transition-colors duration-150 hover:text-[var(--creed-text-primary)]",
-                            portalBusyKey === key && "opacity-60",
+                            "shrink-0 rounded-[6px] px-1.5 py-0.5 text-[11px] font-medium",
+                            CADENCE_TAG_CLASS[plan.scope],
                           )}
                         >
-                          {portalBusyKey === key ? "Opening" : "Manage"}
-                        </button>
-                      ) : !plan.paid && plan.scope === "personal" ? (
-                        <Link
-                          href="/pricing"
-                          className="shrink-0 font-medium text-[var(--creed-accent)] transition-colors duration-150 hover:text-[var(--creed-accent-hover)]"
-                        >
-                          View plans
-                        </Link>
+                          {cadenceLabel(plan)}
+                        </span>
+                        {flag ? (
+                          <span
+                            className={cn(
+                              "shrink-0 text-[12px] font-medium",
+                              flag.className,
+                            )}
+                          >
+                            {flag.label}
+                          </span>
+                        ) : null}
+                      </div>
+                      {detail ? (
+                        <div className="mt-1 truncate text-[13px] text-[var(--creed-text-secondary)]">
+                          {detail}
+                        </div>
                       ) : null}
                     </div>
+
+                    {isSubscription ? (
+                      <Button
+                        onClick={() => void openPortal(plan)}
+                        disabled={portalBusyKey === key}
+                        className="h-8 shrink-0 rounded-md bg-[var(--creed-accent)] px-3.5 text-[13px] text-white hover:bg-[var(--creed-accent-hover)]"
+                      >
+                        {portalBusyKey === key ? "Opening" : "Manage"}
+                      </Button>
+                    ) : null}
                   </div>
-                </div>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

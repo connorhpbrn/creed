@@ -139,7 +139,9 @@ function VersionToastDevPreview() {
 const PREVIEW_EXIT_MS = 380;
 
 function CreedLoaderDevPreview() {
-  const [phase, setPhase] = useState<"hidden" | "showing" | "leaving">("hidden");
+  const [phase, setPhase] = useState<"hidden" | "showing" | "leaving">(
+    "hidden",
+  );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -191,11 +193,10 @@ function CreedLoaderDevPreview() {
   );
 }
 
-
-// Every shape the billing dialog can be handed, in one list: the two personal
-// billing modes, a healthy company plan, one past due, one with no credits at
-// all, and the unpaid row. Deliberately impossible as real data - nobody owns
-// two personal plans - because the point is to see the states together.
+// One row per state the dialog can render: a plan ticking over, a cancelled
+// one, a lifetime with nothing to manage, a company, and a company behind on
+// payment. Deliberately impossible as real data - nobody owns three personal
+// plans - because the point is to see the states next to each other.
 const BILLING_PREVIEW_PLANS: PlanCard[] = [
   {
     scope: "personal",
@@ -207,31 +208,18 @@ const BILLING_PREVIEW_PLANS: PlanCard[] = [
     status: "active",
     currentPeriodEnd: "2026-09-03T00:00:00.000Z",
     cancelAtPeriodEnd: false,
-    // Part spent, and topped up: the case where balance exceeds the allowance.
-    credits: {
-      balanceUsd: 32.4,
-      allowanceUsd: 20,
-      allowanceResets: true,
-      purchasedUsd: 20,
-    },
   },
   {
     scope: "personal",
-    creedId: "preview-personal-annual",
+    creedId: "preview-personal-cancelled",
     name: "Personal",
     paid: true,
     billingMode: "subscription",
     interval: "year",
     status: "active",
     currentPeriodEnd: "2027-03-12T00:00:00.000Z",
-    // Cancelled but still running: the row reads "Ends" rather than "Renews".
+    // Cancelled but still running to the end of the period.
     cancelAtPeriodEnd: true,
-    credits: {
-      balanceUsd: 4.15,
-      allowanceUsd: 20,
-      allowanceResets: true,
-      purchasedUsd: 0,
-    },
   },
   {
     scope: "personal",
@@ -242,18 +230,12 @@ const BILLING_PREVIEW_PLANS: PlanCard[] = [
     interval: null,
     status: "active",
     currentPeriodEnd: null,
+    // Nothing to manage, so no button.
     cancelAtPeriodEnd: false,
-    // One-time credits: no reset, no Manage link.
-    credits: {
-      balanceUsd: 180,
-      allowanceUsd: 200,
-      allowanceResets: false,
-      purchasedUsd: 0,
-    },
   },
   {
     scope: "company",
-    creedId: "preview-company-annual",
+    creedId: "preview-company",
     name: "Northwind Labs",
     paid: true,
     billingMode: "subscription",
@@ -261,12 +243,6 @@ const BILLING_PREVIEW_PLANS: PlanCard[] = [
     status: "active",
     currentPeriodEnd: "2027-01-08T00:00:00.000Z",
     cancelAtPeriodEnd: false,
-    credits: {
-      balanceUsd: 42,
-      allowanceUsd: 50,
-      allowanceResets: true,
-      purchasedUsd: 0,
-    },
   },
   {
     scope: "company",
@@ -278,38 +254,6 @@ const BILLING_PREVIEW_PLANS: PlanCard[] = [
     status: "past_due",
     currentPeriodEnd: "2026-08-19T00:00:00.000Z",
     cancelAtPeriodEnd: false,
-    // Allowance exhausted, top-ups keeping it alive.
-    credits: {
-      balanceUsd: 6.5,
-      allowanceUsd: 50,
-      allowanceResets: true,
-      purchasedUsd: 6.5,
-    },
-  },
-  {
-    scope: "company",
-    creedId: "preview-company-lifetime",
-    name: "Halcyon",
-    paid: true,
-    billingMode: "lifetime",
-    interval: null,
-    status: "active",
-    currentPeriodEnd: null,
-    cancelAtPeriodEnd: false,
-    // Credits failed to load: the row must not claim a zero balance.
-    credits: null,
-  },
-  {
-    scope: "personal",
-    creedId: "preview-personal-free",
-    name: "Personal",
-    paid: false,
-    billingMode: null,
-    interval: null,
-    status: null,
-    currentPeriodEnd: null,
-    cancelAtPeriodEnd: false,
-    credits: null,
   },
 ];
 
