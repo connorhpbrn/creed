@@ -1,0 +1,13 @@
+{
+  "name": "@creed/persistence",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./supabase/*": "./supabase-client/*.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.10.0",
+    "@supabase/supabase-js": "^2.101.1"
+  }
+}

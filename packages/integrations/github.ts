@@ -1,0 +1,389 @@
+import { createHash } from "node:crypto";
+import "server-only";
+
+type GitHubErrorPayload = {
+  message?: string;
+  error?: string;
+  error_description?: string;
+};
+
+type GitHubTokenRefreshPayload = {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  refresh_token_expires_in?: number;
+  token_type?: string;
+  scope?: string;
+  error?: string;
+  error_description?: string;
+};
+
+export type GitHubRepo = {
+  id: number;
+  name: string;
+  full_name: string;
+  owner: {
+    login: string;
+  };
+  default_branch: string;
+  private: boolean;
+};
+
+export type GitHubBranch = {
+  name: string;
+};
+
+export type GitHubFileSnapshot = {
+  sha: string;
+  content: string;
+  contentHash: string;
+  commitMessage?: string;
+  committedAt?: string;
+};
+
+export type GitHubPushResult = {
+  sha: string;
+  message?: string;
+  committedAt?: string;
+  contentHash: string;
+};
+
+function hashContent(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function encodePath(path: string) {
+  return path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+async function readJson<T>(response: Response) {
+  return (await response.json()) as T;
+}
+
+function getGitHubOAuthClientId() {
+  return process.env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? "";
+}
+
+function getGitHubOAuthClientSecret() {
+  return process.env.GITHUB_OAUTH_CLIENT_SECRET?.trim() ?? "";
+}
+
+export function isGitHubTokenRefreshConfigured() {
+  return Boolean(getGitHubOAuthClientId() && getGitHubOAuthClientSecret());
+}
+
+export type GitHubOAuthCredentials = { clientId: string; clientSecret: string };
+
+// A single shared "Creed" GitHub OAuth App backs BOTH the personal and the team
+// version-control connections. GitHub is no longer a sign-in provider, so these
+// credentials (GITHUB_OAUTH_CLIENT_ID/SECRET) drive our own authorize ->
+// callback -> token-exchange for the integration on both sides. One app, one
+// callback (/auth/github/callback), personal-vs-shared carried in the state.
+export function getGitHubOAuthAppCredentials(): GitHubOAuthCredentials {
+  return {
+    clientId: getGitHubOAuthClientId(),
+    clientSecret: getGitHubOAuthClientSecret(),
+  };
+}
+
+export function isGitHubOAuthAppConfigured() {
+  return isGitHubTokenRefreshConfigured();
+}
+
+// The short-lived httpOnly cookie holding the anti-CSRF state (mode + creedId +
+// nonce) between the authorize redirect and the OAuth callback. Shared by the
+// personal and shared flows, which use the same app + callback.
+export const GITHUB_OAUTH_STATE_COOKIE = "github_oauth_state";
+
+/**
+ * The GitHub authorize URL to send an owner/admin to when connecting the team's
+ * GitHub. `state` is an opaque anti-CSRF value the caller also stores in a
+ * cookie and re-checks on the callback. Scope is `repo` (read/write repo
+ * contents) plus `read:user` to resolve the connected login for attribution.
+ */
+export function buildGitHubAuthorizeUrl(args: {
+  clientId: string;
+  redirectUri: string;
+  state: string;
+  scopes?: string;
+  prompt?: string;
+}) {
+  const params = new URLSearchParams({
+    client_id: args.clientId,
+    redirect_uri: args.redirectUri,
+    scope: args.scopes ?? "repo read:user",
+    state: args.state,
+    allow_signup: "false",
+  });
+  if (args.prompt) params.set("prompt", args.prompt);
+  return `https://github.com/login/oauth/authorize?${params.toString()}`;
+}
+
+/**
+ * Exchange an OAuth authorization code for a user access token. Used by the
+ * team GitHub callback; the personal flow gets its token from Supabase instead.
+ */
+export async function exchangeGitHubOAuthCode(args: {
+  credentials: GitHubOAuthCredentials;
+  code: string;
+  redirectUri: string;
+}) {
+  const response = await fetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "Creed",
+    },
+    body: new URLSearchParams({
+      client_id: args.credentials.clientId,
+      client_secret: args.credentials.clientSecret,
+      code: args.code,
+      redirect_uri: args.redirectUri,
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  const payload = await readJson<GitHubTokenRefreshPayload>(response);
+
+  if (!response.ok || payload.error || !payload.access_token) {
+    throw new Error(
+      payload.error_description ||
+        payload.error ||
+        "Could not complete GitHub authorization."
+    );
+  }
+
+  return {
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token ?? null,
+    expiresAt:
+      typeof payload.expires_in === "number"
+        ? new Date(Date.now() + payload.expires_in * 1000).toISOString()
+        : null,
+  };
+}
+
+async function githubRequest<T>(
+  accessToken: string,
+  path: string,
+  init?: RequestInit & { allowNotFound?: boolean }
+) {
+  const response = await fetch(`https://api.github.com${path}`, {
+    ...init,
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${accessToken}`,
+      "User-Agent": "Creed",
+      ...(init?.headers ?? {}),
+    },
+    cache: "no-store",
+    signal: init?.signal ?? AbortSignal.timeout(10_000),
+  });
+
+  // GitHub answers 409 (not 404) when the repository has no commits yet, so an
+  // empty repo must read as "file not there yet" rather than a hard failure.
+  if (init?.allowNotFound && (response.status === 404 || response.status === 409)) {
+    return null;
+  }
+
+  if (!response.ok) {
+    let message = "GitHub request failed.";
+    try {
+      const payload = await readJson<GitHubErrorPayload>(response);
+      if (payload.message) {
+        message = payload.message;
+      }
+    } catch {
+      // Ignore parse failures and keep the generic message.
+    }
+
+    throw new Error(message);
+  }
+
+  return readJson<T>(response);
+}
+
+export async function listGitHubRepos(accessToken: string) {
+  const repos =
+    (await githubRequest<GitHubRepo[]>(
+      accessToken,
+      "/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member"
+    )) ?? [];
+
+  return repos.sort((left, right) => left.full_name.localeCompare(right.full_name));
+}
+
+export async function getGitHubViewer(accessToken: string) {
+  return githubRequest<{ id: number; login: string }>(accessToken, "/user");
+}
+
+export async function listGitHubBranches(
+  accessToken: string,
+  owner: string,
+  repo: string
+) {
+  const branches =
+    (await githubRequest<GitHubBranch[]>(
+      accessToken,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`
+    )) ?? [];
+
+  return branches.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export async function getGitHubFileSnapshot(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  path: string,
+  branch: string
+) {
+  const [file, commits] = await Promise.all([
+    githubRequest<{
+    sha: string;
+    content?: string;
+    encoding?: string;
+    }>(
+      accessToken,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodePath(path)}?ref=${encodeURIComponent(branch)}`,
+      { allowNotFound: true }
+    ),
+    githubRequest<
+      Array<{
+        sha: string;
+        commit?: {
+          message?: string;
+          committer?: { date?: string };
+        };
+      }>
+    >(
+      accessToken,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?path=${encodeURIComponent(path)}&sha=${encodeURIComponent(branch)}&per_page=1`,
+      { allowNotFound: true }
+    ),
+  ]);
+
+  if (!file) {
+    return null;
+  }
+
+  const rawContent =
+    file.encoding === "base64" && typeof file.content === "string"
+      ? Buffer.from(file.content.replace(/\n/g, ""), "base64").toString("utf8")
+      : "";
+
+  const latestCommit = (commits ?? [])[0];
+
+  return {
+    sha: file.sha,
+    content: rawContent,
+    contentHash: hashContent(rawContent),
+    commitMessage: latestCommit?.commit?.message,
+    committedAt: latestCommit?.commit?.committer?.date,
+  } satisfies GitHubFileSnapshot;
+}
+
+export async function pushGitHubFile(args: {
+  accessToken: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  path: string;
+  message: string;
+  content: string;
+  currentSha?: string | null;
+}) {
+  const payload = await githubRequest<{
+    commit?: {
+      sha: string;
+      commit?: {
+        message?: string;
+        committer?: {
+          date?: string;
+        };
+      };
+    };
+    content?: {
+      sha?: string;
+    };
+  }>(
+    args.accessToken,
+    `/repos/${encodeURIComponent(args.owner)}/${encodeURIComponent(args.repo)}/contents/${encodePath(args.path)}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: args.message,
+        branch: args.branch,
+        content: Buffer.from(args.content, "utf8").toString("base64"),
+        ...(args.currentSha ? { sha: args.currentSha } : {}),
+      }),
+    }
+  );
+
+  if (!payload) {
+    throw new Error("GitHub did not return a commit payload.");
+  }
+
+  return {
+    sha: payload.commit?.sha ?? payload.content?.sha ?? "",
+    message: payload.commit?.commit?.message ?? args.message,
+    committedAt: payload.commit?.commit?.committer?.date,
+    contentHash: hashContent(args.content),
+  } satisfies GitHubPushResult;
+}
+
+export async function refreshGitHubAccessToken(
+  refreshToken: string,
+  credentials?: GitHubOAuthCredentials
+) {
+  const clientId = credentials?.clientId ?? getGitHubOAuthClientId();
+  const clientSecret = credentials?.clientSecret ?? getGitHubOAuthClientSecret();
+  if (!clientId || !clientSecret) {
+    throw new Error("GitHub token refresh is not configured.");
+  }
+
+  const response = await fetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "Creed",
+    },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  const payload = await readJson<GitHubTokenRefreshPayload>(response);
+
+  if (!response.ok || payload.error || !payload.access_token) {
+    throw new Error(
+      payload.error_description ||
+        payload.error ||
+        payload.error_description ||
+        "Could not refresh GitHub access token."
+    );
+  }
+
+  return {
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token ?? refreshToken,
+    expiresAt:
+      typeof payload.expires_in === "number"
+        ? new Date(Date.now() + payload.expires_in * 1000).toISOString()
+        : null,
+  };
+}

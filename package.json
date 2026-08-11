@@ -1,0 +1,32 @@
+{
+  "name": "creed-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "setup": "npm run setup --workspace creed-open --",
+    "doctor": "npm run doctor --workspace creed-open --",
+    "dev": "npm run dev --workspace creed-open --",
+    "dev:cloud": "npm run dev --workspace creed-cloud --",
+    "dev:status": "npm run dev --workspace creed-status --",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run ui:parity && npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "ui:parity": "node packages/creed-app/scripts/ui-parity.mjs",
+    "ui:parity:update": "node packages/creed-app/scripts/ui-parity.mjs --write",
+    "bench": "npm run bench --workspace @creed/app --",
+    "indexnow": "npm run indexnow --workspace @creed/app"
+  },
+  "overrides": {
+    "next@16.2.11": {
+      "postcss": "8.5.23",
+      "sharp": "0.35.3"
+    }
+  },
+  "devDependencies": {
+    "supabase": "2.113.0"
+  }
+}

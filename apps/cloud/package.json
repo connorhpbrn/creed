@@ -1,0 +1,27 @@
+{
+  "name": "creed-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "NODE_OPTIONS=--max-http-header-size=65536 next dev -p 3000",
+    "build": "next build",
+    "start": "NODE_OPTIONS=--max-http-header-size=65536 next start -p 3000",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@creed/app": "*",
+    "@creed/cloud": "*",
+    "next": "16.3.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "typescript": "^5"
+  }
+}

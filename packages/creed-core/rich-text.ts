@@ -1,0 +1,383 @@
+
+import sanitizeHtml from "sanitize-html";
+
+const RICH_TEXT_TAGS = [
+  "p", "strong", "em", "u", "s", "mark", "code", "pre", "blockquote",
+  "ul", "ol", "li", "a", "h2", "h3", "h4", "br", "span", "hr",
+];
+export function sanitizeRichTextHtml(html: string): string {
+  return sanitizeHtml(html, {
+    allowedTags: RICH_TEXT_TAGS,
+    allowedAttributes: {
+      a: ["href"],
+      span: ["class", "data-tag"],
+      blockquote: ["class"],
+    },
+    allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesAppliedToAttributes: ["href"],
+    allowProtocolRelative: false,
+  });
+}
+
+export function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Match `#tag` and `#multi-word-tag` inside paragraph / list / quote text.
+// We escape the surrounding text first via `escapeHtml`, then run this on the
+// escaped output to inject the styled tag-mark span. The pattern requires
+// either start-of-string or whitespace before the `#` so `C#`-in-prose isn't
+// accidentally treated as a tag.
+const INLINE_TAG_PATTERN = /(^|\s)#([a-zA-Z0-9][a-zA-Z0-9_-]*)/g;
+
+function applyInlineTagMarks(escapedText: string) {
+  return escapedText.replace(INLINE_TAG_PATTERN, (_match, lead: string, tag: string) => {
+    const slug = tag.toLowerCase();
+    return `${lead}<span class="creed-inline-tag" data-tag="${slug}">${tag}</span>`;
+  });
+}
+
+// Bold (`**text**`) and italic (`*text*` / `_text_`). The bold pattern runs
+// first so a triple-star `***text***` collapses cleanly (bold then italic).
+// The negative-lookbehind on italic skips the inner stars of a bold run.
+function applyInlineEmphasis(escapedText: string) {
+  return escapedText
+    .replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*_])(?:\*|_)([^*_\n]+?)(?:\*|_)(?!\*|_)/g, "$1<em>$2</em>");
+}
+
+// Inline-code spans (`` `code` ``). Substitute placeholders BEFORE the rest
+// of inline processing runs so the code body isn't re-parsed as emphasis /
+// tags / links. We restore the placeholders at the end. Escaping inside the
+// code body uses `escapeHtml` so `<`/`>`/`&` inside code render literally.
+function withInlineCode(rawText: string, render: (rest: string) => string) {
+  const placeholders: string[] = [];
+  const stashed = rawText.replace(/`([^`\n]+)`/g, (_match, body: string) => {
+    const token = `__CREED_INLINE_CODE_${placeholders.length}__`;
+    placeholders.push(`<code>${escapeHtml(body)}</code>`);
+    return token;
+  });
+  let out = render(stashed);
+  placeholders.forEach((html, index) => {
+    out = out.replace(`__CREED_INLINE_CODE_${index}__`, html);
+  });
+  return out;
+}
+
+// Markdown links (`[text](url)`) - converted to anchor tags with the URL
+// HTML-escaped to keep this safe from injection through user-controlled
+// markdown. We deliberately restrict URLs to http(s) / mailto schemes and
+// fall back to a plain text representation otherwise.
+function applyInlineLinks(escapedText: string) {
+  return escapedText.replace(
+    /\[([^\]\n]+?)\]\(([^)\s]+?)\)/g,
+    (match, label: string, href: string) => {
+      const safeHref = /^(https?:|mailto:|\/|#)/i.test(href) ? href : null;
+      if (!safeHref) return match;
+      return `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    }
+  );
+}
+
+// GFM strikethrough (`~~text~~`) and Obsidian-style highlight (`==text==`)
+// and underline (`__text__`). All mirror what `sectionToMarkdown` emits.
+function applyInlineExtras(escapedText: string) {
+  return escapedText
+    .replace(/~~([^~\n]+?)~~/g, "<s>$1</s>")
+    .replace(/==([^=\n]+?)==/g, "<mark>$1</mark>")
+    .replace(/__([^_\n]+?)__/g, "<u>$1</u>");
+}
+
+function inline(text: string) {
+  return withInlineCode(text, (stashed) => {
+    const escaped = escapeHtml(stashed);
+    return applyInlineExtras(
+      applyInlineEmphasis(applyInlineLinks(applyInlineTagMarks(escaped)))
+    );
+  });
+}
+
+function paragraphize(lines: string[]) {
+  const text = lines.join(" ").trim();
+  return text ? `<p>${inline(text)}</p>` : "";
+}
+
+export function markdownToRichHtml(markdown: string) {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const blocks: string[] = [];
+  let paragraphBuffer: string[] = [];
+  let listMode: "ul" | "ol" | null = null;
+  let listItems: string[] = [];
+  let quoteLines: string[] = [];
+  let codeLines: string[] = [];
+  let inCodeBlock = false;
+
+  function flushParagraph() {
+    if (paragraphBuffer.length > 0) {
+      blocks.push(paragraphize(paragraphBuffer));
+      paragraphBuffer = [];
+    }
+  }
+
+  function flushList() {
+    if (listMode && listItems.length > 0) {
+      const listClass =
+        listMode === "ul" ? "creed-list creed-list-bullet" : "creed-list creed-list-ordered";
+      blocks.push(
+        `<${listMode} class="${listClass}">${listItems
+          .map((item) => `<li class="creed-list-item">${inline(item)}</li>`)
+          .join("")}</${listMode}>`
+      );
+    }
+    listMode = null;
+    listItems = [];
+  }
+
+  function flushQuote() {
+    if (quoteLines.length > 0) {
+      // Render markdown blockquotes as Creed callouts, which is how the
+      // editor styles `<blockquote>` via the `creed-callout` class.
+      blocks.push(
+        `<blockquote class="creed-callout"><p>${inline(quoteLines.join(" "))}</p></blockquote>`
+      );
+      quoteLines = [];
+    }
+  }
+
+  function flushCode() {
+    if (codeLines.length > 0) {
+      blocks.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+      codeLines = [];
+    }
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      if (inCodeBlock) {
+        flushCode();
+        inCodeBlock = false;
+      } else {
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(rawLine);
+      continue;
+    }
+
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      continue;
+    }
+
+    // Markdown horizontal rule: `---`, `***`, or `___` on its own line.
+    if (/^([-*_])\1{2,}$/.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      blocks.push(`<hr />`);
+      continue;
+    }
+
+    const heading2 = trimmed.match(/^##\s+(.*)$/);
+    if (heading2) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      blocks.push(`<h2>${inline(heading2[1])}</h2>`);
+      continue;
+    }
+
+    const heading3 = trimmed.match(/^###\s+(.*)$/);
+    if (heading3) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      blocks.push(`<h3>${inline(heading3[1])}</h3>`);
+      continue;
+    }
+
+    const heading4 = trimmed.match(/^####\s+(.*)$/);
+    if (heading4) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      blocks.push(`<h4>${inline(heading4[1])}</h4>`);
+      continue;
+    }
+
+    const bullet = trimmed.match(/^[-*]\s+(.*)$/);
+    if (bullet) {
+      flushParagraph();
+      flushQuote();
+      if (listMode && listMode !== "ul") {
+        flushList();
+      }
+      listMode = "ul";
+      listItems.push(bullet[1]);
+      continue;
+    }
+
+    const numbered = trimmed.match(/^\d+\.\s+(.*)$/);
+    if (numbered) {
+      flushParagraph();
+      flushQuote();
+      if (listMode && listMode !== "ol") {
+        flushList();
+      }
+      listMode = "ol";
+      listItems.push(numbered[1]);
+      continue;
+    }
+
+    const quote = trimmed.match(/^>\s?(.*)$/);
+    if (quote) {
+      flushParagraph();
+      flushList();
+      quoteLines.push(quote[1]);
+      continue;
+    }
+
+    flushList();
+    flushQuote();
+    paragraphBuffer.push(trimmed);
+  }
+
+  flushParagraph();
+  flushList();
+  flushQuote();
+  flushCode();
+
+  return blocks.join("");
+}
+
+// Collapse insignificant whitespace in a rich-text HTML body: turn &nbsp; into a
+// space, drop whitespace between tags, collapse runs of whitespace, and trim.
+// Used only for equality comparison, never for storage.
+export function normalizeHtmlWhitespace(html: string): string {
+  return html
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .replace(/>\s+/g, ">")
+    .replace(/\s+</g, "<")
+    .trim();
+}
+
+function normalizeSectionReference(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^#/, "")
+    .replace(/[\s_-]+/g, "");
+}
+
+function readHtmlAttribute(attributes: string, name: string): string | null {
+  const match = attributes.match(
+    new RegExp(
+      `(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))`,
+      "i",
+    ),
+  );
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
+const INLINE_TAG_SPAN_PATTERN = /<span\b([^>]*)>([\s\S]*?)<\/span>/gi;
+const REMOVED_SECTION_REFERENCE = "__CREED_REMOVED_SECTION_REFERENCE__";
+
+/**
+ * Remove every rich-text section-reference mark that targets a permanently
+ * deleted section. Current marks store the section id in `data-tag`; legacy
+ * imports can store the display name, so both are matched using the editor's
+ * separator-tolerant normalization. Plain hashtags are deliberately untouched.
+ */
+export function removeSectionReferences(
+  html: string,
+  target: { id: string; name: string },
+): string {
+  if (!html.includes("creed-inline-tag")) return html;
+
+  const targetValues = new Set(
+    [target.id, target.name]
+      .map(normalizeSectionReference)
+      .filter(Boolean),
+  );
+  let removed = false;
+  const marked = html.replace(
+    INLINE_TAG_SPAN_PATTERN,
+    (span, attributes: string, body: string) => {
+      const className = readHtmlAttribute(attributes, "class") ?? "";
+      if (!className.split(/\s+/).includes("creed-inline-tag")) return span;
+
+      const rawValue =
+        readHtmlAttribute(attributes, "data-tag") ??
+        body.replace(/<[^>]+>/g, "");
+      if (!targetValues.has(normalizeSectionReference(rawValue))) return span;
+
+      removed = true;
+      return REMOVED_SECTION_REFERENCE;
+    },
+  );
+  if (!removed) return html;
+
+  const escapedMarker = REMOVED_SECTION_REFERENCE.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&",
+  );
+  const emptyBlockPattern = new RegExp(
+    `<p([^>]*)>(?:(?:\\s|&nbsp;|<br\\s*\\/?>)*${escapedMarker})+(?:\\s|&nbsp;|<br\\s*\\/?>)*<\\/p>`,
+    "gi",
+  );
+  const withoutEmptyBlocks = marked.replace(emptyBlockPattern, "");
+  return withoutEmptyBlocks.replace(
+    new RegExp(`[ \\t]*${escapedMarker}[ \\t]*`, "g"),
+    (match) =>
+      /^[ \t]/.test(match) && /[ \t]$/.test(match) ? " " : "",
+  );
+}
+
+export function removeSectionReferencesFromSections<
+  T extends { id: string; content: string },
+>(sections: T[], target: { id: string; name: string }): T[] {
+  return sections
+    .filter((section) => section.id !== target.id)
+    .map((section) => {
+      const content = removeSectionReferences(section.content, target);
+      return content === section.content ? section : { ...section, content };
+    });
+}
+
+// True when two rich-text bodies differ only in insignificant whitespace (a
+// stray space, an &nbsp;, or whitespace between tags). Lets a save or proposal
+// that added no real content - e.g. just hitting the spacebar - be treated as a
+// no-op, so it never lands a version, an activity row, or a proposal. Formatting
+// changes survive (tags differ), so bolding a word is NOT a no-op.
+export function richTextContentEquivalent(a: string, b: string): boolean {
+  return normalizeHtmlWhitespace(a) === normalizeHtmlWhitespace(b);
+}
+
+export function normalizeRichTextInput(input: { contentHtml?: string; contentMarkdown?: string }) {
+  if (typeof input.contentHtml === "string" && input.contentHtml.trim()) {
+    return sanitizeRichTextHtml(input.contentHtml.trim());
+  }
+
+  if (typeof input.contentMarkdown === "string" && input.contentMarkdown.trim()) {
+    return sanitizeRichTextHtml(markdownToRichHtml(input.contentMarkdown.trim()));
+  }
+
+  return "";
+}

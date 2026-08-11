@@ -1,0 +1,127 @@
+import { NextResponse } from "next/server";
+import { getGitHubFileSnapshot } from "@creed/integrations/github";
+import {
+  getConfiguredRepo,
+  hasLinkedGitHubIdentity,
+  requireAuthenticatedUser,
+  resolveSyncStatus,
+  withAuthenticatedGitHubAccess,
+} from "@/lib/github-version-control";
+import { readGitHubIntegration, readVersionControlConfig } from "@/lib/creed-backend";
+import {
+  readSharedGitHubIntegration,
+  readSharedVersionControl,
+  resolveManagedSharedCreedId,
+  withSharedGitHubAccess,
+} from "@creed/edition/github";
+import { log } from "@/lib/observability";
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const localHash = searchParams.get("localHash")?.trim() ?? "";
+    const { supabase, user } = await requireAuthenticatedUser();
+
+    // Shared managers resolve status against the TEAM connection + the shared
+    // target. Members and personal Creeds resolve against their own.
+    const sharedId = await resolveManagedSharedCreedId(supabase, user);
+    if (sharedId) {
+      const sharedVc = await readSharedVersionControl(sharedId);
+      const configuredRepo = getConfiguredRepo(sharedVc);
+      const integration = await readSharedGitHubIntegration(sharedId);
+      const connected = Boolean(integration?.accessToken);
+
+      if (!connected || !configuredRepo) {
+        return NextResponse.json({
+          connected,
+          configured: false,
+          syncStatus: "not-configured",
+        });
+      }
+
+      const payload = await withSharedGitHubAccess(sharedId, async (token) => {
+        const remoteFile = await getGitHubFileSnapshot(
+          token,
+          configuredRepo.repoOwner,
+          configuredRepo.repoName,
+          configuredRepo.path,
+          configuredRepo.branch
+        );
+        return {
+          connected: true,
+          configured: true,
+          repoOwner: configuredRepo.repoOwner,
+          repoName: configuredRepo.repoName,
+          branch: configuredRepo.branch,
+          path: configuredRepo.path,
+          syncStatus: resolveSyncStatus({
+            localHash,
+            remoteHash: remoteFile?.contentHash ?? null,
+            lastSyncedHash: sharedVc?.last_synced_content_hash ?? null,
+          }),
+          remoteSha: remoteFile?.sha ?? null,
+          remoteMessage: remoteFile?.commitMessage ?? null,
+          remoteCommittedAt: remoteFile?.committedAt ?? null,
+          remoteContentHash: remoteFile?.contentHash ?? null,
+        };
+      });
+      return NextResponse.json(payload);
+    }
+
+    const integration = await readGitHubIntegration(supabase, user.id);
+    const versionControl = await readVersionControlConfig(supabase, user.id);
+    const configuredRepo = getConfiguredRepo(versionControl);
+
+    const linkedIdentity = hasLinkedGitHubIdentity(user);
+
+    if (!integration?.access_token || !configuredRepo) {
+      return NextResponse.json({
+        connected: Boolean(integration?.access_token) || linkedIdentity,
+        configured: false,
+        syncStatus: "not-configured",
+      });
+    }
+
+    const payload = await withAuthenticatedGitHubAccess(async ({ integration: activeIntegration }) => {
+      const remoteFile = await getGitHubFileSnapshot(
+        activeIntegration.access_token!,
+        configuredRepo.repoOwner,
+        configuredRepo.repoName,
+        configuredRepo.path,
+        configuredRepo.branch
+      );
+
+      const syncStatus = resolveSyncStatus({
+        localHash,
+        remoteHash: remoteFile?.contentHash ?? null,
+        lastSyncedHash: versionControl?.last_synced_content_hash ?? null,
+      });
+
+      return {
+        connected: true,
+        configured: true,
+        repoOwner: configuredRepo.repoOwner,
+        repoName: configuredRepo.repoName,
+        branch: configuredRepo.branch,
+        path: configuredRepo.path,
+        syncStatus,
+        remoteSha: remoteFile?.sha ?? null,
+        remoteMessage: remoteFile?.commitMessage ?? null,
+        remoteCommittedAt: remoteFile?.committedAt ?? null,
+        remoteContentHash: remoteFile?.contentHash ?? null,
+      };
+    });
+
+    return NextResponse.json(payload);
+  } catch (error) {
+    log.error("GitHub status failed", { route: "/api/app/github/status" }, error);
+    const message =
+      error instanceof Error && error.message && error.message !== "Unauthorized"
+        ? error.message
+        : "Could not load GitHub status.";
+    return NextResponse.json(
+      { error: message },
+      { status: error instanceof Error && error.message === "Unauthorized" ? 401 : 400 }
+    );
+  }
+}

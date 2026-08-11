@@ -1,0 +1,2631 @@
+import { randomBytes } from "node:crypto";
+import "server-only";
+import { cache } from "react";
+import type { User } from "@supabase/supabase-js";
+import { getDisplayName } from "@/lib/user-name";
+import {
+  buildAgentReadPayload,
+  inferSectionTemplate,
+  legacyPayloadToRichTextContent,
+  normalizeAgentPermission,
+  normalizeLegacyAccent,
+  normalizeLegacyProposalDraft,
+  normalizeLegacySectionId,
+  permissionToWritable,
+  type AgentIconKind,
+  type ActivityStatus,
+  type GitHubSyncStatus,
+  initialCreedState,
+  initialOnboardingState,
+  type AccentKey,
+  type ActivityEntry,
+  type ActorType,
+  type ConnectionItem,
+  type CreedSection,
+  type CreedState,
+  type SharedContext,
+  type CreedMemberSummary,
+  type CreedSwitcherItem,
+  type AgentPermission,
+  type McpClient,
+  type Proposal,
+  type SectionTemplate,
+} from "@creed/core/creed-data";
+import {
+  resolveSectionPermission,
+  type CreedRole,
+} from "@creed/core/creed-permissions";
+import {
+  getAgentIconKind,
+  type CliAttributableAgentId,
+} from "@/lib/agent-icon";
+import { getSiteUrl } from "@creed/persistence/supabase/env";
+import { getSupabaseAdminClient } from "@creed/persistence/supabase/admin";
+import { decryptSecret, encryptSecret, hashSecret } from "@creed/integrations/secret-crypto";
+import { isGitHubOAuthAppConfigured } from "@creed/integrations/github";
+import { readSharedGitHubIntegration } from "@creed/edition/github";
+import { log } from "@/lib/observability";
+import type { SupabaseLikeClient } from "@creed/persistence/supabase/types";
+import { richTextContentEquivalent } from "@creed/core/rich-text";
+import type { CreedSummary } from "@/lib/creed-membership";
+import {
+  getOwnedPersonalCreedId,
+  getPersonalCreedId,
+} from "@/lib/creed-membership";
+
+const ACTIVITY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+function getActivityCutoffIso() {
+  return new Date(Date.now() - ACTIVITY_RETENTION_MS).toISOString();
+}
+
+export async function getCreedStateTick(creedId: string): Promise<number | null> {
+  const admin = getSupabaseAdminClient() as unknown as SupabaseLikeClient;
+  const { data, error } = await admin.rpc("get_creed_state_tick", {
+    p_creed_id: creedId,
+  });
+  if (error) throw new Error("Could not read Creed sync state.");
+  const value = Array.isArray(data) ? data[0] : data;
+  const tick = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(tick) ? tick : null;
+}
+
+type SectionRow = {
+  user_id: string;
+  section_id: string;
+  position: number;
+  // The DB has legacy kinds (chips, rules, decisions, focus) on older rows;
+  // hydrateSection migrates them all to "rich-text" for the in-memory model.
+  kind: string;
+  name: string;
+  accent: AccentKey;
+  payload: Record<string, unknown>;
+  agent_permission?: string | null;
+  archived_at?: string | null;
+  last_edited_by: string;
+  last_edited_type: ActorType;
+  last_edited_at: string;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type ProposalRow = {
+  id: string;
+  user_id: string;
+  section_id: Proposal["sectionId"];
+  section_name: string;
+  accent: AccentKey;
+  agent_name: string;
+  change_type: Proposal["changeType"];
+  reason: string;
+  impact: Proposal["impact"];
+  confidence: Proposal["confidence"];
+  draft: Proposal["draft"];
+  status: Proposal["status"];
+  base_revision: number | null;
+  created_at: string;
+  updated_at: string;
+  // Shared only: set to the member's id for a manual (human-typed) proposal;
+  // null for agent proposals. The sole signal that distinguishes the two.
+  author_user_id?: string | null;
+};
+
+type ActivityRow = {
+  id: string;
+  user_id: string;
+  proposal_id: string | null;
+  section_id: ActivityEntry["sectionId"];
+  section_name: string;
+  accent: AccentKey;
+  actor: string;
+  actor_type: ActorType;
+  summary: string;
+  status: ActivityEntry["status"];
+  change_type: ActivityEntry["changeType"];
+  reason: string;
+  impact: ActivityEntry["impact"];
+  confidence: ActivityEntry["confidence"];
+  before_text: string | null;
+  after_text: string | null;
+  created_at: string;
+  // Shared only: the actor's user id (for avatar lookup) + the event kind
+  // (content edits/proposals vs admin config events, which the sidebar hides).
+  actor_user_id?: string | null;
+  event_kind?: string | null;
+};
+
+type ConnectionRow = {
+  user_id: string;
+  connection_id: string;
+  status: ConnectionItem["status"];
+  last_seen_at: string | null;
+  last_agent_name: string | null;
+  observed_via: "read" | "proposal" | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type TokenRow = {
+  creed_id: string;
+  user_id: string;
+  read_token: string | null;
+  proposal_token: string | null;
+  direct_edit_token?: string | null;
+  read_token_hash?: string | null;
+  proposal_token_hash?: string | null;
+  direct_edit_token_hash?: string | null;
+  encrypted_read_token?: string | null;
+  encrypted_proposal_token?: string | null;
+  encrypted_direct_edit_token?: string | null;
+  require_approval: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type McpClientRow = {
+  user_id: string;
+  client_id: string;
+  client_name: string;
+  last_seen_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type IntegrationRow = {
+  creed_id: string;
+  provider: "github";
+  status: "connected" | "not-connected" | "disconnected";
+  provider_account_id: string | null;
+  provider_login: string | null;
+  encrypted_access_token?: string | null;
+  encrypted_refresh_token?: string | null;
+  token_expires_at: string | null;
+  connected_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type VersionControlRow = {
+  creed_id: string;
+  provider: "github";
+  repo_owner: string | null;
+  repo_name: string | null;
+  branch: string | null;
+  path: string;
+  last_remote_sha: string | null;
+  last_remote_message: string | null;
+  last_remote_committed_at: string | null;
+  last_synced_content_hash: string | null;
+  sync_status: GitHubSyncStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+type PersistResult = {
+  state: CreedState;
+  hasPersistedCreed: boolean;
+};
+
+const KNOWN_CONNECTIONS = [
+  "claude",
+  "claudecode",
+  "codex",
+  "chatgpt",
+  "cursor",
+  "devin",
+  "replit",
+  "whirl",
+  "grok",
+  "v0",
+  "opencode",
+  "openclaw",
+  "hermes",
+  "factory",
+  "manus",
+  "custom",
+  "mcp",
+] as const;
+
+function assertNoError(error: { message: string } | null, fallback: string) {
+  if (error) {
+    throw new Error(error.message || fallback);
+  }
+}
+
+async function readTokenRow(
+  client: SupabaseLikeClient,
+  userId: string,
+  creedId: string,
+) {
+  const { data, error } = await client
+    .from("creed_tokens")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("creed_id", creedId)
+    .maybeSingle();
+
+  assertNoError(error, "Could not load Creed tokens.");
+  const row = (data as TokenRow | null) ?? null;
+  return row ? resolveTokenRow(row) : null;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function toRelativeTime(timestamp?: string | null) {
+  if (!timestamp) {
+    return undefined;
+  }
+
+  const deltaMs = Date.now() - new Date(timestamp).getTime();
+  const minutes = Math.max(Math.round(deltaMs / 60000), 0);
+
+  if (minutes < 1) {
+    return "just now";
+  }
+
+  if (minutes < 60) {
+    return `${minutes} min ago`;
+  }
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+
+  const days = Math.round(hours / 24);
+  if (days === 1) {
+    return "1 day ago";
+  }
+
+  return `${days} days ago`;
+}
+
+function toDayLabel(timestamp?: string | null) {
+  if (!timestamp) {
+    return "Today";
+  }
+
+  const deltaMs = Date.now() - new Date(timestamp).getTime();
+  const days = Math.floor(deltaMs / 86_400_000);
+
+  if (days <= 0) {
+    return "Today";
+  }
+
+  if (days === 1) {
+    return "Yesterday";
+  }
+
+  return "Earlier";
+}
+
+export function getUserName(user: User) {
+  return getDisplayName(user);
+}
+
+export function getAvatarUrl(user: User) {
+  const metadata = user.user_metadata ?? {};
+  const identities =
+    (
+      user as User & {
+        identities?: Array<{ identity_data?: Record<string, unknown> | null }>;
+      }
+    ).identities ?? [];
+  const identityData =
+    identities
+      .map((identity) => identity?.identity_data ?? {})
+      .find((identity) => identity && Object.keys(identity).length > 0) ?? {};
+
+  const raw =
+    metadata.avatar_url ||
+    metadata.picture ||
+    metadata.photo_url ||
+    identityData.avatar_url ||
+    identityData.picture ||
+    identityData.photo_url;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
+}
+
+function getIdentityData(
+  user: User,
+  provider: "google" | "github",
+): Record<string, unknown> {
+  const identities =
+    (
+      user as User & {
+        identities?: Array<{
+          provider?: string;
+          identity_data?: Record<string, unknown> | null;
+        }>;
+      }
+    ).identities ?? [];
+
+  return (
+    identities.find((identity) => identity.provider === provider)
+      ?.identity_data ?? {}
+  );
+}
+
+function buildIntegrationSettings(
+  user: User,
+  githubRow?: IntegrationRow | null,
+  options?: { ignoreLinkedIdentity?: boolean },
+): CreedState["settings"]["integrations"] {
+  // In Shared mode the GitHub connection is the TEAM's, not the caller's, so we
+  // derive status purely from the passed row and never from the user's linked
+  // GitHub identity (which would otherwise mark a team "connected" just because
+  // the manager linked their own GitHub for sign-in).
+  const ignoreLinkedIdentity = options?.ignoreLinkedIdentity ?? false;
+  const githubIdentity = ignoreLinkedIdentity
+    ? {}
+    : getIdentityData(user, "github");
+  const identityLogin =
+    (typeof githubIdentity.user_name === "string"
+      ? githubIdentity.user_name
+      : undefined) ??
+    (typeof githubIdentity.preferred_username === "string"
+      ? githubIdentity.preferred_username
+      : undefined);
+  const githubLogin = githubRow?.provider_login ?? identityLogin;
+  const hasLinkedGitHubIdentity = ignoreLinkedIdentity
+    ? false
+    : Boolean(
+        identityLogin ||
+        (typeof githubIdentity.sub === "string" && githubIdentity.sub.trim()) ||
+        (typeof githubIdentity.id === "string" && githubIdentity.id.trim()),
+      );
+
+  return {
+    google: {
+      provider: "google",
+      label: "Google",
+      status: "connected",
+      disconnectable: false,
+      accountLabel: user.email ?? undefined,
+    },
+    github: {
+      provider: "github",
+      label: "GitHub",
+      status:
+        githubRow?.status === "connected" || hasLinkedGitHubIdentity
+          ? "connected"
+          : githubRow?.status === "disconnected"
+            ? "disconnected"
+            : "not-connected",
+      disconnectable: true,
+      accountLabel: githubLogin,
+    },
+  };
+}
+
+function buildVersionControlSettings(
+  row?: VersionControlRow | null,
+): CreedState["settings"]["versionControl"] {
+  return {
+    provider: "github",
+    repoOwner: row?.repo_owner ?? "",
+    repoName: row?.repo_name ?? "",
+    branch: row?.branch ?? "",
+    path: "creed.md",
+    lastRemoteSha: row?.last_remote_sha ?? undefined,
+    lastRemoteMessage: row?.last_remote_message ?? undefined,
+    lastRemoteCommittedAt: row?.last_remote_committed_at ?? undefined,
+    lastSyncedContentHash: row?.last_synced_content_hash ?? undefined,
+    syncStatus: row?.sync_status ?? "not-configured",
+  };
+}
+
+async function readGithubIntegrationRow(
+  client: SupabaseLikeClient,
+  userId: string,
+  targetCreedId?: string,
+) {
+  const creedId = targetCreedId ?? (await getPersonalCreedId(client, userId));
+  if (!creedId) return null;
+  const { data, error } = await client
+    .from("creed_integrations")
+    .select("*")
+    .eq("creed_id", creedId)
+    .eq("provider", "github")
+    .maybeSingle();
+
+  assertNoError(error, "Could not load GitHub integration.");
+  const row = (data as IntegrationRow | null) ?? null;
+  return row ? resolveGitHubIntegrationRow(row) : null;
+}
+
+async function readVersionControlRow(
+  client: SupabaseLikeClient,
+  userId: string,
+  targetCreedId?: string,
+) {
+  const creedId = targetCreedId ?? (await getPersonalCreedId(client, userId));
+  if (!creedId) return null;
+  const { data, error } = await client
+    .from("creed_version_control")
+    .select("*")
+    .eq("creed_id", creedId)
+    .maybeSingle();
+
+  assertNoError(error, "Could not load version control settings.");
+  return (data as VersionControlRow | null) ?? null;
+}
+
+async function readMcpClientRows(
+  client: SupabaseLikeClient,
+  userId: string,
+  creedId?: string | null,
+) {
+  let query = client
+    .from("creed_mcp_clients")
+    .select("*")
+    .order("last_seen_at", { ascending: false });
+  query = creedId ? query.eq("creed_id", creedId) : query.eq("user_id", userId);
+  const { data, error } = await query;
+
+  assertNoError(error, "Could not load MCP clients.");
+  return ((data as McpClientRow[] | null) ?? [])
+    .filter((row) => row.client_name.trim().toLowerCase() !== "mcp client")
+    .map(hydrateMcpClient);
+}
+
+export async function readGitHubIntegration(client: unknown, userId: string) {
+  return readGithubIntegrationRow(client as SupabaseLikeClient, userId);
+}
+
+export async function readVersionControlConfig(
+  client: unknown,
+  userId: string,
+) {
+  return readVersionControlRow(client as SupabaseLikeClient, userId);
+}
+
+export async function upsertGitHubIntegration(
+  client: unknown,
+  userId: string,
+  input: {
+    status?: "connected" | "not-connected" | "disconnected";
+    providerAccountId?: string | null;
+    providerLogin?: string | null;
+    accessToken?: string | null;
+    refreshToken?: string | null;
+    tokenExpiresAt?: string | null;
+  },
+) {
+  const db = client as SupabaseLikeClient;
+  const creedId = await getPersonalCreedId(db, userId);
+  if (!creedId) throw new Error("Could not resolve the personal Creed.");
+  const now = new Date().toISOString();
+
+  const accessToken = input.accessToken?.trim() || null;
+  const refreshToken = input.refreshToken?.trim() || null;
+
+  const { error } = await db.from("creed_integrations").upsert(
+    {
+      creed_id: creedId,
+      provider: "github",
+      status: input.status ?? "connected",
+      provider_account_id: input.providerAccountId ?? null,
+      provider_login: input.providerLogin ?? null,
+      encrypted_access_token: accessToken ? encryptSecret(accessToken) : null,
+      encrypted_refresh_token: refreshToken
+        ? encryptSecret(refreshToken)
+        : null,
+      token_expires_at: input.tokenExpiresAt ?? null,
+      connected_by: userId,
+      created_at: now,
+      updated_at: now,
+    },
+    { onConflict: "creed_id,provider" },
+  );
+
+  assertNoError(error, "Could not persist GitHub integration.");
+}
+
+export async function clearGitHubIntegration(client: unknown, userId: string) {
+  const db = client as SupabaseLikeClient;
+  const creedId = await getPersonalCreedId(db, userId);
+  if (!creedId) throw new Error("Could not resolve the personal Creed.");
+
+  // Keep the integration row (status = 'disconnected') so the UI can show
+  // "Disconnected" (previously connected) vs "Not connected" (never).
+  // Tokens / provider identity are cleared so nothing reusable lingers.
+  //
+  // Deliberately *don't* delete `creed_version_control`. The repo/branch the
+  // user picked is configuration they almost always want again on reconnect,
+  // and re-finding their repo by hand is the friction reconnect should
+  // avoid. We also flip its sync_status back to a neutral value so the
+  // greyed-out UI doesn't claim it's still in sync.
+  const [{ error: integrationError }, { error: versionControlError }] =
+    await Promise.all([
+      db
+        .from("creed_integrations")
+        .update({
+          status: "disconnected",
+          provider_account_id: null,
+          provider_login: null,
+          encrypted_access_token: null,
+          encrypted_refresh_token: null,
+          token_expires_at: null,
+        })
+        .eq("creed_id", creedId)
+        .eq("provider", "github"),
+      db
+        .from("creed_version_control")
+        .update({ sync_status: "unknown" })
+        .eq("creed_id", creedId),
+    ]);
+
+  assertNoError(integrationError, "Could not clear GitHub integration.");
+  assertNoError(
+    versionControlError,
+    "Could not clear version control settings.",
+  );
+}
+
+// Admin re-fetch of the user, cached per request by id. The personal load path
+// enriches twice (loadActiveCreedState -> loadCreedState); keying the round-trip
+// on the id (a string, so React cache() dedupes by value) collapses those into
+// one getUserById per request.
+const fetchEnrichedUser = cache(async (userId: string): Promise<User | null> => {
+  try {
+    const admin = getSupabaseAdminClient();
+    const { data, error } = await admin.auth.admin.getUserById(userId);
+    if (error || !data.user) {
+      return null;
+    }
+    return data.user;
+  } catch {
+    return null;
+  }
+});
+
+async function enrichUserForState(user: User) {
+  return (await fetchEnrichedUser(user.id)) ?? user;
+}
+
+export function getAvatarInitials(name: string) {
+  const parts = name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) {
+    return "CR";
+  }
+
+  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("");
+}
+
+function enrichCreedSwitcherItems(
+  creeds: CreedSummary[],
+  user: User,
+): CreedSwitcherItem[] {
+  const userName = getUserName(user);
+  const userAvatarUrl = getAvatarUrl(user);
+
+  return creeds.map((creed) => {
+    const label = creed.name || userName;
+    return {
+      ...creed,
+      avatarInitials: getAvatarInitials(label),
+      avatarUrl:
+        creed.type === "personal"
+          ? (creed.avatarUrl ?? userAvatarUrl)
+          : creed.avatarUrl,
+    };
+  });
+}
+
+function generateToken(prefix: "xt_read" | "xt_proposal" | "xt_direct") {
+  return `${prefix}_${randomBytes(18).toString("hex")}`;
+}
+
+function tokenFields(token: string) {
+  return {
+    token,
+    hash: hashSecret(token),
+    encrypted: encryptSecret(token),
+  };
+}
+
+// Decrypt-only. The earlier plaintext-column fallback was removed so a DB
+// dump can never surface live tokens without the AES-256-GCM secret.
+//
+// Two failure modes both resolve to `""`, which the upgrade-on-read path
+// in `ensureTokenRow` uses as the signal to regenerate fresh tokens:
+//   1. `encrypted` column is null - legacy row never written by the
+//      current code path.
+//   2. `decryptSecret` throws - the ciphertext was written with a
+//      different `CREED_ENCRYPTION_SECRET` than is currently set (i.e.
+//      the key was rotated without clearing the column). Self-heal here
+//      so a rotation doesn't crash every signed-in request.
+function resolveSecret(encrypted?: string | null, label = "secret") {
+  if (!encrypted) return "";
+  try {
+    return decryptSecret(encrypted, label);
+  } catch (error) {
+    log.warn("secret_decrypt_failed", {
+      label,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return "";
+  }
+}
+
+function resolveTokenRow(row: TokenRow) {
+  return {
+    ...row,
+    read_token: resolveSecret(row.encrypted_read_token, "read token"),
+    proposal_token: resolveSecret(
+      row.encrypted_proposal_token,
+      "proposal token",
+    ),
+    direct_edit_token: resolveSecret(
+      row.encrypted_direct_edit_token,
+      "direct edit token",
+    ),
+  };
+}
+
+function resolveGitHubIntegrationRow(row: IntegrationRow) {
+  return {
+    ...row,
+    access_token: resolveSecret(
+      row.encrypted_access_token,
+      "GitHub access token",
+    ),
+    refresh_token: resolveSecret(
+      row.encrypted_refresh_token,
+      "GitHub refresh token",
+    ),
+  };
+}
+
+function buildMcpUrl() {
+  return `${getSiteUrl()}/mcp`;
+}
+
+function normalizeIntegrationId(value?: string | null) {
+  if (!value) {
+    return "custom";
+  }
+
+  const normalized = value.toLowerCase();
+  return KNOWN_CONNECTIONS.includes(
+    normalized as (typeof KNOWN_CONNECTIONS)[number],
+  )
+    ? (normalized as (typeof KNOWN_CONNECTIONS)[number])
+    : "custom";
+}
+
+// A connecting client's id and its brand icon are the same vocabulary, so both
+// resolve through the single alias table in lib/agent-icon. Keeping one source
+// of truth means a new agent can't get an icon without also being a known
+// connection id (which is what drives its connected/not-connected status).
+function inferIntegrationId(agentName?: string | null): AgentIconKind {
+  return getAgentIconKind(agentName);
+}
+
+export function inferAgentIconKind(agentName?: string | null): AgentIconKind {
+  return getAgentIconKind(agentName);
+}
+
+export function normalizeMcpClientId(clientName?: string | null) {
+  const icon = inferAgentIconKind(clientName);
+  if (icon !== "custom") {
+    return icon;
+  }
+
+  const normalized = (clientName ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    // Drop generic client-wrapper suffixes so the same custom agent resolves to
+    // one id whether it identifies as "foo", "foo-mcp", or "foo-mcp-client".
+    .replace(
+      /-(mcp-client|mcp|client|cli|vscode|extension|desktop|app|bot)$/u,
+      "",
+    )
+    .replace(/-$/u, "")
+    .slice(0, 48);
+
+  return normalized || "custom";
+}
+
+function hydrateMcpClient(row: McpClientRow): McpClient {
+  return {
+    id: row.client_id,
+    name: row.client_name,
+    icon: inferAgentIconKind(row.client_name),
+    lastUsed: toRelativeTime(row.last_seen_at) ?? undefined,
+  };
+}
+
+function buildReadUrl(readToken: string) {
+  return `${getSiteUrl()}/api/creed?token=${readToken}`;
+}
+
+function buildProposalUrl() {
+  return `${getSiteUrl()}/api/creed/proposals`;
+}
+
+function buildDirectEditUrl() {
+  return `${getSiteUrl()}/api/creed/write`;
+}
+
+function buildConnectionDefinitions() {
+  // Per-agent buttons and command snippets are NOT built here: the client
+  // provider snapshots this payload once per page load, so presentation baked
+  // into it goes stale in open tabs under HMR. The cards derive their actions
+  // from lib/connection-actions.ts instead; these definitions carry identity,
+  // status, and fallback copy only.
+  const remoteHint =
+    "Add a custom MCP server pointing at the URL above, then authorize Creed in the browser window your client opens.";
+
+  return {
+    definitions: [
+      {
+        id: "chatgpt",
+        name: "ChatGPT",
+        icon: "chatgpt",
+        description:
+          "Add Creed as a connector so ChatGPT starts from your context.",
+        connectHint:
+          "In ChatGPT, open Settings > Apps & Connectors, turn on Developer mode, then Create a connector with the URL.",
+      },
+      {
+        id: "claude",
+        name: "Claude",
+        icon: "claude",
+        description: "Connect Creed as a custom connector in Claude.",
+        connectHint:
+          "In Claude, open Settings > Connectors > Add custom connector, paste the URL above, then Connect to authorize in the browser.",
+      },
+      {
+        id: "codex",
+        name: "Codex",
+        icon: "codex",
+        description:
+          "Add Creed as a remote MCP server for agentic coding runs.",
+        connectHint:
+          "Run the command below, then codex mcp login creed to authorize in the browser.",
+      },
+      {
+        id: "claudecode",
+        name: "Claude Code",
+        icon: "claudecode",
+        description:
+          "Connect Creed so every Claude Code session starts with your context.",
+        connectHint:
+          "Run the command below (user scope, so every project gets it), then /mcp to authorize in the browser.",
+      },
+      {
+        id: "openclaw",
+        name: "OpenClaw",
+        icon: "openclaw",
+        description: "Add Creed to OpenClaw as a remote MCP server.",
+        connectHint: remoteHint,
+      },
+      {
+        id: "hermes",
+        name: "Hermes",
+        icon: "hermes",
+        description: "Add Creed to Hermes as a remote MCP server.",
+        connectHint: remoteHint,
+      },
+      {
+        id: "manus",
+        name: "Manus",
+        icon: "manus",
+        description: "Add Creed to Manus as a remote MCP server.",
+        connectHint:
+          "In Manus, open Settings > Connectors > Add custom MCP, enter the URL above with transport HTTP, then authorize.",
+      },
+      {
+        id: "grok",
+        name: "Grok",
+        icon: "grok",
+        description: "Add Creed to Grok as a custom connector.",
+        connectHint:
+          "In Grok, go to grok.com/connectors, create a New Connector > Custom, paste the URL above, and authorize.",
+      },
+      {
+        id: "opencode",
+        name: "OpenCode",
+        icon: "opencode",
+        description: "Add Creed to OpenCode as a remote MCP server.",
+        connectHint:
+          "Add the JSON below to opencode.json, then run opencode mcp auth creed to authorize in the browser.",
+      },
+      {
+        id: "cursor",
+        name: "Cursor",
+        icon: "cursor",
+        description: "One-click install Creed into Cursor, then authorize.",
+        connectHint:
+          "Use the one-click button to add Creed to Cursor as a remote MCP server, then authorize Creed in the browser window Cursor opens.",
+      },
+      {
+        id: "devin",
+        name: "Devin",
+        icon: "devin",
+        description: "Add Creed to Devin from the MCP Marketplace.",
+        connectHint:
+          "In Devin, open Settings > Connections > MCP servers, add a custom MCP with the URL above then transport HTTP and OAuth.",
+      },
+      {
+        id: "replit",
+        name: "Replit",
+        icon: "replit",
+        description: "Add Creed to Replit as a remote MCP server.",
+        connectHint:
+          "In Replit, open the Agent's Integrations pane, add a custom MCP server with the URL above, and authorize Creed with OAuth.",
+      },
+      {
+        id: "whirl",
+        name: "Whirl",
+        icon: "whirl",
+        description: "Add Creed to Whirl as a custom MCP connection.",
+        connectHint:
+          "In Whirl, open Settings and add a custom MCP server with the URL above, then authorize Creed with OAuth.",
+      },
+      {
+        id: "factory",
+        name: "Factory",
+        icon: "factory",
+        description: "Add Creed to Factory's droid as a remote MCP server.",
+        connectHint:
+          "Run the command below, then /mcp inside droid to authorize in the browser.",
+      },
+      {
+        id: "v0",
+        name: "v0",
+        icon: "v0",
+        description: "Add Creed to v0 as a custom MCP connection.",
+        connectHint:
+          "In v0, open MCP Connections (or Add MCP in the prompt bar), add a custom server with the URL above, and choose OAuth.",
+      },
+      {
+        id: "custom",
+        name: "Custom Agent",
+        icon: "custom",
+        description:
+          "Any client that speaks MCP can connect with the URL above. For non-MCP clients, the HTTP API is documented in the docs.",
+        connectHint: remoteHint,
+      },
+    ] as Array<Omit<ConnectionItem, "status" | "lastUsed">>,
+  };
+}
+
+const CONNECTION_DEFINITIONS = buildConnectionDefinitions();
+
+const SECTION_SELECT =
+  "user_id, section_id, position, kind, name, accent, payload, agent_permission, archived_at, last_edited_by, last_edited_type, last_edited_at, revision, created_at, updated_at";
+const PROPOSAL_SELECT =
+  "id, user_id, section_id, section_name, accent, agent_name, change_type, reason, impact, confidence, draft, status, base_revision, created_at, updated_at, author_user_id";
+const ACTIVITY_SELECT =
+  "id, user_id, proposal_id, section_id, section_name, accent, actor, actor_type, summary, status, change_type, reason, impact, confidence, before_text, after_text, created_at, actor_user_id, event_kind";
+const CONNECTION_SELECT =
+  "user_id, connection_id, status, last_seen_at, last_agent_name, observed_via, created_at, updated_at";
+
+function serializeSectionPayload(section: CreedSection) {
+  return {
+    content: section.content,
+    template: section.template,
+    agentWritable: section.agentWritable,
+    agentPermission: section.agentPermission,
+  };
+}
+
+function hydrateSection(row: SectionRow): CreedSection {
+  const id = normalizeLegacySectionId(row.section_id);
+  const payloadTemplate =
+    typeof row.payload.template === "string"
+      ? (row.payload.template as SectionTemplate)
+      : undefined;
+  // Read the per-section permission from the dedicated column (the legacy
+  // payload `agentWritable` flag is ignored - the old GitHub-pull bug that set
+  // it false is moot now). Anything outside the enum heals to "propose", the
+  // safe writable default, so no section silently becomes read-only / hidden.
+  const agentPermission = normalizeAgentPermission(row.agent_permission);
+  const content = legacyPayloadToRichTextContent(row.kind, row.payload);
+
+  return {
+    id,
+    kind: "rich-text",
+    template: inferSectionTemplate(row.kind, payloadTemplate),
+    name: row.section_id === "conventions" ? "Operating Principles" : row.name,
+    accent: normalizeLegacyAccent(row.accent),
+    content,
+    agentWritable: permissionToWritable(agentPermission),
+    agentPermission,
+    lastEditedBy: row.last_edited_by,
+    lastEditedType: row.last_edited_type,
+    lastEditedLabel: toRelativeTime(row.last_edited_at) ?? "just now",
+    archived: row.archived_at != null,
+  };
+}
+
+export async function loadActiveCreedSections(
+  client: unknown,
+  userId: string,
+  active: { creedId: string; role: CreedRole; creeds: CreedSummary[] } | null,
+): Promise<CreedSection[]> {
+  const activeEntry = active?.creeds.find((creed) => creed.id === active.creedId);
+  const sharedActive = active && activeEntry?.type === "shared";
+  const db = (sharedActive ? getSupabaseAdminClient() : client) as SupabaseLikeClient;
+  const creedId = active?.creedId ?? (await getPersonalCreedId(db, userId));
+  if (!creedId) return [];
+
+  const [sectionsResult, overridesResult] = await Promise.all([
+    db.from("creed_sections").select("*").eq("creed_id", creedId).is("deleted_at", null).order("position", { ascending: true }),
+    sharedActive
+      ? db.from("creed_member_section_permissions").select("section_id, permission").eq("creed_id", creedId).eq("user_id", userId)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  assertNoError(sectionsResult.error, "Could not load Creed sections.");
+  assertNoError(overridesResult.error, "Could not load section permissions.");
+  const overrides = new Map(
+    ((overridesResult.data as Array<{ section_id: string; permission: AgentPermission }> | null) ?? [])
+      .map((row) => [normalizeLegacySectionId(row.section_id), row.permission]),
+  );
+  return ((sectionsResult.data as SectionRow[] | null) ?? [])
+    .map(hydrateSection)
+    .map((section) => sharedActive
+      ? { ...section, agentPermission: resolveSectionPermission(active.role, overrides.get(section.id)) }
+      : section)
+    .filter((section) => section.agentPermission !== "hidden");
+}
+
+function hydrateProposal(row: ProposalRow): Proposal {
+  return {
+    id: row.id,
+    sectionId: normalizeLegacySectionId(row.section_id),
+    sectionName:
+      row.section_id === "conventions"
+        ? "Operating Principles"
+        : row.section_name,
+    accent: normalizeLegacyAccent(row.accent),
+    agentName: row.agent_name,
+    createdAt: row.created_at,
+    timeLabel: toRelativeTime(row.created_at) ?? "just now",
+    changeType: row.change_type,
+    reason: row.reason,
+    impact: row.impact,
+    confidence: row.confidence,
+    draft: normalizeLegacyProposalDraft(row.draft),
+    status: row.status,
+    baseRevision: row.base_revision,
+  };
+}
+
+// Pending activity rows used to be persisted with `before_text = null`,
+// which made the sidebar diff render only the proposed text as "added"
+// with nothing on the removed side. We now snapshot the section content at
+// proposal-creation time, but for any historic rows still missing it we
+// fall back to the section's CURRENT content here - for a pending entry
+// that's still the right "before" reference because the proposal hasn't
+// been applied yet.
+function hydrateActivityEntries(
+  rows: ActivityRow[],
+  sectionRows: SectionRow[],
+): ActivityEntry[] {
+  const sectionContentById = new Map<string, string>();
+  for (const row of sectionRows) {
+    const section = hydrateSection(row);
+    sectionContentById.set(section.id, section.content);
+  }
+
+  return rows.map((row) => {
+    const entry = hydrateActivity(row);
+    if (entry.status === "pending" && !entry.beforeText) {
+      const fallback = sectionContentById.get(entry.sectionId);
+      if (fallback) {
+        entry.beforeText = fallback;
+      }
+    }
+    return entry;
+  });
+}
+
+function hydrateActivity(row: ActivityRow): ActivityEntry {
+  const status: ActivityStatus =
+    row.status === "accepted" &&
+    row.reason === "Applied directly because approval was off."
+      ? "direct"
+      : row.status;
+
+  return {
+    id: row.id,
+    proposalId: row.proposal_id ?? undefined,
+    createdAt: row.created_at,
+    dayLabel: toDayLabel(row.created_at),
+    sectionId: normalizeLegacySectionId(row.section_id),
+    sectionName:
+      row.section_id === "conventions"
+        ? "Operating Principles"
+        : row.section_name,
+    accent: normalizeLegacyAccent(row.accent),
+    actor: row.actor,
+    actorType: row.actor_type,
+    summary: row.summary,
+    timeLabel: toRelativeTime(row.created_at) ?? "just now",
+    status,
+    changeType: row.change_type,
+    reason: row.reason,
+    impact: row.impact,
+    confidence: row.confidence,
+    beforeText: row.before_text ?? undefined,
+    afterText: row.after_text ?? "",
+  };
+}
+
+function isNoopActivityEntry(entry: ActivityEntry) {
+  if (entry.status === "pending") return false;
+
+  const before = entry.beforeText ?? "";
+  const after = entry.afterText ?? "";
+  const hasBefore = before.trim().length > 0;
+  const hasAfter = after.trim().length > 0;
+
+  if (
+    (entry.status === "direct" || entry.status === "accepted") &&
+    !hasBefore &&
+    !hasAfter
+  ) {
+    return true;
+  }
+
+  return (
+    entry.status === "direct" &&
+    hasBefore &&
+    hasAfter &&
+    before !== after &&
+    richTextContentEquivalent(before, after)
+  );
+}
+
+async function ensureTokenRow(client: unknown, userId: string, creedId: string) {
+  const db = client as SupabaseLikeClient;
+  const data = await readTokenRow(db, userId, creedId);
+
+  if (data) {
+    // Trigger upgrade when the row is legacy (any hash / ciphertext
+    // column missing) OR when a resolved token is empty - the latter
+    // means `resolveSecret` couldn't decrypt the stored ciphertext,
+    // typically because `CREED_ENCRYPTION_SECRET` was rotated. Either
+    // way, regenerate fresh tokens with the current key.
+    if (
+      !data.read_token ||
+      !data.proposal_token ||
+      !data.direct_edit_token ||
+      !data.read_token_hash ||
+      !data.proposal_token_hash ||
+      !data.direct_edit_token_hash ||
+      !data.encrypted_read_token ||
+      !data.encrypted_proposal_token ||
+      !data.encrypted_direct_edit_token
+    ) {
+      const read = tokenFields(data.read_token || generateToken("xt_read"));
+      const proposal = tokenFields(
+        data.proposal_token || generateToken("xt_proposal"),
+      );
+      const directEdit = tokenFields(
+        data.direct_edit_token || generateToken("xt_direct"),
+      );
+      const { data: upgradedRow, error: upgradeError } = await db
+        .from("creed_tokens")
+        .update({
+          // Mirror the encrypted blob into the legacy plaintext columns so
+          // we satisfy any lingering NOT NULL / UNIQUE constraints in
+          // databases that haven't applied 20260502130000. The blob is
+          // ciphertext, never decoded - `resolveSecret` only reads
+          // `encrypted_*`, so nothing readable lives in this slot.
+          read_token: read.encrypted,
+          proposal_token: proposal.encrypted,
+          direct_edit_token: directEdit.encrypted,
+          read_token_hash: read.hash,
+          proposal_token_hash: proposal.hash,
+          direct_edit_token_hash: directEdit.hash,
+          encrypted_read_token: read.encrypted,
+          encrypted_proposal_token: proposal.encrypted,
+          encrypted_direct_edit_token: directEdit.encrypted,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("creed_id", creedId)
+        .select("*")
+        .single();
+
+      assertNoError(upgradeError, "Could not upgrade Creed tokens.");
+      return resolveTokenRow(upgradedRow as TokenRow);
+    }
+
+    return data;
+  }
+
+  const now = new Date().toISOString();
+  const read = tokenFields(generateToken("xt_read"));
+  const proposal = tokenFields(generateToken("xt_proposal"));
+  const directEdit = tokenFields(generateToken("xt_direct"));
+  const nextRow: TokenRow = {
+    creed_id: creedId,
+    user_id: userId,
+    // Mirror the encrypted blob into the legacy plaintext columns for
+    // backwards-compat with schemas that haven't dropped the NOT NULL.
+    // resolveSecret reads only encrypted_*, so this slot holds ciphertext
+    // and is never decoded - no security regression vs writing null.
+    read_token: read.encrypted,
+    proposal_token: proposal.encrypted,
+    direct_edit_token: directEdit.encrypted,
+    read_token_hash: read.hash,
+    proposal_token_hash: proposal.hash,
+    direct_edit_token_hash: directEdit.hash,
+    encrypted_read_token: read.encrypted,
+    encrypted_proposal_token: proposal.encrypted,
+    encrypted_direct_edit_token: directEdit.encrypted,
+    require_approval: true,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const { error: upsertError } = await db.from("creed_tokens").upsert(nextRow, {
+    onConflict: "creed_id",
+    ignoreDuplicates: true,
+  });
+
+  assertNoError(upsertError, "Could not create Creed tokens.");
+
+  for (const delayMs of [0, 30]) {
+    if (delayMs > 0) {
+      await wait(delayMs);
+    }
+
+    const existingAfterWrite = await readTokenRow(db, userId, creedId);
+    if (existingAfterWrite) {
+      return existingAfterWrite;
+    }
+  }
+
+  try {
+    const admin = getSupabaseAdminClient() as unknown as SupabaseLikeClient;
+    const adminExisting = await readTokenRow(admin, userId, creedId);
+    if (adminExisting) {
+      return adminExisting;
+    }
+
+    const adminRow: TokenRow = {
+      ...nextRow,
+      updated_at: new Date().toISOString(),
+    };
+    const { data: createdRow, error: adminError } = await admin
+      .from("creed_tokens")
+      .upsert(adminRow, { onConflict: "creed_id" })
+      .select("*")
+      .single();
+
+    assertNoError(
+      adminError,
+      "Could not create Creed tokens with admin client.",
+    );
+    return createdRow as TokenRow;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /Supabase admin client is not configured/i.test(error.message)
+    ) {
+      throw new Error("Could not load Creed tokens after creation.");
+    }
+
+    throw error;
+  }
+}
+
+// Derives the overall "connected via MCP" status from the per-agent roster.
+// With OAuth there is no separate credential row to read; the roster is the
+// source of truth, and it is ordered most-recent-first.
+function deriveMcpStatus(mcpClients: McpClient[]): {
+  mcpStatus: CreedState["mcpStatus"];
+  mcpLastUsed?: string;
+  mcpLastClientName?: string;
+} {
+  if (mcpClients.length === 0) {
+    return { mcpStatus: "waiting" };
+  }
+  return {
+    mcpStatus: "connected",
+    mcpLastUsed: mcpClients[0]?.lastUsed,
+    mcpLastClientName: mcpClients[0]?.name,
+  };
+}
+
+export function createBlankCreedState(
+  user: User,
+  tokenRow?: Pick<
+    TokenRow,
+    "read_token" | "proposal_token" | "direct_edit_token" | "require_approval"
+  >,
+  mcpClients: McpClient[] = [],
+  githubIntegration?: IntegrationRow | null,
+  versionControl?: VersionControlRow | null,
+  options?: { ignoreLinkedGitHubIdentity?: boolean },
+): CreedState {
+  const name = getUserName(user);
+  const avatarInitials = getAvatarInitials(name);
+  const avatarUrl = getAvatarUrl(user);
+  const readToken = tokenRow?.read_token ?? "";
+  const proposalToken = tokenRow?.proposal_token ?? "";
+  const directEditToken = tokenRow?.direct_edit_token ?? "";
+  const { definitions } = CONNECTION_DEFINITIONS;
+
+  return {
+    ...initialCreedState,
+    user: {
+      name,
+      handle: user.email ? `@${user.email.split("@")[0]}` : "@you",
+      avatarInitials,
+      avatarUrl,
+      email: user.email ?? "",
+    },
+    readUrl: buildReadUrl(readToken),
+    readToken,
+    writeToken: proposalToken,
+    directEditToken,
+    mcpUrl: buildMcpUrl(),
+    ...deriveMcpStatus(mcpClients),
+    mcpClients,
+    sections: [],
+    proposals: [],
+    activity: [],
+    settings: {
+      requireApproval: tokenRow?.require_approval ?? true,
+      integrations: buildIntegrationSettings(user, githubIntegration, {
+        ignoreLinkedIdentity: options?.ignoreLinkedGitHubIdentity ?? false,
+      }),
+      versionControl: buildVersionControlSettings(versionControl),
+    },
+    connections: definitions.map((connection) => ({
+      ...connection,
+      status: "not-connected",
+      lastUsed: undefined,
+    })),
+    onboarding: initialOnboardingState,
+    sectionRevisions: {},
+  };
+}
+
+/**
+ * Cheap "has this user been through onboarding?" probe used by
+ * `app/page.tsx` and the (creed-app) layout to decide between `/file`
+ * (already onboarded) and `/onboarding` (fresh user).
+ *
+ * The signal is the personal `creeds` row itself: the only thing that
+ * creates one is the onboarding claim step (`/api/app/claim` via
+ * `ensurePersonalCreedId`). Deliberately NOT a section-count probe - a
+ * user who deletes or archives every section still has a Creed and must
+ * not be bounced back into first-run onboarding.
+ */
+export async function hasPersistedCreed(
+  client: unknown,
+  userId: string,
+): Promise<boolean> {
+  const db = client as SupabaseLikeClient;
+  const creedId = await getPersonalCreedId(db, userId);
+  return creedId !== null;
+}
+
+// Per-request dedup via React's `cache()`. If multiple server components or
+// nested helpers in the same request all call `loadCreedState(client, user)`,
+// only the first triggers the 7-query Supabase fan-out + token enrichment;
+// the rest receive the same in-flight promise. The cache scope is bounded
+// to a single request, so writes elsewhere (persistCreedState) always see
+// fresh data on the next request - no staleness risk.
+//
+// Cache key is identity-based on `client` and `user`. In practice the
+// supabase client and user objects are stable within a single render tree,
+// so the dedup fires reliably; if either object changes (e.g. impersonation
+// in a server action), the cache treats it as a different call.
+//
+// `proposalLimit` / `activityLimit` let non-display callers (MCP, proposal
+// submissions, GitHub sync) avoid pulling rows they'll never inspect. Activity
+// is also bounded to the product's seven-day retention window at query time, so
+// a delayed cleanup job can never make the UI hydrate stale history.
+export const loadCreedState = cache(
+  async (
+    client: unknown,
+    user: User,
+    options?: {
+      proposalLimit?: number;
+      activityLimit?: number;
+      creedId?: string;
+    },
+  ): Promise<PersistResult> => {
+    return loadCreedStateImpl(client, user, options);
+  },
+);
+
+async function loadCreedStateImpl(
+  client: unknown,
+  user: User,
+  options?: {
+    proposalLimit?: number;
+    activityLimit?: number;
+    creedId?: string;
+  },
+): Promise<PersistResult> {
+  const proposalLimit = options?.proposalLimit ?? 500;
+  const activityLimit = options?.activityLimit ?? 500;
+  const db = client as SupabaseLikeClient;
+  // These five reads are independent of each other; only readMcpClientRows
+  // needs personalCreedId, so run the rest as one wave instead of a serial
+  // chain (was ~5 sequential round-trips, now 2).
+  const [resolvedUser, personalCreedId] = await Promise.all([
+    enrichUserForState(user),
+    options?.creedId
+      ? Promise.resolve(options.creedId)
+      : getPersonalCreedId(db, user.id),
+  ]);
+  // Brand-new / invite-only accounts have no Personal Creed yet. Return a blank
+  // shell instead of throwing into AuthedProviders / app/error.tsx.
+  if (!personalCreedId) {
+    return {
+      state: createBlankCreedState(resolvedUser),
+      hasPersistedCreed: false,
+    };
+  }
+  const [tokenRow, githubIntegration, versionControl] = await Promise.all([
+    ensureTokenRow(db, user.id, personalCreedId),
+    readGithubIntegrationRow(db, user.id, personalCreedId),
+    readVersionControlRow(db, user.id, personalCreedId),
+  ]);
+  const mcpClients = await readMcpClientRows(db, user.id, personalCreedId);
+
+  const [
+    { data: sectionRows, error: sectionError },
+    { data: proposalRows, error: proposalError },
+    { data: activityRows, error: activityError },
+    { data: connectionRows, error: connectionError },
+  ] = await Promise.all([
+    db
+      .from("creed_sections")
+      .select(SECTION_SELECT)
+      .eq("creed_id", personalCreedId)
+      .order("position", { ascending: true }),
+    db
+      .from("creed_proposals")
+      .select(PROPOSAL_SELECT)
+      .eq("creed_id", personalCreedId)
+      .order("created_at", { ascending: false })
+      .limit(proposalLimit),
+    db
+      .from("creed_activity")
+      .select(ACTIVITY_SELECT)
+      .eq("creed_id", personalCreedId)
+      .gte("created_at", getActivityCutoffIso())
+      .order("created_at", { ascending: false })
+      .limit(activityLimit),
+    db
+      .from("creed_connections")
+      .select(CONNECTION_SELECT)
+      .eq("creed_id", personalCreedId)
+      .order("updated_at", { ascending: false }),
+  ]);
+
+  assertNoError(sectionError, "Could not load Creed sections.");
+  assertNoError(proposalError, "Could not load Creed proposals.");
+  assertNoError(activityError, "Could not load Creed activity.");
+  assertNoError(connectionError, "Could not load Creed connections.");
+
+  // No early return when the section list is empty: a creed row with zero
+  // sections is a real, onboarded Creed whose sections were all deleted or
+  // archived. It must load (and keep persisting) as an empty file, not fall
+  // back to the blank pre-onboarding state - that disabled autosave and let
+  // the routing gates bounce the user back into first-run onboarding.
+  const readToken = tokenRow.read_token ?? "";
+  const proposalToken = tokenRow.proposal_token ?? "";
+  const directEditToken = tokenRow.direct_edit_token ?? "";
+  const { definitions } = CONNECTION_DEFINITIONS;
+
+  const connectionMap = new Map(
+    ((connectionRows as ConnectionRow[] | null) ?? []).map((row) => [
+      row.connection_id,
+      row,
+    ]),
+  );
+
+  const baseState = createBlankCreedState(
+    resolvedUser,
+    tokenRow,
+    mcpClients,
+    githubIntegration,
+    versionControl,
+    { ignoreLinkedGitHubIdentity: true },
+  );
+
+  // The relative "Saved Xm ago" label starts from the most recent section
+  // edit, so a fresh page load reflects when the file actually last changed
+  // rather than always reading "just now".
+  const editTimes = ((sectionRows as SectionRow[] | null) ?? [])
+    .map((row) => Date.parse(row.last_edited_at ?? row.updated_at))
+    .filter((ts) => !Number.isNaN(ts));
+  const lastSavedAt = editTimes.length ? Math.max(...editTimes) : null;
+
+  return {
+    state: {
+      ...baseState,
+      lastSavedAt,
+      readUrl: buildReadUrl(readToken),
+      readToken,
+      writeToken: proposalToken,
+      directEditToken,
+      mcpUrl: buildMcpUrl(),
+      ...deriveMcpStatus(mcpClients),
+      mcpClients,
+      sections: ((sectionRows as SectionRow[] | null) ?? []).map(
+        hydrateSection,
+      ),
+      proposals: ((proposalRows as ProposalRow[] | null) ?? []).map(
+        hydrateProposal,
+      ),
+      activity: hydrateActivityEntries(
+        (activityRows as ActivityRow[] | null) ?? [],
+        (sectionRows as SectionRow[] | null) ?? [],
+      ).filter((entry) => !isNoopActivityEntry(entry)),
+      settings: {
+        requireApproval: tokenRow.require_approval,
+        integrations: buildIntegrationSettings(
+          resolvedUser,
+          githubIntegration,
+          {
+            ignoreLinkedIdentity: true,
+          },
+        ),
+        versionControl: buildVersionControlSettings(versionControl),
+      },
+      connections: definitions.map((definition) => {
+        const row = connectionMap.get(definition.id);
+
+        return {
+          ...definition,
+          status: row?.status ?? "not-connected",
+          lastUsed: toRelativeTime(row?.last_seen_at) ?? undefined,
+        };
+      }),
+      sectionRevisions: Object.fromEntries(
+        ((sectionRows as SectionRow[] | null) ?? []).map((row) => [
+          normalizeLegacySectionId(row.section_id),
+          row.revision,
+        ]),
+      ),
+    },
+    hasPersistedCreed: true,
+  };
+}
+
+// ── Shared / active-Creed loading ──────────────────────────────────────────
+
+// The entry point the UI uses to load "the Creed the user is currently in".
+// Personal Creeds go through the untouched loadCreedState (byte-identical
+// behaviour); Shared Creeds go through loadSharedCreedState (admin client,
+// membership + permission filtered). The switcher list is attached to both.
+// `active` comes from resolveActiveCreed (cookie + membership validated); pass
+// null for a brand-new user with no Creed yet.
+export async function loadActiveCreedState(
+  client: unknown,
+  user: User,
+  active: {
+    creedId: string;
+    role: CreedRole;
+    creeds: CreedSummary[];
+  } | null,
+  options?: { proposalLimit?: number; activityLimit?: number },
+): Promise<PersistResult> {
+  const resolvedUser = await enrichUserForState(user);
+  const creeds = enrichCreedSwitcherItems(active?.creeds ?? [], resolvedUser);
+  const activeEntry = active
+    ? (creeds.find((c) => c.id === active.creedId) ?? null)
+    : null;
+
+  if (!active || !activeEntry) {
+    return {
+      state: {
+        ...createBlankCreedState(resolvedUser),
+        creeds,
+        creedId: undefined,
+        creedType: "personal",
+      },
+      hasPersistedCreed: false,
+    };
+  }
+
+  if (active && activeEntry && activeEntry.type === "shared") {
+    return loadSharedCreedState(
+      resolvedUser,
+      active.creedId,
+      active.role,
+      creeds,
+      options,
+    );
+  }
+
+  const personalId =
+    activeEntry.type === "personal"
+      ? activeEntry.id
+      : creeds.find((c) => c.type === "personal")?.id;
+  // Invite-only Shared members (or a missing Personal row) must never hard-throw
+  // through loadCreedState - return a blank personal shell instead.
+  if (!personalId) {
+    return {
+      state: {
+        ...createBlankCreedState(resolvedUser),
+        creeds,
+        creedId: undefined,
+        creedType: "personal",
+      },
+      hasPersistedCreed: false,
+    };
+  }
+  const result = await loadCreedState(client, resolvedUser, {
+    ...options,
+    creedId: personalId,
+  });
+  return {
+    ...result,
+    state: {
+      ...result.state,
+      creeds,
+      creedId: personalId,
+      creedType: "personal",
+    },
+  };
+}
+
+// Load a Shared Creed's state via the service-role admin client, after the
+// caller has validated membership (role passed in). Reads are filtered to what
+// the member may see: Hidden sections (and their proposals/activity) are removed
+// entirely. hasPersistedCreed is returned false so the personal full-state PUT
+// autosave never fires in Shared mode - shared writes go through the
+// per-section API instead.
+export async function loadSharedCreedState(
+  user: User,
+  creedId: string,
+  role: CreedRole,
+  creeds: CreedSwitcherItem[],
+  options?: { proposalLimit?: number; activityLimit?: number },
+): Promise<PersistResult> {
+  const admin = getSupabaseAdminClient() as unknown as SupabaseLikeClient;
+  const proposalLimit = options?.proposalLimit ?? 500;
+  const activityLimit = options?.activityLimit ?? 500;
+  const resolvedUserPromise = enrichUserForState(user);
+  const creedResultPromise = admin
+    .from("creeds")
+    .select("name, avatar_url")
+    .eq("id", creedId)
+    .maybeSingle() as unknown as Promise<{
+    data: {
+      name?: string;
+      avatar_url?: string | null;
+    } | null;
+    error: unknown;
+  }>;
+
+  const [
+    resolvedUser,
+    creedResult,
+    sectionsResult,
+    proposalsResult,
+    activityResult,
+    memberProfilesResult,
+    overridesResult,
+    invitesResult,
+    connectionsResult,
+    mcpClientRows,
+    agentPermissionsResult,
+    sharedGithubIntegration,
+    sharedVersionControlResult,
+  ] = await Promise.all([
+    resolvedUserPromise,
+    creedResultPromise,
+    admin
+      .from("creed_sections")
+      .select(SECTION_SELECT)
+      .eq("creed_id", creedId)
+      .is("deleted_at", null)
+      .order("position", { ascending: true }),
+    admin
+      .from("creed_proposals")
+      .select(PROPOSAL_SELECT)
+      .eq("creed_id", creedId)
+      .order("created_at", { ascending: false })
+      .limit(proposalLimit),
+    admin
+      .from("creed_activity")
+      .select(ACTIVITY_SELECT)
+      .eq("creed_id", creedId)
+      .gte("created_at", getActivityCutoffIso())
+      .order("created_at", { ascending: false })
+      .limit(activityLimit),
+    admin.rpc("get_member_profiles", { p_creed_id: creedId }),
+    admin
+      .from("creed_member_section_permissions")
+      .select("section_id, permission")
+      .eq("creed_id", creedId)
+      .eq("user_id", user.id),
+    admin
+      .from("creed_invites")
+      .select("id, email, role")
+      .eq("creed_id", creedId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: true }),
+    admin
+      .from("creed_connections")
+      .select(CONNECTION_SELECT)
+      .eq("creed_id", creedId)
+      .order("updated_at", { ascending: false }),
+    admin
+      .from("creed_mcp_clients")
+      .select("*")
+      .eq("creed_id", creedId)
+      .order("last_seen_at", { ascending: false }),
+    // The member's OWN per-section agent ceiling for this Shared Creed (the
+    // shared twin of personal agent_permission; no row = 'propose').
+    admin
+      .from("creed_member_agent_permissions")
+      .select("section_id, permission")
+      .eq("creed_id", creedId)
+      .eq("user_id", user.id),
+    // The TEAM's GitHub connection (manager-only): a single team-wide token,
+    // separate from any member's personal GitHub. Members never see it.
+    role === "owner" || role === "admin"
+      ? readSharedGitHubIntegration(creedId).catch(() => null)
+      : Promise.resolve(null),
+    admin
+      .from("creed_version_control")
+      .select("*")
+      .eq("creed_id", creedId)
+      .maybeSingle(),
+  ]);
+
+  const creedRow = creedResult.data as {
+    name?: string;
+    avatar_url?: string | null;
+  } | null;
+  const creedName = creedRow?.name ?? "Shared";
+  const sharedAvatarUrl = creedRow?.avatar_url ?? undefined;
+  const allSectionRows = (sectionsResult.data as SectionRow[] | null) ?? [];
+  const memberRows =
+    (memberProfilesResult.data as Array<{
+      user_id: string;
+      role: CreedRole;
+      email: string;
+      raw_user_meta_data: Record<string, unknown>;
+    }> | null) ?? [];
+  const overrideRows =
+    (overridesResult.data as Array<{
+      section_id: string;
+      permission: AgentPermission;
+    }> | null) ?? [];
+  const inviteRows =
+    (invitesResult.data as Array<{
+      id: string;
+      email: string;
+      role: "admin" | "member";
+    }> | null) ?? [];
+  const overrides = new Map<string, AgentPermission>(
+    overrideRows.map((row) => [
+      normalizeLegacySectionId(row.section_id),
+      row.permission,
+    ]),
+  );
+
+  // Filter sections to what this member may see; build the effective-permission
+  // map. Owner/admin resolve to "direct" on everything (see all).
+  const visibleSectionRows: SectionRow[] = [];
+  const myPermissions: Record<string, AgentPermission> = {};
+  for (const row of allSectionRows) {
+    const id = normalizeLegacySectionId(row.section_id);
+    const effective = resolveSectionPermission(role, overrides.get(id));
+    if (effective === "hidden") continue;
+    visibleSectionRows.push(row);
+    myPermissions[id] = effective;
+  }
+  const visibleIds = new Set(
+    visibleSectionRows.map((row) => normalizeLegacySectionId(row.section_id)),
+  );
+
+  // Roster with display names + real profile pictures (per-member auth lookup;
+  // rosters are small). Built before proposals so a manual (human) proposal can
+  // borrow its author's avatar.
+  const members: CreedMemberSummary[] = memberRows.map((row) => {
+      const memberUser = {
+        id: row.user_id,
+        email: row.email,
+        user_metadata: row.raw_user_meta_data,
+      } as User;
+      const name = getUserName(memberUser);
+      return {
+        userId: row.user_id,
+        name,
+        email: row.email,
+        avatarInitials: getAvatarInitials(name),
+        avatarUrl: getAvatarUrl(memberUser),
+        role: row.role,
+      };
+    });
+  const memberById = new Map(members.map((m) => [m.userId, m]));
+
+  const proposals = ((proposalsResult.data as ProposalRow[] | null) ?? [])
+    .map((row) => {
+      const base = hydrateProposal(row);
+      // author_user_id is set only for a member's manual edit; agent proposals
+      // leave it null. Tag human proposals so the UI shows the person's avatar,
+      // and mark the viewer's own so they get edit/delete instead of approve.
+      const authorId = row.author_user_id ?? null;
+      if (!authorId) return base;
+      const member = memberById.get(authorId);
+      return {
+        ...base,
+        authorType: "user" as const,
+        authorAvatarUrl: member?.avatarUrl,
+        authorInitials:
+          member?.avatarInitials ?? getAvatarInitials(base.agentName),
+        mine: authorId === user.id,
+      };
+    })
+    .filter(
+      (p) => visibleIds.has(p.sectionId) || p.sectionId === "new-section",
+    );
+  // The sidebar is for content: edits, proposals, section lifecycle. Admin /
+  // config events (access changes, role changes, membership, billing/BYOK) are
+  // audit-log-only, so drop them here.
+  const HIDDEN_ACTIVITY_KINDS = new Set([
+    "permission",
+    "role",
+    "membership",
+    "byok",
+    "billing",
+  ]);
+  const activityRows = (
+    (activityResult.data as ActivityRow[] | null) ?? []
+  ).filter((row) => !HIDDEN_ACTIVITY_KINDS.has(row.event_kind ?? ""));
+  const activity = hydrateActivityEntries(activityRows, visibleSectionRows)
+    .map((entry, index) => {
+      // A person's activity borrows their profile picture from the roster; an
+      // agent keeps its glyph (resolved from the name in the UI).
+      if (entry.actorType !== "user") return entry;
+      const member = memberById.get(activityRows[index]?.actor_user_id ?? "");
+      return {
+        ...entry,
+        avatarUrl: member?.avatarUrl,
+        avatarInitials:
+          member?.avatarInitials ?? getAvatarInitials(entry.actor),
+      };
+    })
+    .filter((entry) => !entry.sectionId || visibleIds.has(entry.sectionId))
+    .filter((entry) => !isNoopActivityEntry(entry));
+
+  const shared: SharedContext = {
+    creedId,
+    creedName,
+    avatarUrl: sharedAvatarUrl,
+    myRole: role,
+    members,
+    myPermissions,
+    // Whether the shared "Creed" GitHub OAuth App is configured on this
+    // deployment. Managers only need it to decide whether to offer "Connect".
+    githubOAuthConfigured: isGitHubOAuthAppConfigured(),
+    // Pending invites are a management view and can be revoked before use.
+    invites:
+      role === "owner" || role === "admin"
+        ? inviteRows.map((invite) => ({
+            id: invite.id,
+            email: invite.email,
+            role: invite.role,
+          }))
+        : undefined,
+  };
+
+  const mcpClients = ((mcpClientRows.data as McpClientRow[] | null) ?? []).map(
+    hydrateMcpClient,
+  );
+  const { definitions } = CONNECTION_DEFINITIONS;
+  const connectionMap = new Map(
+    ((connectionsResult.data as ConnectionRow[] | null) ?? []).map((row) => [
+      row.connection_id,
+      row,
+    ]),
+  );
+
+  const editTimes = visibleSectionRows
+    .map((row) => Date.parse(row.last_edited_at ?? row.updated_at))
+    .filter((ts) => !Number.isNaN(ts));
+
+  // The member's own agent ceilings, laid over the hydrated sections so the
+  // settings Agent-edit-behaviour UI and MCP read the SAME per-member value.
+  // The shared creed_sections.agent_permission column is meaningless for a
+  // Shared file (it cannot vary per member), so it is ignored here.
+  const agentPermissionRows =
+    (agentPermissionsResult.data as Array<{
+      section_id: string;
+      permission: AgentPermission;
+    }> | null) ?? [];
+  const myAgentPermissions = new Map<string, AgentPermission>(
+    agentPermissionRows.map((row) => [
+      normalizeLegacySectionId(row.section_id),
+      row.permission,
+    ]),
+  );
+
+  // Version control targets the Shared file but is a manager tool: only
+  // owner/admin see the config (and the file-screen push affordances it
+  // enables); members get the blank not-configured shape.
+  const sharedVersionControlRow =
+    role === "owner" || role === "admin"
+      ? ((sharedVersionControlResult.data as VersionControlRow | null) ?? null)
+      : null;
+
+  // The team GitHub connection status feeds settings.integrations.github so the
+  // file-screen push affordances + the Shared settings screen read one source.
+  // It is the TEAM's connection, not the manager's personal one, so we ignore
+  // the caller's linked GitHub identity when deriving status (createBlankCreedState
+  // option below). Only provider_login + status are read downstream.
+  const githubRowForState: IntegrationRow | null = sharedGithubIntegration
+    ? ({
+        creed_id: creedId,
+        provider: "github",
+        status: sharedGithubIntegration.status,
+        provider_account_id: sharedGithubIntegration.providerAccountId,
+        provider_login: sharedGithubIntegration.providerLogin,
+        encrypted_access_token: null,
+        encrypted_refresh_token: null,
+        token_expires_at: null,
+        connected_by: null,
+        created_at: "",
+        updated_at: "",
+      } satisfies IntegrationRow)
+    : null;
+
+  const base = createBlankCreedState(
+    resolvedUser,
+    undefined,
+    [],
+    githubRowForState,
+    sharedVersionControlRow,
+    { ignoreLinkedGitHubIdentity: true },
+  );
+  return {
+    state: {
+      ...base,
+      creedId,
+      creedType: "shared",
+      creeds,
+      shared,
+      lastSavedAt: editTimes.length ? Math.max(...editTimes) : null,
+      // Shared uses OAuth MCP; the legacy bearer tokens are personal-only.
+      readUrl: "",
+      readToken: "",
+      writeToken: "",
+      directEditToken: "",
+      mcpUrl: buildMcpUrl(),
+      ...deriveMcpStatus(mcpClients),
+      mcpClients,
+      sections: visibleSectionRows.map(hydrateSection).map((section) => {
+        const agentPermission = myAgentPermissions.get(section.id) ?? "propose";
+        return {
+          ...section,
+          agentPermission,
+          agentWritable: agentPermission === "direct",
+        };
+      }),
+      proposals,
+      activity,
+      connections: definitions.map((definition) => {
+        const row = connectionMap.get(definition.id);
+        return {
+          ...definition,
+          status: row?.status ?? "not-connected",
+          lastUsed: toRelativeTime(row?.last_seen_at) ?? undefined,
+        };
+      }),
+      sectionRevisions: Object.fromEntries(
+        visibleSectionRows.map((row) => [
+          normalizeLegacySectionId(row.section_id),
+          row.revision,
+        ]),
+      ),
+    },
+    hasPersistedCreed: false,
+  };
+}
+
+export async function persistCreedState(
+  client: unknown,
+  userId: string,
+  state: CreedState,
+  targetCreedId?: string,
+) {
+  const db = client as SupabaseLikeClient;
+  const creedId = targetCreedId
+    ? await getOwnedPersonalCreedId(db, userId, targetCreedId)
+    : await getPersonalCreedId(db, userId);
+  if (!creedId) {
+    throw new Error("Could not resolve the personal Creed.");
+  }
+  const [
+    currentSectionsResult,
+    existingProposalsResult,
+    existingActivityResult,
+    tokenSettingsResult,
+  ] = await Promise.all([
+    db
+      .from("creed_sections")
+      .select(
+        "section_id, position, kind, name, accent, payload, agent_permission, revision, last_edited_by, last_edited_type, last_edited_at, archived_at",
+      )
+      .eq("creed_id", creedId),
+    db
+      .from("creed_proposals")
+      .select("id, section_id, section_name, accent, agent_name, change_type, reason, impact, confidence, draft, status, base_revision, created_at")
+      .eq("creed_id", creedId),
+    db
+      .from("creed_activity")
+      .select("id")
+      .eq("creed_id", creedId)
+      .gte("created_at", getActivityCutoffIso()),
+    db
+      .from("creed_tokens")
+      .select("require_approval")
+      .eq("creed_id", creedId)
+      .maybeSingle(),
+  ]);
+
+  assertNoError(
+    currentSectionsResult.error,
+    "Could not load current section revisions.",
+  );
+  assertNoError(
+    existingProposalsResult.error,
+    "Could not load current proposals.",
+  );
+  assertNoError(
+    existingActivityResult.error,
+    "Could not load current activity ids.",
+  );
+  assertNoError(
+    tokenSettingsResult.error,
+    "Could not load Creed settings.",
+  );
+
+  const currentSectionRows =
+    (currentSectionsResult.data as Array<{
+      section_id: string;
+      position: number;
+      kind: CreedSection["kind"];
+      name: string;
+      accent: AccentKey;
+      payload: Record<string, unknown>;
+      agent_permission?: string | null;
+      revision: number;
+      last_edited_by?: string;
+      last_edited_type?: ActorType;
+      last_edited_at?: string;
+      archived_at?: string | null;
+    }> | null) ?? [];
+  const currentSections = new Map<
+    string,
+    {
+      kind: CreedSection["kind"];
+      position: number;
+      name: string;
+      accent: AccentKey;
+      payload: Record<string, unknown>;
+      agentPermission?: string | null;
+      revision: number;
+      lastEditedBy?: string;
+      lastEditedType?: ActorType;
+      lastEditedAt?: string;
+      archivedAt?: string | null;
+    }
+  >(
+    currentSectionRows.map((row) => [
+      normalizeLegacySectionId(row.section_id),
+      {
+        kind: row.kind,
+        position: row.position,
+        name: row.name,
+        accent: row.accent,
+        payload: row.payload,
+        agentPermission: row.agent_permission,
+        revision: row.revision,
+        lastEditedBy: row.last_edited_by,
+        lastEditedType: row.last_edited_type,
+        lastEditedAt: row.last_edited_at,
+        archivedAt: row.archived_at,
+      },
+    ]),
+  );
+  type ExistingProposal = {
+    id: string;
+    section_id: string;
+    section_name: string;
+    accent: string;
+    agent_name: string;
+    change_type: string;
+    reason: string;
+    impact: string;
+    confidence: string;
+    draft: unknown;
+    status: string;
+    base_revision: number | null;
+    created_at: string;
+  };
+  const existingProposalById = new Map(
+    ((existingProposalsResult.data as ExistingProposal[] | null) ?? []).map(
+      (row) => [row.id, row],
+    ),
+  );
+  const existingProposalIds = new Set(existingProposalById.keys());
+  const existingActivityIds = new Set(
+    ((existingActivityResult.data as Array<{ id: string }> | null) ?? []).map(
+      (row) => row.id,
+    ),
+  );
+
+  const now = new Date().toISOString();
+  const sectionRows = state.sections.flatMap((section, index) => {
+    const payload = serializeSectionPayload(section);
+    const current = currentSections.get(section.id);
+    const contentChanged =
+      JSON.stringify(current?.payload ?? null) !== JSON.stringify(payload) ||
+      current?.kind !== section.kind ||
+      current?.name !== section.name ||
+      current?.accent !== section.accent;
+    const metadataChanged =
+      current?.position !== index ||
+      current?.agentPermission !== section.agentPermission ||
+      current?.lastEditedBy !== section.lastEditedBy ||
+      current?.lastEditedType !== section.lastEditedType ||
+      Boolean(current?.archivedAt) !== section.archived;
+
+    if (current && !contentChanged && !metadataChanged) return [];
+
+    return [{
+      creed_id: creedId,
+      user_id: userId,
+      section_id: section.id,
+      position: index,
+      kind: section.kind,
+      name: section.name,
+      accent: section.accent,
+      payload,
+      agent_permission: section.agentPermission,
+      last_edited_by: section.lastEditedBy,
+      last_edited_type: section.lastEditedType,
+      last_edited_at: contentChanged ? now : (current?.lastEditedAt ?? now),
+      revision: contentChanged
+        ? (current?.revision ?? 0) + 1
+        : (current?.revision ?? 1),
+      // Preserve the original archive time so "archived" ordering is stable;
+      // null clears it on restore. Metadata only - does not bump revision.
+      archived_at: section.archived ? (current?.archivedAt ?? now) : null,
+      created_at: now,
+      updated_at: now,
+    }];
+  });
+
+  // Stale proposals are resolved, not persisted: they used to be written back
+  // with status "stale" forever (removable only covered accepted/rejected), so
+  // every refresh reloaded them and they accumulated. The client now drops
+  // them from its list on resolution; this filter is the belt-and-braces.
+  const persistableProposals = state.proposals.filter(
+    (proposal) => proposal.status !== "stale",
+  );
+  const proposalRows = persistableProposals
+    .map((proposal) => ({
+    id: proposal.id,
+    creed_id: creedId,
+    user_id: userId,
+    section_id: proposal.sectionId,
+    section_name: proposal.sectionName,
+    accent: proposal.accent,
+    agent_name: proposal.agentName,
+    change_type: proposal.changeType,
+    reason: proposal.reason,
+    impact: proposal.impact,
+    confidence: proposal.confidence,
+    draft: proposal.draft,
+    status: proposal.status,
+    base_revision: proposal.baseRevision ?? null,
+    created_at: proposal.createdAt ?? now,
+      updated_at: now,
+    }))
+    .filter((row) => {
+      const current = existingProposalById.get(row.id);
+      if (!current) return true;
+      return current.section_id !== row.section_id ||
+        current.section_name !== row.section_name ||
+        current.accent !== row.accent ||
+        current.agent_name !== row.agent_name ||
+        current.change_type !== row.change_type ||
+        current.reason !== row.reason ||
+        current.impact !== row.impact ||
+        current.confidence !== row.confidence ||
+        JSON.stringify(current.draft) !== JSON.stringify(row.draft) ||
+        current.status !== row.status ||
+        current.base_revision !== row.base_revision ||
+        current.created_at !== row.created_at;
+    });
+
+  const proposalIds = persistableProposals.map((proposal) => proposal.id);
+  const knownProposalIds = new Set(proposalIds);
+  const activityRows = state.activity
+    .filter((entry) => !isNoopActivityEntry(entry))
+    .filter((entry) => !existingActivityIds.has(entry.id))
+    .map((entry) => ({
+      id: entry.id,
+      creed_id: creedId,
+      user_id: userId,
+      proposal_id:
+        entry.proposalId && knownProposalIds.has(entry.proposalId)
+          ? entry.proposalId
+          : null,
+      section_id: entry.sectionId,
+      section_name: entry.sectionName,
+      accent: entry.accent,
+      actor: entry.actor,
+      actor_type: entry.actorType,
+      summary: entry.summary,
+      status: entry.status,
+      change_type: entry.changeType,
+      reason: entry.reason,
+      impact: entry.impact,
+      confidence: entry.confidence,
+      before_text: entry.beforeText ?? null,
+      after_text: entry.afterText,
+      created_at: entry.createdAt ?? now,
+    }));
+
+  const sectionIds = state.sections.map((section) => section.id);
+
+  if (sectionRows.length > 0) {
+    const { error } = await db
+      .from("creed_sections")
+      .upsert(sectionRows, { onConflict: "creed_id,section_id" });
+    assertNoError(error, "Could not persist Creed sections.");
+  }
+
+  if (proposalRows.length > 0) {
+    const { error } = await db
+      .from("creed_proposals")
+      .upsert(proposalRows, { onConflict: "id" });
+    assertNoError(error, "Could not persist Creed proposals.");
+  }
+
+  if (activityRows.length > 0) {
+    const { error } = await db
+      .from("creed_activity")
+      .upsert(activityRows, { onConflict: "id", ignoreDuplicates: true });
+    assertNoError(error, "Could not persist Creed activity.");
+  }
+
+  const versionControlRow = {
+    creed_id: creedId,
+    configured_by: userId,
+    provider: "github" as const,
+    repo_owner: state.settings.versionControl.repoOwner || null,
+    repo_name: state.settings.versionControl.repoName || null,
+    branch: state.settings.versionControl.branch || null,
+    path: state.settings.versionControl.path,
+    last_remote_sha: state.settings.versionControl.lastRemoteSha ?? null,
+    last_remote_message:
+      state.settings.versionControl.lastRemoteMessage ?? null,
+    last_remote_committed_at:
+      state.settings.versionControl.lastRemoteCommittedAt ?? null,
+    last_synced_content_hash:
+      state.settings.versionControl.lastSyncedContentHash ?? null,
+    sync_status:
+      state.settings.versionControl.repoOwner &&
+      state.settings.versionControl.repoName &&
+      state.settings.versionControl.branch
+        ? state.settings.versionControl.syncStatus
+        : "not-configured",
+    updated_at: now,
+    created_at: now,
+  };
+
+  const { error: versionControlError } = await db
+    .from("creed_version_control")
+    .upsert(versionControlRow, { onConflict: "creed_id" });
+  assertNoError(
+    versionControlError,
+    "Could not persist version control settings.",
+  );
+
+  if (sectionIds.length > 0) {
+    const removableSectionIds = currentSectionRows
+      .map((row) => row.section_id)
+      .filter(
+        (id) =>
+          !sectionIds.includes(normalizeLegacySectionId(id)) ||
+          (id === "conventions" && sectionIds.includes("operating-principles")),
+      );
+
+    // Only issue the delete when there's something to remove. The previous
+    // guard swallowed any error whose message merely contained "in" (which
+    // catches "timeout", "connection", "invalid input") to tolerate an empty
+    // `.in()` list; skipping the call when the list is empty is the real fix
+    // and lets every genuine delete error surface.
+    if (removableSectionIds.length > 0) {
+      const { error } = await db
+        .from("creed_sections")
+        .delete()
+        .eq("creed_id", creedId)
+        .in("section_id", removableSectionIds);
+      assertNoError(error, "Could not remove deleted sections.");
+    }
+  }
+
+  const resolvedProposalIds = new Set(
+    state.activity
+      .filter(
+        (entry) =>
+          (entry.status === "accepted" ||
+            entry.status === "rejected" ||
+            entry.status === "stale") &&
+          Boolean(entry.proposalId),
+      )
+      .map((entry) => entry.proposalId as string),
+  );
+  const removableProposalIds = Array.from(existingProposalIds).filter(
+    (id) => !knownProposalIds.has(id) && resolvedProposalIds.has(id),
+  );
+
+  if (removableProposalIds.length > 0) {
+    const { error: removeError } = await db
+      .from("creed_proposals")
+      .delete()
+      .eq("creed_id", creedId)
+      .in("id", removableProposalIds);
+    assertNoError(removeError, "Could not remove resolved proposals.");
+  }
+
+  const tokenSettings = tokenSettingsResult.data as {
+    require_approval: boolean;
+  } | null;
+  if (!tokenSettings) {
+    await ensureTokenRow(db, userId, creedId);
+  }
+  if (tokenSettings?.require_approval !== state.settings.requireApproval) {
+    const { error: tokenError } = await db
+      .from("creed_tokens")
+      .update({
+        require_approval: state.settings.requireApproval,
+        updated_at: now,
+      })
+      .eq("creed_id", creedId);
+    assertNoError(tokenError, "Could not persist Creed settings.");
+  }
+}
+
+export async function updatePersonalSectionContent(
+  client: unknown,
+  userId: string,
+  params: {
+    creedId: string;
+    sectionId: string;
+    baseRevision: number;
+    content: string;
+  },
+): Promise<
+  | { ok: true; revision: number }
+  | {
+      ok: false;
+      code: "forbidden" | "not_found" | "conflict" | "failed";
+      error: string;
+      currentRevision?: number;
+    }
+> {
+  const db = client as SupabaseLikeClient;
+  const personalCreedId = await getPersonalCreedId(db, userId);
+  if (personalCreedId !== params.creedId) {
+    return { ok: false, code: "forbidden", error: "You cannot edit this Creed." };
+  }
+
+  const currentResult = await db
+    .from("creed_sections")
+    .select("payload, revision")
+    .eq("creed_id", params.creedId)
+    .eq("section_id", params.sectionId)
+    .maybeSingle();
+  if (currentResult.error) {
+    return { ok: false, code: "failed", error: "Could not load the section." };
+  }
+  const current = currentResult.data as {
+    payload: Record<string, unknown> & { content?: string };
+    revision: number;
+  } | null;
+  if (!current) {
+    return { ok: false, code: "not_found", error: "Section not found." };
+  }
+  if (current.revision !== params.baseRevision) {
+    return {
+      ok: false,
+      code: "conflict",
+      error: "This section changed while you were editing.",
+      currentRevision: current.revision,
+    };
+  }
+  if (richTextContentEquivalent(current.payload.content ?? "", params.content)) {
+    return { ok: true, revision: current.revision };
+  }
+
+  const nextRevision = current.revision + 1;
+  const updateResult = await db
+    .from("creed_sections")
+    .update({
+      payload: { ...current.payload, content: params.content },
+      revision: nextRevision,
+      last_edited_by: "You",
+      last_edited_type: "user",
+      last_edited_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("creed_id", params.creedId)
+    .eq("section_id", params.sectionId)
+    .eq("revision", current.revision)
+    .select("revision")
+    .maybeSingle();
+  if (updateResult.error) {
+    return { ok: false, code: "failed", error: "Could not save the section." };
+  }
+  const updated = updateResult.data as { revision: number } | null;
+  if (!updated) {
+    return {
+      ok: false,
+      code: "conflict",
+      error: "This section changed while you were editing.",
+      currentRevision: current.revision + 1,
+    };
+  }
+  return { ok: true, revision: updated.revision };
+}
+
+export async function recordConnectionUsage(
+  client: unknown,
+  userId: string,
+  integrationId?: string | null,
+  agentName?: string | null,
+  observedVia: "read" | "proposal" = "read",
+  creedId?: string | null,
+) {
+  const db = client as SupabaseLikeClient;
+  const targetCreedId = creedId ?? (await getPersonalCreedId(db, userId));
+  if (!targetCreedId) {
+    throw new Error("Could not resolve Creed for connection usage.");
+  }
+  const connectionId = normalizeIntegrationId(
+    integrationId ?? inferIntegrationId(agentName),
+  );
+  const now = new Date().toISOString();
+
+  const { error } = await db.from("creed_connections").upsert(
+    {
+      creed_id: targetCreedId,
+      user_id: userId,
+      connection_id: connectionId,
+      status: "connected",
+      last_seen_at: now,
+      last_agent_name: agentName ?? null,
+      observed_via: observedVia,
+      created_at: now,
+      updated_at: now,
+    },
+    { onConflict: "creed_id,connection_id" },
+  );
+
+  assertNoError(error, "Could not record Creed connection usage.");
+}
+
+async function findCredentialByTokenHash(
+  db: SupabaseLikeClient,
+  table: string,
+  hashColumn: string,
+  token: string,
+  errorMessage: string,
+): Promise<{ userId: string; creedId: string } | null> {
+  const tokenHash = hashSecret(token);
+  const { data, error } = await db
+    .from(table)
+    .select("user_id, creed_id")
+    .eq(hashColumn, tokenHash)
+    .maybeSingle();
+
+  assertNoError(error, errorMessage);
+  const row = data as { user_id: string; creed_id: string } | null;
+  return row ? { userId: row.user_id, creedId: row.creed_id } : null;
+}
+
+export async function findUserIdByReadToken(client: unknown, token: string) {
+  return findCredentialByTokenHash(
+    client as SupabaseLikeClient,
+    "creed_tokens",
+    "read_token_hash",
+    token,
+    "Could not verify read token.",
+  );
+}
+
+export async function findUserIdByProposalToken(
+  client: unknown,
+  token: string,
+) {
+  return findCredentialByTokenHash(
+    client as SupabaseLikeClient,
+    "creed_tokens",
+    "proposal_token_hash",
+    token,
+    "Could not verify proposal token.",
+  );
+}
+
+export async function findUserIdByDirectEditToken(
+  client: unknown,
+  token: string,
+) {
+  return findCredentialByTokenHash(
+    client as SupabaseLikeClient,
+    "creed_tokens",
+    "direct_edit_token_hash",
+    token,
+    "Could not verify direct edit token.",
+  );
+}
+
+// Records that an MCP client read the user's Creed: bumps the per-agent roster
+// (creed_mcp_clients) and the daily read rollup. The overall "connected / last
+// seen" status shown in the UI is derived from this roster, so there is no
+// separate credential row to touch.
+export async function recordMcpClientUsage(
+  client: unknown,
+  userId: string,
+  clientName?: string | null,
+  creedId?: string | null,
+) {
+  const db = client as SupabaseLikeClient;
+  const targetCreedId = creedId ?? (await getPersonalCreedId(db, userId));
+  if (!targetCreedId) {
+    throw new Error("Could not resolve Creed for MCP usage.");
+  }
+  const now = new Date().toISOString();
+  const normalizedClientName = clientName?.trim() || null;
+  const hasSpecificClientName =
+    normalizedClientName !== null &&
+    normalizedClientName.toLowerCase() !== "mcp client";
+
+  if (hasSpecificClientName) {
+    const clientId = normalizeMcpClientId(normalizedClientName);
+    const { error: clientError } = await db.from("creed_mcp_clients").upsert(
+      {
+        creed_id: targetCreedId,
+        user_id: userId,
+        client_id: clientId,
+        client_name: normalizedClientName,
+        last_seen_at: now,
+        // Omit created_at so the column default seeds it on first insert and a
+        // later read never resets first-seen (onConflict would overwrite it).
+        updated_at: now,
+      },
+      { onConflict: "creed_id,client_id" },
+    );
+
+    assertNoError(clientError, "Could not record MCP client usage.");
+
+    // Bump the per-agent daily read rollup that powers the MCP health
+    // dashboard. Best-effort: a failed counter must never break a read.
+    const rpcClient = db as unknown as {
+      rpc: (
+        fn: string,
+        params: Record<string, unknown>,
+      ) => Promise<{ error: { message: string } | null }>;
+    };
+    const { error: readEventError } = await rpcClient.rpc(
+      "increment_mcp_read_for_creed",
+      {
+        p_creed_id: targetCreedId,
+        p_reader_user_id: userId,
+        p_client_id: clientId,
+        p_day: now.slice(0, 10),
+      },
+    );
+    if (readEventError) {
+      log.warn("Could not record MCP read event", {
+        message: readEventError.message,
+      });
+    }
+  }
+
+  await recordConnectionUsage(
+    db,
+    userId,
+    "mcp",
+    hasSpecificClientName ? normalizedClientName : null,
+    "read",
+    targetCreedId,
+  );
+}
+
+export async function recordCliAgentUsage(
+  client: unknown,
+  userId: string,
+  tokenId: string,
+  agentIcon: CliAttributableAgentId,
+  creedId: string,
+) {
+  const db = client as SupabaseLikeClient;
+  const now = new Date().toISOString();
+  const { error } = await db.from("creed_mcp_clients").upsert(
+    {
+      creed_id: creedId,
+      user_id: userId,
+      client_id: `cli-${tokenId}-${agentIcon}`,
+      client_name: `Creed CLI via ${agentIcon}`,
+      last_seen_at: now,
+      updated_at: now,
+    },
+    { onConflict: "creed_id,client_id" },
+  );
+  assertNoError(error, "Could not record CLI agent usage.");
+}
+
+export async function buildAgentPayloadForToken(
+  client: unknown,
+  token: string,
+  integrationId?: string | null,
+) {
+  const db = client as SupabaseLikeClient;
+  const credential = await findUserIdByReadToken(db, token);
+  if (!credential) {
+    return null;
+  }
+  const { userId, creedId } = credential;
+
+  if (!db.auth?.admin?.getUserById) {
+    throw new Error("Supabase admin getUserById is not available.");
+  }
+
+  const { data: userData, error: userError } =
+    await db.auth.admin.getUserById(userId);
+
+  if (userError || !userData?.user) {
+    throw new Error(userError?.message || "Could not load token owner.");
+  }
+
+  const { state } = await loadCreedState(db, userData.user, {
+    proposalLimit: 100,
+    activityLimit: 100,
+    creedId,
+  });
+  await recordConnectionUsage(
+    db,
+    userId,
+    integrationId,
+    integrationId ?? "Custom Agent",
+    "read",
+    creedId,
+  );
+
+  return {
+    userId,
+    creedId,
+    state,
+    payload: buildAgentReadPayload(state, {
+      proposalUrl: buildProposalUrl(),
+      directEditUrl: buildDirectEditUrl(),
+      docsUrl: `${getSiteUrl()}/docs`,
+    }),
+  };
+}

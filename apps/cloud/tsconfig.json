@@ -1,0 +1,18 @@
+{
+  "extends": "../../packages/creed-app/tsconfig.base.json",
+  "compilerOptions": {
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["../../packages/creed-app/*"],
+      "@creed/cloud/*": ["../../packages/creed-cloud/*"],
+      "@creed/integrations/*": ["../../packages/integrations/*"],
+      "@creed/persistence/supabase/*": ["../../packages/persistence/supabase-client/*"],
+      "@creed/core/*": ["../../packages/creed-core/*"],
+      "@creed/ui/*": ["../../packages/creed-ui/*"],
+      "@creed/edition/*": ["./edition/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts", "../../packages/creed-app/**/*.ts", "../../packages/creed-app/**/*.tsx", "../../packages/creed-cloud/**/*.ts", "../../packages/creed-cloud/**/*.tsx"],
+  "exclude": ["node_modules", "../../packages/creed-app/tests"]
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Comment"
+  short_description: "Keep source comments essential"
+  default_prompt: "Audit or improve these source comments so only durable, non-obvious maintainer guidance remains."

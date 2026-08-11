@@ -1,0 +1,15 @@
+{
+  "name": "@creed/core",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./*": "./*.ts"
+  },
+  "dependencies": {
+    "sanitize-html": "^2.16.0"
+  },
+  "devDependencies": {
+    "@types/sanitize-html": "^2.16.1"
+  }
+}
