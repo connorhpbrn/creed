@@ -1736,6 +1736,20 @@ export function CreedProvider({
         return { ok: false, error: data.error ?? "Could not switch Creed." };
       }
 
+      const targetCreed = (latestStateRef.current.creeds ?? []).find(
+        (creed) => creed.id === creedId,
+      );
+      const mobileSharedSwitch =
+        window.matchMedia("(max-width: 767px)").matches &&
+        (latestStateRef.current.creedType === "shared" ||
+          targetCreed?.type === "shared");
+      if (mobileSharedSwitch) {
+        // Reload after activation so mobile surfaces never observe mixed state
+        // while entering or leaving a Shared Creed.
+        window.location.reload();
+        return { ok: true };
+      }
+
       const stateResponse = await fetch("/api/app/state", {
         method: "GET",
         cache: "no-store",
