@@ -19,12 +19,22 @@ export default function RouteError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Surface to Vercel logs alongside the digest the user sees.
     console.error("[route-error]", {
       message: error.message,
       digest: error.digest,
       stack: error.stack,
     });
+    void fetch("/api/app/client-errors", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        digest: error.digest,
+      }),
+      keepalive: true,
+    }).catch(() => {});
   }, [error]);
 
   return (

@@ -701,6 +701,15 @@ export function CreedProvider({
       setSectionPresence({});
       return;
     }
+    if (
+      window.matchMedia("(max-width: 767px)").matches ||
+      typeof WebSocket === "undefined"
+    ) {
+      // Presence is an enhancement. Mobile keeps the durable polling and
+      // broadcast sync paths without opening a browser-dependent channel.
+      setSectionPresence({});
+      return;
+    }
     const supabase = getSupabaseBrowserClient();
     // Keyed by email so a member's multiple tabs collapse to one presence;
     // the random fallback keeps two email-less members from sharing a key
@@ -1734,20 +1743,6 @@ export function CreedProvider({
           error?: string;
         };
         return { ok: false, error: data.error ?? "Could not switch Creed." };
-      }
-
-      const targetCreed = (latestStateRef.current.creeds ?? []).find(
-        (creed) => creed.id === creedId,
-      );
-      const mobileSharedSwitch =
-        window.matchMedia("(max-width: 767px)").matches &&
-        (latestStateRef.current.creedType === "shared" ||
-          targetCreed?.type === "shared");
-      if (mobileSharedSwitch) {
-        // Reload after activation so mobile surfaces never observe mixed state
-        // while entering or leaving a Shared Creed.
-        window.location.reload();
-        return { ok: true };
       }
 
       const stateResponse = await fetch("/api/app/state", {

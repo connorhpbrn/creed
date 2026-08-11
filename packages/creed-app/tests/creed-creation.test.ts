@@ -91,20 +91,16 @@ test("switcher keeps creation and identity affordances visible", async () => {
   assert.doesNotMatch(dialog, /setupPath/);
 });
 
-test("mobile Shared switches reload after activation before replacing state", async () => {
+test("mobile Shared switches skip realtime presence without forcing a reload", async () => {
   const provider = await source("components/creed/creed-provider.tsx");
-  const activation = provider.indexOf('fetch("/api/app/creeds/activate"');
-  const mobileReload = provider.indexOf(
+  const presenceEffect = provider.indexOf(
     'window.matchMedia("(max-width: 767px)").matches',
-    activation,
   );
-  const stateLoad = provider.indexOf('fetch("/api/app/state"', activation);
+  const realtimeChannel = provider.indexOf("getSupabaseBrowserClient()", presenceEffect);
 
-  assert.notEqual(activation, -1);
-  assert.ok(mobileReload > activation);
-  assert.ok(stateLoad > mobileReload);
-  assert.match(provider.slice(activation, stateLoad), /targetCreed\?\.type === "shared"/);
-  assert.match(provider.slice(activation, stateLoad), /creedType === "shared"/);
-  assert.match(provider.slice(mobileReload, stateLoad), /window\.location\.reload\(\)/);
-  assert.match(provider.slice(mobileReload, stateLoad), /return \{ ok: true \}/);
+  assert.notEqual(presenceEffect, -1);
+  assert.ok(realtimeChannel > presenceEffect);
+  assert.match(provider.slice(presenceEffect, realtimeChannel), /typeof WebSocket/);
+  assert.match(provider.slice(presenceEffect, realtimeChannel), /return;/);
+  assert.doesNotMatch(provider, /window\.location\.reload\(\)/);
 });
