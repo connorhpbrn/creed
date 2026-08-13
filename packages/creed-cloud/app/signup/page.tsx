@@ -4,6 +4,7 @@ import { AuthScreen } from "@creed/cloud/components/auth/auth-screen";
 import { sanitizeNextPath } from "@/lib/safe-next";
 import { isSupabaseConfigured } from "@creed/persistence/supabase/env";
 import { createSupabaseServerClient } from "@creed/persistence/supabase/server";
+import { canAccessCloud, isPrivateCloud } from "@creed/cloud/lib/cloud-access";
 
 // Credential surface: kept under the strict nonce CSP, which requires
 // request-time rendering (see lib/csp-policy.ts).
@@ -29,9 +30,19 @@ export default async function SignupPage({
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
-      redirect(nextPath);
+      if (canAccessCloud(user.email)) {
+        redirect(nextPath);
+      }
+      await supabase.auth.signOut();
     }
   }
 
-  return <AuthScreen mode="signup" configured={configured} nextPath={nextPath} />;
+  return (
+    <AuthScreen
+      mode="signup"
+      configured={configured}
+      nextPath={nextPath}
+      privateAccess={isPrivateCloud()}
+    />
+  );
 }

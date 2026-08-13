@@ -5,6 +5,7 @@ import { isSupabaseTableMissingError } from "@/lib/creed-backend-errors";
 import { hasActiveEntitlement } from "@creed/cloud/lib/stripe";
 import { isSupabaseConfigured } from "@creed/persistence/supabase/env";
 import { getRequestAuth } from "@/lib/request-auth";
+import { hasPrivateCloudAccess } from "@creed/cloud/lib/cloud-access";
 
 // Onboarding is free and lives outside the (creed-app) route group. Anyone
 // signed in can run it (answer questions, build with their assistant via a
@@ -39,7 +40,9 @@ export default async function OnboardingPage({
       redirect("/signup?next=/onboarding");
     }
 
-    paid = await hasActiveEntitlement(supabase, user.id);
+    paid = hasPrivateCloudAccess(user.email)
+      ? true
+      : await hasActiveEntitlement(supabase, user.id);
 
     // A fresh user has no Creed row yet. AuthedProviders supplies the blank
     // onboarding state, so only load persisted state when there is one to

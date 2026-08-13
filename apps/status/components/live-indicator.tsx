@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { BrandedCredit } from "@creed/ui/branded-credit";
 import type { OverallState } from "@/lib/types";
 import { StatusBanner } from "./status-banner";
+import { StatusLogo } from "./status-logo";
 
 const POLL_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 8_000;
 
 type DashboardResponse = {
   overall?: OverallState;
+  uptimePct?: number;
 };
 
 function stateFromDashboard(body: DashboardResponse): OverallState | null {
@@ -18,16 +22,20 @@ function stateFromDashboard(body: DashboardResponse): OverallState | null {
     : null;
 }
 
-// Server renders the banner from the latest snapshot. After mount we poll
-// /api/dashboard, which derives `overall` from that same snapshot across all
-// four components , /api/summary reports creed.md's self-declared health
-// instead, which ignores the synthetic `site` probe and so used to flip a
-// truthful "Partial outage" straight back to green a moment after paint. The
-// endpoint's one-minute CDN cache bounds upstream load regardless of visitor
-// count, while focus and visibility refreshes make a returning tab catch up
-// immediately.
-export function LiveIndicator({ initial }: { initial: OverallState }) {
+// Poll the same aggregate dashboard used for the server render. The one-minute
+// CDN cache bounds upstream load, while focus and visibility refreshes let a
+// returning tab catch up immediately without replacing state on network errors.
+export function LiveIndicator({
+  initial,
+  initialUptime,
+  children,
+}: {
+  initial: OverallState;
+  initialUptime: number;
+  children: ReactNode;
+}) {
   const [state, setState] = useState<OverallState>(initial);
+  const [uptime, setUptime] = useState(initialUptime);
 
   useEffect(() => {
     let alive = true;
@@ -40,8 +48,12 @@ export function LiveIndicator({ initial }: { initial: OverallState }) {
         const res = await fetch("/api/dashboard", {
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
-        const next = stateFromDashboard((await res.json()) as DashboardResponse);
+        const body = (await res.json()) as DashboardResponse;
+        const next = stateFromDashboard(body);
         if (alive && next) setState(next);
+        if (alive && typeof body.uptimePct === "number") {
+          setUptime(body.uptimePct);
+        }
       } catch {
         // Keep the last known state on a client-network failure.
       } finally {
@@ -66,5 +78,27 @@ export function LiveIndicator({ initial }: { initial: OverallState }) {
     };
   }, []);
 
-  return <StatusBanner state={state} />;
+  return (
+    <>
+      <header className="flex items-center justify-center">
+        <StatusLogo state={state} />
+      </header>
+      <div className="mt-10">
+        <StatusBanner state={state} uptime={uptime} />
+      </div>
+      <hr
+        className="my-9 border-0"
+        style={{ borderTop: "1px solid var(--status-border)" }}
+      />
+      {children}
+      <hr
+        className="my-9 border-0"
+        style={{ borderTop: "1px solid var(--status-border)" }}
+      />
+      <BrandedCredit
+        accent={`var(--status-${state})`}
+        style={{ color: "var(--status-text-tertiary)" }}
+      />
+    </>
+  );
 }

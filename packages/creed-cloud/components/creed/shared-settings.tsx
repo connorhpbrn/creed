@@ -88,7 +88,8 @@ function sectionAccent(accent: string): string {
 // Role pill colours: owner blue, admin green, member amber. Same shape as the
 // personal integration status pills (rounded-[6px] px-1.5 py-0.5 text-[12px]).
 const ROLE_PILL: Record<"owner" | "admin" | "member", string> = {
-  owner: "bg-[#EFF6FF] text-[var(--creed-accent-hover)] dark:bg-[#172554]/50 dark:text-[#60A5FA]",
+  owner:
+    "bg-[#EFF6FF] text-[var(--creed-accent-hover)] dark:bg-[#172554]/50 dark:text-[#60A5FA]",
   admin: "bg-[#ECFDF5] text-[#047857] dark:bg-[#052e1a]/50 dark:text-[#4ade80]",
   member:
     "bg-[#FFFBEB] text-[#B45309] dark:bg-[#422006]/50 dark:text-[#FBBF24]",
@@ -713,7 +714,11 @@ export function SharedSettings() {
   async function disconnectGitHub() {
     try {
       setDisconnectingGitHub(true);
-      const ok = await post("/api/app/github/integration", { creedId }, "DELETE");
+      const ok = await post(
+        "/api/app/github/integration",
+        { creedId },
+        "DELETE",
+      );
       if (!ok) return;
       setGithubDisconnectedOverride(true);
       setRepos([]);
@@ -931,7 +936,8 @@ export function SharedSettings() {
   }
 
   async function doDelete() {
-    if (!shared || !creedId || deleteConfirm !== shared.creedName || deleting) return;
+    if (!shared || !creedId || deleteConfirm !== shared.creedName || deleting)
+      return;
     setDeleting(true);
     let preferredNextCreedId: string | null = null;
     try {
@@ -1488,7 +1494,7 @@ export function SharedSettings() {
                   label="Credit balance"
                   primary={`$${purchasedUsd.toFixed(2)}`}
                 />
-                {isCreditsHome ? (
+                {allowanceResets && isCreditsHome ? (
                   <CreditTile
                     label="Bonus credits"
                     primary={`$${bonusRemainingUsd.toFixed(2)}`}
@@ -1691,7 +1697,10 @@ export function SharedSettings() {
           <span className="font-medium text-[var(--creed-text-secondary)]">
             Last commit
           </span>
-          <span aria-hidden className="shrink-0 text-[var(--creed-text-tertiary)]">
+          <span
+            aria-hidden
+            className="shrink-0 text-[var(--creed-text-tertiary)]"
+          >
             ·
           </span>
           {state.settings.versionControl.lastRemoteMessage ? (
@@ -2022,9 +2031,7 @@ export function SharedSettings() {
       >
         <DialogContent className="rounded-[var(--radius-xl)] border-[var(--creed-border)] bg-[var(--creed-surface)]">
           <DialogHeader>
-            <DialogTitle>
-              Transfer ownership
-            </DialogTitle>
+            <DialogTitle>Transfer ownership</DialogTitle>
           </DialogHeader>
           <p className="text-[14px] leading-7 text-[var(--creed-text-secondary)]">
             {(() => {
@@ -2089,7 +2096,9 @@ export function SharedSettings() {
               disabled={deleting || deleteConfirm !== shared.creedName}
             >
               {deleting ? "Deleting" : "Delete"}
-              {deleting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+              {deleting ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : null}
             </Button>
           </div>
         </DialogContent>

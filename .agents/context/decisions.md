@@ -7,6 +7,7 @@ Durable decisions future agents should not reopen casually.
 - Creed is a curation product, not a notes app, journal, memory feed, dashboard, or generic AI wrapper.
 - Creed Open is the public v1 product: free, MIT licensed, self-hosted, single-owner, and Personal-only.
 - Cloud, Shared Creeds, and the CLI remain private development products until separate launches.
+- The hosted Cloud development build uses a temporary server-only email allowlist. Private mode must fail closed for authenticated product and agent access, disable billing, and keep public marketing pointed at the roadmap.
 - MCP is the preferred agent connection path. Scoped HTTP bearer APIs remain a fallback.
 - GitHub version control is manual push and pull, not automatic sync.
 - Open AI features are BYOK through OpenRouter. Open never silently spends a platform-owned key or managed credits.
@@ -41,7 +42,7 @@ Durable decisions future agents should not reopen casually.
 - Open says `Saved locally` for drafts and `Saved to database` in green after database persistence.
 - Open public calls to action say `View on GitHub`.
 - Open and Cloud show a disabled CLI card with `View roadmap` until the CLI is rebuilt. Shared agent-card CLI attribution and status UI is retained for reuse.
-- `/docs` stays in the applications until the separate documentation site is intentionally built.
+- Documentation belongs to the standalone `apps/docs/` application. Open and Cloud do not duplicate or wrap its routes; shared packages retain only genuine interface primitives used by more than one surface.
 
 ## Release process
 

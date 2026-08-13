@@ -9,6 +9,7 @@ export type CreedEdition = Readonly<{
     managedCredits: boolean;
     feedback: boolean;
     cli: boolean;
+    publicSignup: boolean;
   }>;
   routes: Readonly<{
     unauthenticated: string;

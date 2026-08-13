@@ -58,28 +58,6 @@ const AGENT_OPEN_URLS: Record<string, string> = {
   manus: "https://manus.im",
 };
 
-// Anchor on Creed's own /docs page for the kebab's "Docs" action. Agents with
-// their own card there get a per-card anchor; the rest land on their group's
-// section.
-const AGENT_DOCS_ANCHORS: Record<string, string> = {
-  claude: "agent-claude",
-  chatgpt: "agent-chatgpt",
-  grok: "agent-grok",
-  whirl: "agent-whirl",
-  openclaw: "agent-openclaw",
-  hermes: "agent-hermes",
-  claudecode: "agent-claudecode",
-  codex: "agent-codex",
-  opencode: "agent-opencode",
-  cursor: "agent-cursor",
-  custom: "agent-custom",
-  devin: "agents-coding",
-  replit: "agents-coding",
-  v0: "agents-coding",
-  factory: "agents-coding",
-  manus: "agents-assistants",
-};
-
 // Compacts the backend's relative-time strings ("2 days ago", "5 min ago",
 // "3h ago", "just now") to the card's short form ("2d", "5m", "3h", "now").
 function compactLastSeen(value: string) {
@@ -379,9 +357,7 @@ export function ConnectionCard({
                 className="text-sm"
                 onSelect={() => {
                   window.open(
-                    mode === "cli"
-                      ? "/docs#creed-cli"
-                      : `/docs#${AGENT_DOCS_ANCHORS[connection.id] ?? "connect-mcp"}`,
+                    "https://docs.creed.md#agent-setup",
                     "_blank",
                     "noopener,noreferrer",
                   );

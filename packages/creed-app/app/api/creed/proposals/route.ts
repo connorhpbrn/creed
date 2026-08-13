@@ -14,6 +14,7 @@ import { findUserIdByProposalToken, loadCreedState, recordConnectionUsage } from
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getSupabaseAdminClient } from "@creed/persistence/supabase/admin";
 import { isSupabaseAdminConfigured } from "@creed/persistence/supabase/env";
+import { authorizeAuthenticatedUser } from "@creed/edition/auth";
 
 type ProposalSubmission = Omit<Proposal, "timeLabel" | "status" | "accent"> & {
   accent?: Proposal["accent"];
@@ -61,6 +62,9 @@ export async function POST(request: Request) {
   const { data: userData, error: userError } = await admin.auth.admin.getUserById(userId);
   if (userError || !userData.user) {
     return NextResponse.json({ error: userError?.message ?? "Could not load token owner." }, { status: 500 });
+  }
+  if (!(await authorizeAuthenticatedUser(userData.user))) {
+    return NextResponse.json({ error: "Invalid token." }, { status: 401 });
   }
 
   // Proposals route only validates against sections + tokens. Skip pulling

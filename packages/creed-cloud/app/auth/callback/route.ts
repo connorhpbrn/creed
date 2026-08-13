@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { upsertGitHubIntegration } from "@/lib/creed-backend";
 import { createSupabaseServerClient } from "@creed/persistence/supabase/server";
 import { sanitizeNextPath } from "@/lib/safe-next";
+import { canAccessCloud } from "@creed/cloud/lib/cloud-access";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -26,6 +27,11 @@ export async function GET(request: Request) {
     // normal for identity linking, so don't treat that as a failure.
     if (error) {
       exchangeFailed = true;
+    }
+
+    if (user && !canAccessCloud(user.email)) {
+      await supabase.auth.signOut();
+      return NextResponse.redirect(`${origin}/login?access=private`);
     }
 
     if (integration === "github" && session?.provider_token && user) {

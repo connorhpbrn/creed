@@ -172,9 +172,7 @@ export function ConnectDemo() {
   return (
     <div className="w-full">
       <motion.div
-        layout
-        transition={{ layout: { duration: 0.42, ease: EASE } }}
-        className="relative w-full overflow-hidden rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] text-left"
+        className="relative min-h-[232px] w-full overflow-hidden rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] text-left lg:min-h-0"
       >
         <AnimatePresence mode="popLayout" initial={false}>
           {phase <= 1 ? (
@@ -201,10 +199,6 @@ export function ConnectDemo() {
                   </div>
                 </div>
               </div>
-              <p className="mt-4 text-[13px] leading-6 text-[var(--creed-text-secondary)]">
-                Paste it into any AI. It returns a structured Markdown profile
-                built from what it already knows.
-              </p>
               <div className="mt-4">
                 <AnimatedIconButton
                   type="button"

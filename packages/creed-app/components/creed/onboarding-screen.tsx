@@ -1,9 +1,24 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, Check, ChevronDown, Download, FileText, LoaderCircle, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  Download,
+  FileText,
+  LoaderCircle,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@creed/ui/button";
@@ -45,7 +60,7 @@ import { useCreedEdition } from "@/components/creed/edition-provider";
 
 // First-run begins with Creed type choice (Personal pre-selected), then branches
 // into the matching onboarding path. Personal keeps the three-question compose
-// flow; Shared creates an owned Shared Creed and hands off to its setup.
+// flow; Shared hands off without creating a persisted Creed until completion.
 // Back from either path can return to the type picker. Skip jumps unpaid users
 // to checkout and paid users into the app (Personal by default).
 const TOTAL_STEPS = 11;
@@ -100,7 +115,8 @@ export function OnboardingScreen({
   const router = useRouter();
   const supportsSharedCreeds = useCreedEdition().capabilities.sharedCreeds;
   const { state, updateOnboarding, claimOnboardingPreview } = useCreed();
-  const { startCheckout, submitting: checkoutSubmitting } = useEditionCheckout();
+  const { startCheckout, submitting: checkoutSubmitting } =
+    useEditionCheckout();
   const [step, setStep] = useState(() => {
     if (supportsSharedCreeds && forceTypePick) return TYPE_STEP;
     if (initialStage === "preview") return PREVIEW_STEP;
@@ -108,8 +124,9 @@ export function OnboardingScreen({
     return supportsSharedCreeds ? TYPE_STEP : WELCOME_STEP;
   });
   const [claiming, setClaiming] = useState(false);
-  const [creedType, setCreedType] = useState<"personal" | "shared" | null>("personal");
-  const [typeError, setTypeError] = useState<string | null>(null);
+  const [creedType, setCreedType] = useState<"personal" | "shared" | null>(
+    "personal",
+  );
   const [skipping, setSkipping] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
   const [draftUserId, setDraftUserId] = useState<string | null>(null);
@@ -125,8 +142,9 @@ export function OnboardingScreen({
         : PERSONAL_BLUE
       : stepAccentMap[step];
   const previewSections = useMemo(
-    () => buildOnboardingPreviewSections(compileOnboardingDraft(state.onboarding)),
-    [state.onboarding]
+    () =>
+      buildOnboardingPreviewSections(compileOnboardingDraft(state.onboarding)),
+    [state.onboarding],
   );
 
   // The welcome headline greets the signed-in user by first name when we have a
@@ -134,13 +152,17 @@ export function OnboardingScreen({
   const welcomeHeadline = useMemo(() => {
     if (!supportsSharedCreeds) return "Welcome to Creed.";
     const first = (state.user.name || "").trim().split(/\s+/)[0];
-    return first && first.length <= 24 ? `Welcome to Creed, ${first}.` : "Welcome to Creed.";
+    return first && first.length <= 24
+      ? `Welcome to Creed, ${first}.`
+      : "Welcome to Creed.";
   }, [supportsSharedCreeds, state.user.name]);
 
   // Paste-compose result: set from the /api/app/onboarding/compose response when
   // the user pastes the markdown their assistant produced. Falls back to provider
   // state so a resuming, already-composed user still sees their Creed.
-  const [composedResult, setComposedResult] = useState<CreedSection[] | null>(null);
+  const [composedResult, setComposedResult] = useState<CreedSection[] | null>(
+    null,
+  );
   const [pasted, setPasted] = useState("");
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [pasteSubmitting, setPasteSubmitting] = useState(false);
@@ -163,7 +185,16 @@ export function OnboardingScreen({
     ) {
       router.replace("/file");
     }
-  }, [router, paid, step, composed, previewMode, forceTypePick, supportsSharedCreeds, state.creedType]);
+  }, [
+    router,
+    paid,
+    step,
+    composed,
+    previewMode,
+    forceTypePick,
+    supportsSharedCreeds,
+    state.creedType,
+  ]);
 
   // Same-browser resume: hydrate step + answers from localStorage before paint
   // when we can. Server compose/claim stages still win over a stale local step.
@@ -210,7 +241,11 @@ export function OnboardingScreen({
             pasteStep: PASTE_STEP,
             previewStep: PREVIEW_STEP,
           });
-        setStep(supportsSharedCreeds ? resumedStep : Math.max(resumedStep, WELCOME_STEP));
+        setStep(
+          supportsSharedCreeds
+            ? resumedStep
+            : Math.max(resumedStep, WELCOME_STEP),
+        );
       } finally {
         if (!cancelled) setDraftReady(true);
       }
@@ -256,34 +291,8 @@ export function OnboardingScreen({
         onPreviewShared?.();
         return;
       }
-      if (claiming) return;
-      setClaiming(true);
-      setTypeError(null);
-      try {
-        const response = await fetch("/api/app/creeds", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: "Shared Creed",
-            type: "shared",
-            forOnboarding: true,
-          }),
-        });
-        const payload = (await response.json().catch(() => ({}))) as {
-          creed?: { id?: string };
-          error?: string;
-        };
-        if (!response.ok || !payload.creed?.id) {
-          setTypeError(payload.error ?? "Could not create your Shared Creed. Try again.");
-          return;
-        }
-        if (draftUserId) clearOnboardingDraft(draftUserId);
-        router.push(`/onboarding/shared?creedId=${encodeURIComponent(payload.creed.id)}`);
-      } catch {
-        setTypeError("Could not create your Shared Creed. Check your connection and try again.");
-      } finally {
-        setClaiming(false);
-      }
+      if (draftUserId) clearOnboardingDraft(draftUserId);
+      router.push("/onboarding/shared");
       return;
     }
     if (step === EXPLAINER_C_STEP) {
@@ -343,20 +352,24 @@ export function OnboardingScreen({
         };
         if (!res.ok) {
           setPasteError(
-            typeof data.error === "string" ? data.error : "Could not save that. Try again."
+            typeof data.error === "string"
+              ? data.error
+              : "Could not save that. Try again.",
           );
           return;
         }
         if (!data.ok || !data.matched || !data.sections) {
           setPasteError(
-            "That doesn't look like your Creed. Paste the whole markdown your assistant gave you."
+            "That doesn't look like your Creed. Paste the whole markdown your assistant gave you.",
           );
           return;
         }
         setComposedResult(data.sections);
         setStep(PREVIEW_STEP);
       } catch {
-        setPasteError("Could not save that. Check your connection and try again.");
+        setPasteError(
+          "Could not save that. Check your connection and try again.",
+        );
       } finally {
         setPasteSubmitting(false);
       }
@@ -424,8 +437,7 @@ export function OnboardingScreen({
     window.setTimeout(() => setPromptCopied(false), 1600);
   }
 
-  const continueAccent =
-    creedType === "shared" ? SHARED_AMBER : PERSONAL_BLUE;
+  const continueAccent = creedType === "shared" ? SHARED_AMBER : PERSONAL_BLUE;
   const visibleStep = supportsSharedCreeds ? step + 1 : step;
   const visibleTotal = supportsSharedCreeds ? TOTAL_STEPS : TOTAL_STEPS - 1;
 
@@ -439,7 +451,10 @@ export function OnboardingScreen({
     >
       <motion.div
         className="h-[2px]"
-        animate={{ width: `${(visibleStep / visibleTotal) * 100}%`, backgroundColor: currentAccent }}
+        animate={{
+          width: `${(visibleStep / visibleTotal) * 100}%`,
+          backgroundColor: currentAccent,
+        }}
         transition={{ duration: 1.45, ease: [0.32, 0.06, 0.18, 1] }}
       />
 
@@ -487,7 +502,8 @@ export function OnboardingScreen({
                       </AnimatedBlock>
                       <AnimatedBlock index={1}>
                         <p className="t-lede mx-auto mt-6 text-[var(--creed-text-tertiary)]">
-                          One file every AI reads before it answers, so you never re-explain yourself.
+                          One file every AI reads before it answers, so you
+                          never re-explain yourself.
                         </p>
                       </AnimatedBlock>
                       <AnimatedBlock index={2}>
@@ -501,17 +517,18 @@ export function OnboardingScreen({
                       title="Who is this Creed for?"
                       subtitle="Choose a private file for yourself or a shared file for a group. You can create more Creeds later."
                     >
-                      <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Creed type">
+                      <div
+                        className="grid gap-3 sm:grid-cols-2"
+                        role="radiogroup"
+                        aria-label="Creed type"
+                      >
                         <CreedTypeChoice
                           value="personal"
                           label="Personal"
                           detail="A private context file for you."
                           color={PERSONAL_BLUE}
                           selected={creedType === "personal"}
-                          onSelect={() => {
-                            setCreedType("personal");
-                            setTypeError(null);
-                          }}
+                          onSelect={() => setCreedType("personal")}
                         />
                         <CreedTypeChoice
                           value="shared"
@@ -519,13 +536,9 @@ export function OnboardingScreen({
                           detail="A shared context file you can invite others to."
                           color={SHARED_AMBER}
                           selected={creedType === "shared"}
-                          onSelect={() => {
-                            setCreedType("shared");
-                            setTypeError(null);
-                          }}
+                          onSelect={() => setCreedType("shared")}
                         />
                       </div>
-                      {typeError ? <p role="alert" className="text-[13px] text-[#DC2626]">{typeError}</p> : null}
                     </OnboardingStep>
                   ) : null}
 
@@ -538,7 +551,9 @@ export function OnboardingScreen({
                         <Textarea
                           data-disable-continue="true"
                           value={state.onboarding.identity}
-                          onChange={(event) => updateOnboarding({ identity: event.target.value })}
+                          onChange={(event) =>
+                            updateOnboarding({ identity: event.target.value })
+                          }
                           className="min-h-[220px] rounded-xl border-[var(--creed-border)] px-4 py-4 text-[15px] leading-7"
                           placeholder="e.g. Founder and engineer building Creed end to end. Strong product taste, allergic to bloated process. Live in Figma, Linear, and the terminal all day."
                         />
@@ -556,8 +571,9 @@ export function OnboardingScreen({
                       </AnimatedBlock>
                       <AnimatedBlock index={1}>
                         <p className="t-lede mx-auto mt-6 max-w-xl text-[var(--creed-text-tertiary)]">
-                          Everything you share becomes one short, structured file. A handful of
-                          sections, each one earning its place.
+                          Everything you share becomes one short, structured
+                          file. A handful of sections, each one earning its
+                          place.
                         </p>
                       </AnimatedBlock>
                       <AnimatedBlock index={2}>
@@ -575,7 +591,9 @@ export function OnboardingScreen({
                         <Textarea
                           data-disable-continue="true"
                           value={state.onboarding.goals}
-                          onChange={(event) => updateOnboarding({ goals: event.target.value })}
+                          onChange={(event) =>
+                            updateOnboarding({ goals: event.target.value })
+                          }
                           className="min-h-[200px] rounded-xl border-[var(--creed-border)] px-4 py-4 text-[15px] leading-7"
                           placeholder="e.g. Ship the Creed v2 onboarding this quarter. Hit $20k MRR before summer. Long term, make Creed the file every AI reads first."
                         />
@@ -593,9 +611,9 @@ export function OnboardingScreen({
                       </AnimatedBlock>
                       <AnimatedBlock index={1}>
                         <p className="t-lede mx-auto mt-6 max-w-xl text-[var(--creed-text-tertiary)]">
-                          As your agents learn something durable about you, they propose a small edit
-                          to the right section. You approve it, and the file stays current without the
-                          upkeep.
+                          As your agents learn something durable about you, they
+                          propose a small edit to the right section. You approve
+                          it, and the file stays current without the upkeep.
                         </p>
                       </AnimatedBlock>
                       <AnimatedBlock index={2}>
@@ -614,7 +632,9 @@ export function OnboardingScreen({
                           data-disable-continue="true"
                           value={state.onboarding.preferences}
                           onChange={(event) =>
-                            updateOnboarding({ preferences: event.target.value })
+                            updateOnboarding({
+                              preferences: event.target.value,
+                            })
                           }
                           className="min-h-[200px] rounded-xl border-[var(--creed-border)] px-4 py-4 text-[15px] leading-7"
                           placeholder="e.g. Be direct, lead with the answer. No preambles, no over-praise. Never make assumptions about my work without checking first."
@@ -633,8 +653,8 @@ export function OnboardingScreen({
                       </AnimatedBlock>
                       <AnimatedBlock index={1}>
                         <p className="t-lede mx-auto mt-6 max-w-xl text-[var(--creed-text-tertiary)]">
-                          Your Creed is plain markdown you own. Export it anytime, take it anywhere,
-                          no lock-in.
+                          Your Creed is plain markdown you own. Export it
+                          anytime, take it anywhere, no lock-in.
                         </p>
                       </AnimatedBlock>
                       <AnimatedBlock index={2}>
@@ -653,12 +673,16 @@ export function OnboardingScreen({
                       </AnimatedBlock>
                       <AnimatedBlock index={1}>
                         <p className="t-lede mx-auto mt-6 max-w-2xl text-[var(--creed-text-tertiary)]">
-                          Copy this prompt and paste it into ChatGPT, Claude, or any AI you use. It
-                          turns everything you just shared into your full Creed.
+                          Copy this prompt and paste it into ChatGPT, Claude, or
+                          any AI you use. It turns everything you just shared
+                          into your full Creed.
                         </p>
                       </AnimatedBlock>
                       <AnimatedBlock index={2}>
-                        <ComposePromptCard copied={promptCopied} onCopy={() => void handleCopyPrompt()} />
+                        <ComposePromptCard
+                          copied={promptCopied}
+                          onCopy={() => void handleCopyPrompt()}
+                        />
                       </AnimatedBlock>
                     </div>
                   ) : null}
@@ -680,12 +704,16 @@ export function OnboardingScreen({
                             "min-h-[220px] max-h-[44vh] resize-none overflow-y-auto rounded-xl px-4 py-4 font-mono text-[14px] leading-7",
                             pasteError
                               ? "border-[#DC2626] focus-visible:border-[#DC2626] focus-visible:ring-[#DC2626]/15"
-                              : "border-[var(--creed-border)]"
+                              : "border-[var(--creed-border)]",
                           )}
-                          placeholder={"## Identity\n\nPaste the full markdown your assistant produced here."}
+                          placeholder={
+                            "## Identity\n\nPaste the full markdown your assistant produced here."
+                          }
                         />
                         {pasteError ? (
-                          <p className="mt-3 text-[13px] text-[#DC2626]">{pasteError}</p>
+                          <p className="mt-3 text-[13px] text-[#DC2626]">
+                            {pasteError}
+                          </p>
                         ) : null}
                       </AnimatedBlock>
                     </OnboardingStep>
@@ -706,9 +734,23 @@ export function OnboardingScreen({
                       </AnimatedBlock>
                       <AnimatedBlock index={2}>
                         <motion.div
-                          initial={{ opacity: 0, y: 18, scale: 0.985, filter: "blur(10px)" }}
-                          animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-                          transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+                          initial={{
+                            opacity: 0,
+                            y: 18,
+                            scale: 0.985,
+                            filter: "blur(10px)",
+                          }}
+                          animate={{
+                            opacity: 1,
+                            y: 0,
+                            scale: 1,
+                            filter: "blur(0px)",
+                          }}
+                          transition={{
+                            duration: 0.6,
+                            delay: 0.1,
+                            ease: [0.22, 1, 0.36, 1],
+                          }}
                           className="mx-auto mt-10 max-w-[920px]"
                         >
                           <CreedPreview sections={composedSections} />
@@ -780,7 +822,11 @@ export function OnboardingScreen({
                   (step === PASTE_STEP && !previewMode && !pasted.trim())
                 }
               >
-                {claiming ? "Saving" : pasteSubmitting ? "Composing" : "Continue"}
+                {claiming
+                  ? "Saving"
+                  : pasteSubmitting
+                    ? "Composing"
+                    : "Continue"}
                 {claiming || pasteSubmitting ? (
                   <LoaderCircle className="h-4 w-4 animate-spin" />
                 ) : (
@@ -823,7 +869,10 @@ export function OnboardingScreen({
                 onClick={() =>
                   previewMode
                     ? onPreviewClose?.()
-                    : void startCheckout({ plan: "personal", cadence: "monthly" })
+                    : void startCheckout({
+                        plan: "personal",
+                        cadence: "monthly",
+                      })
                 }
                 disabled={checkoutSubmitting || skipping}
               >
@@ -887,13 +936,21 @@ function CreedTypeChoice({
       <Icon ref={iconRef} size={24} className="shrink-0" aria-hidden="true" />
       <span>
         <span className="block text-[15px] font-medium">{label}</span>
-        <span className="mt-1 block text-[13px] leading-5 opacity-75">{detail}</span>
+        <span className="mt-1 block text-[13px] leading-5 opacity-75">
+          {detail}
+        </span>
       </span>
     </button>
   );
 }
 
-function StepFrame({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
+function StepFrame({
+  children,
+  wide = false,
+}: {
+  children: ReactNode;
+  wide?: boolean;
+}) {
   return (
     <div className={cn("mx-auto w-full", wide ? "max-w-5xl" : "max-w-3xl")}>
       {children}
@@ -968,7 +1025,11 @@ function WelcomeConstellation() {
             initial={{ pathLength: 0, opacity: 0 }}
             animate={{ pathLength: 1, opacity: 1 }}
             transition={{
-              pathLength: { duration: 0.85, delay: 0.2 + index * 0.05, ease: [0.22, 1, 0.36, 1] },
+              pathLength: {
+                duration: 0.85,
+                delay: 0.2 + index * 0.05,
+                ease: [0.22, 1, 0.36, 1],
+              },
               opacity: { duration: 0.3, delay: 0.2 + index * 0.05 },
             }}
           />
@@ -999,13 +1060,21 @@ function WelcomeConstellation() {
         <div
           key={`chip-${node.kind}`}
           className="absolute z-10"
-          style={{ left: `${node.x}%`, top: `${node.y}%`, transform: "translate(-50%, -50%)" }}
+          style={{
+            left: `${node.x}%`,
+            top: `${node.y}%`,
+            transform: "translate(-50%, -50%)",
+          }}
         >
           <motion.div
             className="flex h-14 w-14 items-center justify-center rounded-full border border-[var(--creed-border)] bg-[var(--creed-surface)]"
             initial={{ opacity: 0, scale: 0.55 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.55, delay: 0.35 + index * 0.05, ease: [0.22, 1, 0.36, 1] }}
+            transition={{
+              duration: 0.55,
+              delay: 0.35 + index * 0.05,
+              ease: [0.22, 1, 0.36, 1],
+            }}
           >
             <IntegrationGlyph
               kind={node.kind}
@@ -1040,7 +1109,12 @@ function WelcomeConstellation() {
               style={{ borderColor: CREED_BLUE }}
               initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: [0, 0.2, 0], scale: [0.92, 1.32, 1.42] }}
-              transition={{ duration: 3.2, repeat: Infinity, ease: [0.22, 1, 0.36, 1], delay: 0.9 }}
+              transition={{
+                duration: 3.2,
+                repeat: Infinity,
+                ease: [0.22, 1, 0.36, 1],
+                delay: 0.9,
+              }}
             />
           </div>
         </motion.div>
@@ -1072,14 +1146,21 @@ function SectionStripsCard() {
           className="flex items-start gap-3 py-2.5"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.15 + index * 0.1, ease: [0.22, 1, 0.36, 1] }}
+          transition={{
+            duration: 0.5,
+            delay: 0.15 + index * 0.1,
+            ease: [0.22, 1, 0.36, 1],
+          }}
         >
           <span
             className="mt-0.5 h-9 w-[3px] shrink-0 rounded-full"
             style={{ backgroundColor: accentColorMap[row.accent] }}
           />
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-medium" style={{ color: accentColorMap[row.accent] }}>
+            <div
+              className="text-[13px] font-medium"
+              style={{ color: accentColorMap[row.accent] }}
+            >
               {row.name}
             </div>
             <div className="mt-2 h-[6px] w-full rounded-full bg-[var(--creed-surface-raised)]" />
@@ -1100,7 +1181,10 @@ const PROPOSAL_EXISTING = "Run a half-marathon at some point.";
 const PROPOSAL_PROPOSED = "Run a half-marathon under 1h45 by spring.";
 
 function ProposalCard() {
-  const parts = useMemo(() => computeDiffParts(PROPOSAL_EXISTING, PROPOSAL_PROPOSED), []);
+  const parts = useMemo(
+    () => computeDiffParts(PROPOSAL_EXISTING, PROPOSAL_PROPOSED),
+    [],
+  );
   const stats = useMemo(() => summarizeDiff(parts), [parts]);
 
   return (
@@ -1113,9 +1197,18 @@ function ProposalCard() {
       <div className="flex items-center justify-between gap-3 px-3 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-2 text-sm text-[var(--creed-text-secondary)]">
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)]" />
-          <AgentIconStack agents={["Claude"]} variant="inline" itemClassName="h-5 w-5" maxVisible={1} />
-          <span className="font-medium text-[var(--creed-text-primary)]">Claude</span>
-          <span className="text-[var(--creed-text-tertiary)]">proposed an update</span>
+          <AgentIconStack
+            agents={["Claude"]}
+            variant="inline"
+            itemClassName="h-5 w-5"
+            maxVisible={1}
+          />
+          <span className="font-medium text-[var(--creed-text-primary)]">
+            Claude
+          </span>
+          <span className="text-[var(--creed-text-tertiary)]">
+            proposed an update
+          </span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
           <span className="inline-flex items-center gap-1">
             <DiffBadge tone="added" count={stats.added} size="md" />
@@ -1161,7 +1254,11 @@ function ProposalCard() {
 // export anywhere. Headings tinted by section accent, body in mono, with a
 // filename and export affordance so it reads as a real, portable file.
 
-const OWNERSHIP_LINES: { heading: string; accent: keyof typeof accentColorMap; body: string }[] = [
+const OWNERSHIP_LINES: {
+  heading: string;
+  accent: keyof typeof accentColorMap;
+  body: string;
+}[] = [
   {
     heading: "## Identity",
     accent: "identity",
@@ -1209,10 +1306,18 @@ function OwnershipCard() {
             className={cn(index > 0 && "mt-4")}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.3 + index * 0.15, ease: [0.22, 1, 0.36, 1] }}
+            transition={{
+              duration: 0.45,
+              delay: 0.3 + index * 0.15,
+              ease: [0.22, 1, 0.36, 1],
+            }}
           >
-            <div style={{ color: accentColorMap[line.accent] }}>{line.heading}</div>
-            <div className="text-[var(--creed-text-secondary)]">{line.body}</div>
+            <div style={{ color: accentColorMap[line.accent] }}>
+              {line.heading}
+            </div>
+            <div className="text-[var(--creed-text-secondary)]">
+              {line.body}
+            </div>
           </motion.div>
         ))}
       </div>
@@ -1301,7 +1406,11 @@ function AnimatedBlock({
     <motion.div
       initial={{ opacity: 0, y: 10, filter: "blur(6px)" }}
       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-      transition={{ delay: index * 0.045, duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+      transition={{
+        delay: index * 0.045,
+        duration: 0.24,
+        ease: [0.22, 1, 0.36, 1],
+      }}
     >
       {children}
     </motion.div>
@@ -1321,7 +1430,9 @@ function CreedPreview({ sections }: { sections: CreedSection[] }) {
                     <div className="flex items-center gap-3">
                       <span
                         className="inline-block h-9 w-[3px] rounded-full"
-                        style={{ backgroundColor: accentColorMap[section.accent] }}
+                        style={{
+                          backgroundColor: accentColorMap[section.accent],
+                        }}
                       />
                       <div className="flex min-w-0 flex-wrap items-center gap-3">
                         <span

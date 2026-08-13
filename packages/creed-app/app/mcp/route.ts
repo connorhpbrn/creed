@@ -33,6 +33,7 @@ import {
 import { sharedMcpWrite, type SharedMcpOp } from "@/lib/shared-sections";
 import { minPermission, resolveSectionPermission } from "@creed/core/creed-permissions";
 import { listUserCreeds } from "@/lib/creed-membership";
+import { authorizeAuthenticatedUser } from "@creed/edition/auth";
 import { CREED_PROMPTS } from "@creed/core/creed-prompts";
 import { lookupOAuthAccessToken, oauthResource } from "@/lib/oauth";
 import {
@@ -959,7 +960,7 @@ async function handleToolCall(
       buildAgentReadPayload(state, {
         proposalUrl: `${getSiteUrl()}/api/creed/proposals`,
         directEditUrl: `${getSiteUrl()}/api/creed/write`,
-        docsUrl: `${getSiteUrl()}/docs`,
+        docsUrl: "https://docs.creed.md",
       })
     );
   }
@@ -2314,6 +2315,9 @@ export async function POST(request: Request) {
       { error: userError?.message ?? "Could not load Creed account." },
       { status: 500, headers: MCP_CORS_HEADERS }
     );
+  }
+  if (!(await authorizeAuthenticatedUser(userData.user))) {
+    return invalidToken();
   }
 
   let body: JsonRpcRequest | JsonRpcRequest[];

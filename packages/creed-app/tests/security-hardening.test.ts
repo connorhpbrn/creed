@@ -89,7 +89,6 @@ test("the nonce policy covers the app and credential surface, and nothing else",
   for (const pathname of [
     "/home",
     "/pricing",
-    "/docs",
     "/changelog",
     "/roadmap",
     "/bench",

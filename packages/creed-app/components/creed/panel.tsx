@@ -678,7 +678,7 @@ export function CreedPanel({
         group: "Actions",
         keywords: ["documentation", "help", "guide"],
         icon: BookTextIcon as AnimatedIconComponent,
-        run: () => router.push("/docs"),
+        run: () => window.location.assign("https://docs.creed.md"),
       },
       {
         id: "action:log-out",

@@ -80,12 +80,12 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/context",
-        destination: "/docs",
+        destination: "https://docs.creed.md",
         permanent: true,
       },
       {
         source: "/learn/:path*",
-        destination: "/docs",
+        destination: "https://docs.creed.md",
         permanent: true,
       },
       {

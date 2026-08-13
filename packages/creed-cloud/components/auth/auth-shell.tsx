@@ -38,7 +38,7 @@ export function AuthShell({ topRight, children }: { topRight?: ReactNode; childr
             <a href={CONTACT_MAILTO} className="transition-colors hover:text-[var(--creed-accent)]">
               Contact
             </a>
-            <Link href="/docs" className="transition-colors hover:text-[var(--creed-accent)]">
+            <Link href="https://docs.creed.md" className="transition-colors hover:text-[var(--creed-accent)]">
               Docs
             </Link>
           </div>

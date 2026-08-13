@@ -1,12 +1,13 @@
 "use client";
 
 import Image from "next/image";
+import type { CSSProperties } from "react";
 import { cn } from "@creed/ui/utils";
 
 const allAgentsIcon = "/assets/agents/all.svg";
 const mcpIcon = "/assets/agents/mcp.svg";
 const cliIcon = "/assets/agents/cli.svg";
-const brandmark = "/assets/brand/brandmark.svg";
+const creedWordmark = "/assets/brand/creed.svg";
 const chatgptIcon = "/assets/agents/chatgpt.svg";
 const claudeIcon = "/assets/agents/claude.svg";
 const claudeCodeIcon = "/assets/agents/claudecode.svg";
@@ -25,27 +26,44 @@ const openClawIcon = "/assets/agents/openclaw.svg";
 const openCodeIcon = "/assets/agents/opencode.svg";
 const v0Icon = "/assets/agents/v0.svg";
 
+const creedWordmarkMask = {
+  WebkitMaskImage: `url(${creedWordmark})`,
+  maskImage: `url(${creedWordmark})`,
+  WebkitMaskRepeat: "no-repeat",
+  maskRepeat: "no-repeat",
+  WebkitMaskPosition: "center",
+  maskPosition: "center",
+  WebkitMaskSize: "contain",
+  maskSize: "contain",
+} satisfies CSSProperties;
+
 export function CreedWordmark({
   className,
-  imageClassName,
+  onTransparent = false,
 }: {
   className?: string;
-  imageClassName?: string;
+  onTransparent?: boolean;
 }) {
   return (
-    <div className={cn("ml-1 h-[18px] shrink-0", className)}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={brandmark}
-        alt="Creed"
-        width={80}
-        height={18}
-        decoding="async"
-        style={{ shapeRendering: "geometricPrecision" }}
-        className={cn("creed-invert-on-dark block h-full w-auto select-none", imageClassName)}
-        draggable={false}
+    <span
+      role="img"
+      aria-label="Creed"
+      className={cn("relative ml-1 block h-[18px] aspect-[1031/244] shrink-0", className)}
+    >
+      <span
+        className="absolute inset-0"
+        style={{
+          ...creedWordmarkMask,
+          backgroundColor: onTransparent ? "#ffffff" : "var(--creed-text-primary)",
+        }}
       />
-    </div>
+      {!onTransparent ? (
+        <span
+          className="absolute inset-0 [clip-path:inset(0_84.77%_0_0)]"
+          style={{ ...creedWordmarkMask, backgroundColor: "#0066FF" }}
+        />
+      ) : null}
+    </span>
   );
 }
 

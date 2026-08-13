@@ -3,6 +3,7 @@ import { NO_STORE_HEADERS } from "@/lib/http-headers";
 import { entitlementGrantsAccess } from "@creed/cloud/lib/stripe";
 import { createSupabaseServerClient } from "@creed/persistence/supabase/server";
 import { isSupabaseConfigured } from "@creed/persistence/supabase/env";
+import { hasPrivateCloudAccess } from "@creed/cloud/lib/cloud-access";
 
 // Billing status for the current user.
 //
@@ -78,6 +79,20 @@ export async function GET() {
 
   if (!user) {
     return NextResponse.json(NO_ACCESS, { headers: NO_STORE_HEADERS });
+  }
+
+  if (hasPrivateCloudAccess(user.email)) {
+    const personal: PlanStatus = {
+      paid: true,
+      interval: null,
+      status: "development",
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+    };
+    return NextResponse.json(
+      { ...legacyPayloadFromPlan("cloud", personal), personal },
+      { headers: NO_STORE_HEADERS },
+    );
   }
 
   // Access is decided from subscription status, never the stored price id, so

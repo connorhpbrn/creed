@@ -10,6 +10,7 @@
     "doctor": "npm run doctor --workspace creed-open --",
     "dev": "npm run dev --workspace creed-open --",
     "dev:cloud": "npm run dev --workspace creed-cloud --",
+    "dev:docs": "npm run dev --workspace creed-docs --",
     "dev:status": "npm run dev --workspace creed-status --",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run ui:parity && npm run test --workspaces --if-present",

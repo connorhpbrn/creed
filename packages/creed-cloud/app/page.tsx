@@ -9,6 +9,10 @@ import { isSupabaseConfigured } from "@creed/persistence/supabase/env";
 import { createSupabaseServerClient } from "@creed/persistence/supabase/server";
 import { getSupabaseAdminClient } from "@creed/persistence/supabase/admin";
 import { log } from "@/lib/observability";
+import {
+  canAccessCloud,
+  hasPrivateCloudAccess,
+} from "@creed/cloud/lib/cloud-access";
 
 export const dynamic = "force-dynamic";
 
@@ -59,13 +63,20 @@ export default async function Home() {
     redirect("/home");
   }
 
+  if (!canAccessCloud(user.email)) {
+    await supabase.auth.signOut();
+    redirect("/login?access=private");
+  }
+
   // Access gate. The app is the paid product, so a signed-in user with no
   // access is sent to /onboarding (free: connect an agent, compose, preview,
   // then "Get Creed"). Access is either a personal entitlement OR membership of
   // a shared Creed whose billing is live - a shared member never needs a
   // personal plan.
   const [paid, active] = await Promise.all([
-    hasActiveEntitlement(supabase, user.id),
+    hasPrivateCloudAccess(user.email)
+      ? Promise.resolve(true)
+      : hasActiveEntitlement(supabase, user.id),
     resolveActiveCreed(supabase, user),
   ]);
   const activeEntry = active?.creeds.find((creed) => creed.id === active.creedId);
@@ -84,7 +95,7 @@ export default async function Home() {
       ? await hasActiveEntitlement(admin, ownerId)
       : false;
   }
-  const hasAccess = sharedAccess ? paidSharedAccess : paid;
+  const hasAccess = paid || (sharedAccess && paidSharedAccess);
   if (!hasAccess) {
     redirect("/onboarding");
   }

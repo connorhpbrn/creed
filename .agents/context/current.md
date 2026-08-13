@@ -8,6 +8,8 @@ Creed is preparing its first stable Open release, v1.0.0. Open is the only publi
 
 Creed Cloud continues in `apps/cloud/` for private development and testing. Hosted accounts, payments, managed credits, Shared Creeds, and feedback are not part of Open v1. The standalone CLI has been removed for a clean rebuild.
 
+The hosted Cloud deployment can be kept private with `CREED_CLOUD_ACCESS=private` and a server-only `CREED_CLOUD_TESTER_EMAILS` allowlist. In that mode public acquisition points to the roadmap, billing is disabled, and only approved accounts can use Cloud pages, APIs, HTTP tokens, or MCP.
+
 ## Implemented release shape
 
 - Open and Cloud are independent Next.js build targets.
@@ -21,7 +23,7 @@ Creed Cloud continues in `apps/cloud/` for private development and testing. Host
 - Save-state behavior is shared. Open says `Saved locally` for drafts and `Saved to database` in green after persistence.
 - Public Open calls to action say `View on GitHub`.
 - The CLI card is visibly disabled in Open and Cloud and links to `creed.md/roadmap`.
-- `/docs` remains in the main applications for this release. A separate docs site is the next project, not part of this release pass.
+- The standalone documentation site lives in `apps/docs/` and owns its content, navigation, and purple brand treatment. Open and Cloud no longer ship a `/docs` route; product links and agent contracts point to `docs.creed.md`.
 
 ## Supported Open setup
 

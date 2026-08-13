@@ -1477,7 +1477,7 @@ export function buildHiddenAgentGuidanceMarkdown(options?: {
   const anyDirect = directSections.length > 0;
   const modeIsMixed =
     new Set(sectionPermissions.map((entry) => entry.permission)).size > 1;
-  const docsUrl = options?.docsUrl ?? "https://creed.md/docs";
+  const docsUrl = options?.docsUrl ?? "https://docs.creed.md";
   const proposalTargetSections = [
     ...new Set([
       ...writableSections,

@@ -4,9 +4,9 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Creed Open v1.0.0](https://img.shields.io/badge/Creed_Open-v1.0.0-2563EB)](./CHANGELOG.md)
-[![MCP](https://img.shields.io/badge/protocol-MCP%20%2B%20OAuth%202.1-8A2BE2)](https://creed.md/docs)
+[![MCP](https://img.shields.io/badge/protocol-MCP%20%2B%20OAuth%202.1-8A2BE2)](https://docs.creed.md)
 
-[Website](https://creed.md) · [Docs](https://creed.md/docs) · [Roadmap](https://creed.md/roadmap) · [Security](./SECURITY.md)
+[Website](https://creed.md) · [Docs](https://docs.creed.md) · [Roadmap](https://creed.md/roadmap) · [Security](./SECURITY.md)
 
 </div>
 

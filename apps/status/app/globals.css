@@ -1,12 +1,6 @@
 @import "tailwindcss";
 
-/* ---------------------------------------------------------------------------
-   Creed design tokens , ported verbatim from the main app's globals.css.
-   Light is the default. Dark applies either when the OS prefers it (and the
-   user hasn't overridden) or when the theme provider sets an explicit `.dark`
-   class. A `.light` class forces light even on a dark OS. See
-   components/theme-provider.tsx (press M to toggle).
---------------------------------------------------------------------------- */
+/* Status uses the Creed palette while keeping its state colours independent. */
 :root {
   --status-bg: #f9f9f8;
   --status-surface: #ffffff;
@@ -22,12 +16,10 @@
   --status-down: #ef4444;
   --status-empty: #e6e6e2;
 
-  /* The chip behind a status glyph (and the banner label). Follows the theme:
-     light in light mode, dark in dark mode , so it never clashes with the
-     surrounding surface. */
+  /* The banner ink follows the theme so it stays legible on state colours. */
   --status-glyph-ink: #ffffff;
 
-  --status-radius-card: 1rem; /* 16px , Creed --radius-xl */
+  --status-radius-card: 1rem;
   --status-radius-bar: 1px;
 
   color-scheme: light;
@@ -102,9 +94,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Card surface. No ring in either mode , the surface lifts purely via
-   background contrast against the page (light: #fff on #f9f9f8; dark:
-   #161615 on #0e0e0d). */
 .card-surface {
   background: var(--status-surface);
 }

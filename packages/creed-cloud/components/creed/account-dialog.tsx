@@ -92,9 +92,18 @@ export function AccountDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { setDisplayName, setProfileAvatar, deleteAccount } = useCreedActions();
-  const user = useCreedStateSelector((s) => s.user, (a, b) => a === b);
-  const creedId = useCreedStateSelector((s) => s.creedId, (a, b) => a === b);
-  const creeds = useCreedStateSelector((s) => s.creeds, (a, b) => a === b);
+  const user = useCreedStateSelector(
+    (s) => s.user,
+    (a, b) => a === b,
+  );
+  const creedId = useCreedStateSelector(
+    (s) => s.creedId,
+    (a, b) => a === b,
+  );
+  const creeds = useCreedStateSelector(
+    (s) => s.creeds,
+    (a, b) => a === b,
+  );
 
   const seededOwned = useMemo(
     () => ownedOptionsFromState(creeds ?? []),
@@ -110,9 +119,8 @@ export function AccountDialog({
   const [bonusRemainingUsd, setBonusRemainingUsd] = useState<number | null>(
     null,
   );
-  const [bonusAllowanceUsd, setBonusAllowanceUsd] =
-    useState<number>(GRANT_MONTHLY_USD);
-  const [bonusResets, setBonusResets] = useState(true);
+  const [bonusAllowanceUsd, setBonusAllowanceUsd] = useState<number>(0);
+  const [bonusResets, setBonusResets] = useState(false);
   const [bonusCreedId, setBonusCreedId] = useState<string>("");
   const [savedBonusCreedId, setSavedBonusCreedId] = useState<string>("");
   const [bonusOptions, setBonusOptions] = useState<CreditsHomeOption[]>([]);
@@ -164,8 +172,8 @@ export function AccountDialog({
       setBonusResets(true);
     } else {
       setBonusRemainingUsd(null);
-      setBonusAllowanceUsd(GRANT_MONTHLY_USD);
-      setBonusResets(true);
+      setBonusAllowanceUsd(0);
+      setBonusResets(false);
     }
     setBonusBalanceLoading(true);
 
@@ -274,7 +282,9 @@ export function AccountDialog({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ creedId: bonusCreedId }),
         });
-        const data = (await res.json().catch(() => ({}))) as CreditsHomePayload & {
+        const data = (await res
+          .json()
+          .catch(() => ({}))) as CreditsHomePayload & {
           error?: string;
         };
         if (!res.ok) {
@@ -301,7 +311,9 @@ export function AccountDialog({
       // Success navigates away via full page load; keep the spinner until then.
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Could not delete your account.",
+        error instanceof Error
+          ? error.message
+          : "Could not delete your account.",
       );
       setDeleting(false);
     }
@@ -357,6 +369,7 @@ export function AccountDialog({
             </div>
           </div>
 
+          {bonusResets ? (
           <div className="min-w-0 rounded-[var(--radius-xl)] border border-[var(--creed-border)] p-3 sm:p-4">
             <div className="flex min-w-0 items-center justify-between gap-3">
               <div className="min-w-0 shrink">
@@ -432,7 +445,9 @@ export function AccountDialog({
                               avatarUrl={creed.avatarUrl ?? undefined}
                               size="sm"
                             />
-                            <span className="min-w-0 truncate">{creed.name}</span>
+                            <span className="min-w-0 truncate">
+                              {creed.name}
+                            </span>
                           </span>
                           {selected ? (
                             <Check
@@ -456,6 +471,7 @@ export function AccountDialog({
               )}
             </div>
           </div>
+          ) : null}
 
           <div className="min-w-0 rounded-[var(--radius-xl)] border border-[#FECACA] bg-[#FEF2F2] p-3 sm:p-4 dark:border-[#7F1D1D]/40 dark:bg-[#3F1212]/30">
             {!deleteExpanded ? (
@@ -540,9 +556,7 @@ export function AccountDialog({
             onClick={() => void handleSave()}
           >
             {saving ? "Saving" : "Save"}
-            {saving ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-            ) : null}
+            {saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
           </Button>
         </DialogFooter>
       </DialogContent>

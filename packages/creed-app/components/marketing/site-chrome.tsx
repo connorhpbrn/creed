@@ -12,8 +12,18 @@ import {
 import { SceneryFade, SceneryImage } from "@/components/marketing/scenery-image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronDown, ChevronLeft, LoaderCircle, Star } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  LoaderCircle,
+  Star,
+} from "lucide-react";
 import { MenuIcon } from "@creed/ui/menu";
+import { BrandedCredit } from "@creed/ui/branded-credit";
+import {
+  ArrowUpRightIcon,
+  type ArrowUpRightIconHandle,
+} from "@creed/ui/arrow-up-right";
 import { CreedWordmark } from "@/components/creed/brand";
 import { SystemStatusPill } from "@/components/marketing/system-status";
 import { useAnimatedIconControls } from "@/components/creed/animated-icon-controls";
@@ -29,7 +39,6 @@ import { useCreedEdition } from "@/components/creed/edition-provider";
 import {
   DISCORD_URL,
   GITHUB_URL,
-  HPBRN_URL,
   INSTAGRAM_URL,
   TWITTER_URL,
 } from "@/lib/branding";
@@ -45,12 +54,13 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { label: "Pricing", href: "/pricing" },
       { label: "Roadmap", href: "/roadmap" },
+      { label: "Status", href: "https://status.creed.md" },
     ],
   },
   {
     label: "Resources",
     items: [
-      { label: "Docs", href: "/docs" },
+      { label: "Docs", href: "https://docs.creed.md" },
       { label: "Bench", href: "/bench" },
       { label: "Changelog", href: "/changelog" },
     ],
@@ -110,7 +120,8 @@ export function MarketingHeader({
   configured: boolean;
   scrolled: boolean;
 }) {
-  const hasHostedAccounts = useCreedEdition().capabilities.hostedAccounts;
+  const { hostedAccounts: hasHostedAccounts, publicSignup } =
+    useCreedEdition().capabilities;
   const cloudAuthEnabled = configured && hasHostedAccounts;
   void scrolled;
   const authState = useLandingAuthState(cloudAuthEnabled);
@@ -167,7 +178,7 @@ export function MarketingHeader({
             stickyChromeActive ? "opacity-100" : "opacity-0",
           )}
         >
-          <div className="absolute inset-0 rounded-xl bg-[var(--creed-surface)]" />
+          <div className="absolute inset-0 rounded-xl border border-[var(--creed-border)] bg-[var(--creed-surface)]" />
         </motion.div>
         <header
           className={cn(
@@ -184,7 +195,7 @@ export function MarketingHeader({
         >
           <CreedWordmark
             className="ml-1.5"
-            imageClassName={stickyChromeActive ? undefined : "invert brightness-0"}
+            onTransparent={!stickyChromeActive}
           />
         </Link>
       </div>
@@ -194,7 +205,7 @@ export function MarketingHeader({
         aria-label="Creed home"
         className="hidden shrink-0 transition-opacity duration-200 hover:opacity-60 md:block"
       >
-        <CreedWordmark className="ml-0" imageClassName={stickyChromeActive ? undefined : "invert brightness-0"} />
+        <CreedWordmark className="ml-0" onTransparent={!stickyChromeActive} />
       </Link>
 
       <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
@@ -211,6 +222,7 @@ export function MarketingHeader({
 
       <HeaderAuthActions
         hasHostedAccounts={hasHostedAccounts}
+        publicSignup={publicSignup}
         authState={authState}
         continueHref={continueHref}
         scrolled={stickyChromeActive}
@@ -275,7 +287,7 @@ export function MarketingHeader({
                 </motion.div>
               ))}
 
-              {hasHostedAccounts && authState !== "loading" ? (
+              {hasHostedAccounts && publicSignup && authState !== "loading" ? (
                 <motion.div
                   className="relative z-10"
                   initial={{ opacity: 0, x: 10 }}
@@ -398,7 +410,7 @@ function GitHubStarButton({
       aria-label="Star Creed on GitHub"
       onClick={onNavigate}
       className={cn(
-        "inline-flex h-9 items-center gap-2.5 rounded-md px-3 text-[14px] font-medium shadow-none transition-colors duration-300",
+        "github-star-button inline-flex h-9 items-center gap-2.5 rounded-md px-3 text-[14px] font-medium shadow-none transition-colors duration-300",
         scrolled
           ? "bg-[var(--creed-accent)] text-white hover:bg-[var(--creed-accent-hover)]"
           : "bg-white text-[#19345f] hover:bg-[#f6f7fb]",
@@ -407,7 +419,7 @@ function GitHubStarButton({
     >
       <GitHubMark className="h-[18px] w-[18px]" />
       <span className="inline-flex items-center gap-1.5">
-        <Star className="h-3.5 w-3.5" strokeWidth={1.8} />
+        <Star className="github-star-icon h-3.5 w-3.5" strokeWidth={1.8} />
         {stars !== null ? (
           <span className="tabular-nums">{formatStarCount(stars)}</span>
         ) : null}
@@ -516,7 +528,7 @@ function HeaderDropdown({
                 "left-0",
               )}
             >
-              <div className="flex flex-col gap-1 rounded-xl bg-[var(--creed-surface)] p-1.5 shadow-[0_10px_18px_rgba(0,0,0,0.16)]">
+              <div className="flex flex-col gap-1 rounded-xl border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1.5 shadow-[0_10px_18px_rgba(0,0,0,0.16)]">
                 {items.map((item, index) => (
                   <motion.div
                     key={item.label}
@@ -537,13 +549,12 @@ function HeaderDropdown({
                       ease: [0.22, 1, 0.36, 1],
                     }}
                   >
-                    <Link
-                      href={item.href}
+                    <AnimatedNavLink
+                      item={item}
                       onClick={() => setOpen(false)}
                       className={linkClass}
-                    >
-                      {item.label}
-                    </Link>
+                      arrowClassName="ml-auto"
+                    />
                   </motion.div>
                 ))}
               </div>
@@ -556,6 +567,7 @@ function HeaderDropdown({
 
 function HeaderAuthActions({
   hasHostedAccounts,
+  publicSignup,
   authState,
   continueHref,
   scrolled,
@@ -563,6 +575,7 @@ function HeaderAuthActions({
   setMobileMenuOpen,
 }: {
   hasHostedAccounts: boolean;
+  publicSignup: boolean;
   authState: "loading" | "signed-in" | "signed-out";
   continueHref: SignedInContinueHref;
   scrolled?: boolean;
@@ -669,6 +682,15 @@ function HeaderAuthActions({
     );
   }
 
+  if (!publicSignup) {
+    return (
+      <div className="flex items-center gap-2">
+        <GitHubStarButton scrolled={scrolled} className="hidden md:inline-flex" />
+        {mobileLinksTrigger}
+      </div>
+    );
+  }
+
   // Signed out → "Start" dropdown (Login / Sign up) + the GitHub star pill.
   // No "Get Started" pill in the chrome anymore; that lives on the landing
   // page itself.
@@ -742,13 +764,11 @@ function MobileNavRow({
                   ease: [0.22, 1, 0.36, 1],
                 }}
               >
-                <Link
-                  href={item.href}
+                <AnimatedNavLink
+                  item={item}
                   onClick={onNavigate}
-                  className="block whitespace-nowrap px-2.5 py-1 text-[14px] font-medium transition-opacity duration-200 hover:opacity-55"
-                >
-                  {item.label}
-                </Link>
+                  className="group inline-flex items-center gap-1 whitespace-nowrap px-2.5 py-1 text-[14px] font-medium transition-opacity duration-200 hover:opacity-55"
+                />
               </motion.span>
             ))}
           </motion.div>
@@ -786,7 +806,7 @@ export function MarketingFooter() {
             >
               <CreedWordmark />
             </Link>
-            <p className="t-body-lg mt-4 max-w-sm text-[var(--creed-text-secondary)]">
+            <p className="t-body-lg mt-4 max-w-sm font-medium text-[var(--creed-text-secondary)]">
               {CREED_TAGLINE}
             </p>
           </div>
@@ -803,19 +823,10 @@ export function MarketingFooter() {
       </div>
 
       <div className="mx-auto mt-8 flex max-w-7xl flex-col gap-4 border-t border-[var(--creed-border)] py-6 md:flex-row md:items-center md:justify-between">
-        <div className="t-meta flex flex-wrap items-center gap-x-2 gap-y-1 text-[var(--creed-text-tertiary)]">
-          <span>© 2026 Creed</span>
-          <span aria-hidden="true">·</span>
-          <span>by</span>
-          <Link
-            href={HPBRN_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="font-medium text-[var(--creed-accent)] transition-colors hover:text-[var(--creed-accent-hover)]"
-          >
-            hpbrn
-          </Link>
-        </div>
+        <BrandedCredit
+          accent="var(--creed-accent)"
+          className="t-meta justify-start text-[var(--creed-text-tertiary)]"
+        />
         {/* Social icons: Discord and GitHub use the same full inline marks as
             the product UI; Instagram and X remain local SVG masks. */}
         <div className="flex items-center gap-4 text-[var(--creed-text-tertiary)]">
@@ -916,20 +927,56 @@ function SocialIconLink({
 function FooterColumn({ title, items }: { title: string; items: NavItem[] }) {
   return (
     <div>
-      <div className="t-body-lg font-medium text-[var(--creed-text-primary)]">
+      <div className="t-body-lg font-medium text-[var(--creed-text-secondary)]">
         {title}
       </div>
       <div className="mt-4 space-y-3">
         {items.map((item) => (
-          <Link
+          <AnimatedNavLink
             key={item.label}
-            href={item.href}
-            className="t-body-lg block text-[var(--creed-text-secondary)] hover:text-[var(--creed-accent)]"
-          >
-            {item.label}
-          </Link>
+            item={item}
+            className="t-body-lg flex w-fit items-center text-[var(--creed-text-primary)] hover:text-[var(--creed-accent)]"
+            arrowClassName="ml-6"
+          />
         ))}
       </div>
     </div>
+  );
+}
+
+function AnimatedNavLink({
+  item,
+  className,
+  arrowClassName,
+  onClick,
+}: {
+  item: NavItem;
+  className: string;
+  arrowClassName?: string;
+  onClick?: () => void;
+}) {
+  const arrowRef = useRef<ArrowUpRightIconHandle | null>(null);
+  const external = item.href.startsWith("http");
+
+  return (
+    <Link
+      href={item.href}
+      onClick={onClick}
+      onMouseEnter={() => arrowRef.current?.startAnimation()}
+      onMouseLeave={() => arrowRef.current?.stopAnimation()}
+      className={className}
+    >
+      {item.label}
+      {external ? (
+        <ArrowUpRightIcon
+          ref={arrowRef}
+          size={14}
+          className={cn(
+            "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center",
+            arrowClassName,
+          )}
+        />
+      ) : null}
+    </Link>
   );
 }

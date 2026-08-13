@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
@@ -47,10 +41,7 @@ import {
   type ChartConfig,
 } from "@creed/ui/chart";
 import { StackTopBar } from "@/components/creed/rounded-bar";
-import {
-  SkeletonBar,
-  SkeletonText,
-} from "@/components/creed/loading-skeleton";
+import { SkeletonBar, SkeletonText } from "@/components/creed/loading-skeleton";
 import { AnimatedIconButton } from "@/components/creed/animated-icon-action";
 import { toast } from "sonner";
 import { SearchableSelect } from "@/components/creed/searchable-select";
@@ -106,7 +97,8 @@ import {
   SectionPermissionControl,
 } from "@/components/creed/section-permission-control";
 
-const GITHUB_AUTHORIZED_APPS_URL = "https://github.com/settings/connections/applications";
+const GITHUB_AUTHORIZED_APPS_URL =
+  "https://github.com/settings/connections/applications";
 
 function looksLikeApiKey(value: string) {
   const trimmed = value.trim();
@@ -125,7 +117,10 @@ function formatGitHubAccessError(message: string) {
   return message;
 }
 
-function formatGitHubAccessErrorForState(message: string, githubConnected: boolean) {
+function formatGitHubAccessErrorForState(
+  message: string,
+  githubConnected: boolean,
+) {
   if (githubConnected && /GitHub is not connected/i.test(message)) {
     return "GitHub access expired";
   }
@@ -182,7 +177,8 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [repos, setRepos] = useState<RepoOption[]>([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
-  const [versionStatus, setVersionStatus] = useState<VersionControlStatus | null>(null);
+  const [versionStatus, setVersionStatus] =
+    useState<VersionControlStatus | null>(null);
   const [githubRefreshTick, setGitHubRefreshTick] = useState(0);
   const [aiSettings, setAiSettings] = useState<PublicAiSettings>({
     provider: "openrouter",
@@ -196,7 +192,8 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
   const [usageRange, setUsageRange] = useState<AiUsageRange>("90d");
   const [usage, setUsage] = useState<AiUsageSummary | null>(null);
   const [credits, setCredits] = useState<CreditsState | null>(null);
-  const [openRouterBalance, setOpenRouterBalance] = useState<OpenRouterBalance | null>(null);
+  const [openRouterBalance, setOpenRouterBalance] =
+    useState<OpenRouterBalance | null>(null);
   const [addCreditsOpen, setAddCreditsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const canSaveAiKey = looksLikeApiKey(aiKeyDraft) && !aiSaving;
@@ -223,7 +220,9 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
     const perms = state.sections
       .filter((section) => section.agentPermission !== "hidden")
       .map((section) => section.agentPermission);
-    return perms.length > 0 && perms.every((perm) => perm === perms[0]) ? perms[0] : null;
+    return perms.length > 0 && perms.every((perm) => perm === perms[0])
+      ? perms[0]
+      : null;
   })();
 
   // Stats for the Data card: gives the export buttons a sense of weight
@@ -231,7 +230,10 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
   // as small mono chips.
   const dataStats = useMemo(() => {
     const sectionCount = state.sections.length;
-    const wordCount = exportMarkdown().trim().split(/\s+/).filter(Boolean).length;
+    const wordCount = exportMarkdown()
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean).length;
     return { sectionCount, wordCount };
   }, [state.sections, exportMarkdown]);
 
@@ -304,7 +306,8 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
   const githubConnected = effectiveGitHubStatus === "connected";
   const githubDisconnected = effectiveGitHubStatus === "disconnected";
   const selectedRepoFullName =
-    state.settings.versionControl.repoOwner && state.settings.versionControl.repoName
+    state.settings.versionControl.repoOwner &&
+    state.settings.versionControl.repoName
       ? `${state.settings.versionControl.repoOwner}/${state.settings.versionControl.repoName}`
       : "";
   const latestCommitUrl =
@@ -328,7 +331,10 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
         text: "GitHub isn't available on this deployment yet.",
       },
       invalid: { ok: false, text: "Could not start the GitHub connection." },
-      forbidden: { ok: false, text: "You can't manage this GitHub connection." },
+      forbidden: {
+        ok: false,
+        text: "You can't manage this GitHub connection.",
+      },
     };
     const message = messages[status];
     if (message) (message.ok ? toast.success : toast.error)(message.text);
@@ -371,9 +377,11 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
         if (!cancelled) {
           toast.error(
             formatGitHubAccessErrorForState(
-              error instanceof Error ? error.message : "Could not load GitHub repos",
-              githubConnected
-            )
+              error instanceof Error
+                ? error.message
+                : "Could not load GitHub repos",
+              githubConnected,
+            ),
           );
         }
       } finally {
@@ -391,7 +399,11 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
   }, [githubConnected, githubRefreshTick]);
 
   useEffect(() => {
-    if (!githubConnected || !state.settings.versionControl.repoOwner || !state.settings.versionControl.repoName) {
+    if (
+      !githubConnected ||
+      !state.settings.versionControl.repoOwner ||
+      !state.settings.versionControl.repoName
+    ) {
       setBranches([]);
       return;
     }
@@ -403,7 +415,7 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
         setBranchesLoading(true);
         const loadedBranches = await loadSettingsBranches(
           state.settings.versionControl.repoOwner,
-          state.settings.versionControl.repoName
+          state.settings.versionControl.repoName,
         );
 
         if (!cancelled) {
@@ -413,9 +425,11 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
         if (!cancelled) {
           toast.error(
             formatGitHubAccessErrorForState(
-              error instanceof Error ? error.message : "Could not load GitHub branches",
-              githubConnected
-            )
+              error instanceof Error
+                ? error.message
+                : "Could not load GitHub branches",
+              githubConnected,
+            ),
           );
         }
       } finally {
@@ -444,7 +458,9 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
       try {
         const settings = await loadSettingsAiSettings();
         if (!cancelled && settings) {
-          setAiSettings(hasManagedCredits ? settings : { ...settings, aiMode: "byok" });
+          setAiSettings(
+            hasManagedCredits ? settings : { ...settings, aiMode: "byok" },
+          );
         }
       } catch {
         return;
@@ -463,7 +479,10 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
 
     async function loadUsage() {
       try {
-        const loadedUsage = await loadSettingsUsage(usageRange, aiSettings.aiMode);
+        const loadedUsage = await loadSettingsUsage(
+          usageRange,
+          aiSettings.aiMode,
+        );
         if (!cancelled) {
           setUsage(loadedUsage);
         }
@@ -482,9 +501,12 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
   // The Panel intent consumer below runs in a mount-once effect, so it reads
   // the mode-change handler through a ref that tracks the latest render (the
   // handler closes over aiSettings and would otherwise be stale).
-  const panelModeChangeRef = useRef<(mode: "credits" | "byok") => void>(() => {});
+  const panelModeChangeRef = useRef<(mode: "credits" | "byok") => void>(
+    () => {},
+  );
   useEffect(() => {
-    panelModeChangeRef.current = (mode: "credits" | "byok") => void handleModeChange(mode);
+    panelModeChangeRef.current = (mode: "credits" | "byok") =>
+      void handleModeChange(mode);
   });
 
   // Panel → Settings intents: scroll to a section, set the usage range or
@@ -533,10 +555,14 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
           // A soft pulse so the eye lands on the right section after the jump.
           element.animate(
             [
-              { backgroundColor: "var(--creed-surface-raised)", borderRadius: "12px", offset: 0.15 },
+              {
+                backgroundColor: "var(--creed-surface-raised)",
+                borderRadius: "12px",
+                offset: 0.15,
+              },
               { backgroundColor: "transparent", borderRadius: "12px" },
             ],
-            { duration: 1100, easing: "ease-out" }
+            { duration: 1100, easing: "ease-out" },
           );
           return;
         }
@@ -587,7 +613,10 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
 
     return () => {
       cancelled = true;
-      window.removeEventListener(SETTINGS_CREDITS_CHANGED_EVENT, onCreditsChanged);
+      window.removeEventListener(
+        SETTINGS_CREDITS_CHANGED_EVENT,
+        onCreditsChanged,
+      );
     };
   }, [hasManagedCredits]);
 
@@ -630,9 +659,11 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
         if (!cancelled) {
           toast.error(
             formatGitHubAccessErrorForState(
-              error instanceof Error ? error.message : "Could not load GitHub sync status",
-              githubConnected
-            )
+              error instanceof Error
+                ? error.message
+                : "Could not load GitHub sync status",
+              githubConnected,
+            ),
           );
         }
       }
@@ -712,7 +743,6 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
     }
   }
 
-
   // GitHub is connected through the standalone "Creed" OAuth App (not Supabase
   // identity linking): a full-page redirect to /api/app/github/authorize, which
   // bounces through GitHub and back to /settings?github=<status> (handled above).
@@ -743,7 +773,9 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
       void refreshState();
       toast.success("GitHub disconnected");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not disconnect GitHub");
+      toast.error(
+        error instanceof Error ? error.message : "Could not disconnect GitHub",
+      );
     } finally {
       setDisconnectingGitHub(false);
     }
@@ -989,7 +1021,7 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                       // Match the other dropdown chevrons: tertiary by default,
                       // primary (white in dark) on hover.
                       "h-4 w-4 shrink-0 text-[var(--creed-text-tertiary)] transition-all duration-200 group-hover:text-[var(--creed-text-primary)]",
-                      permsOpen && "rotate-180"
+                      permsOpen && "rotate-180",
                     )}
                   />
                 </button>
@@ -1011,7 +1043,10 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                             <div className="flex min-w-0 items-center gap-2.5">
                               <span
                                 className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
-                                style={{ backgroundColor: accentColorMap[section.accent] }}
+                                style={{
+                                  backgroundColor:
+                                    accentColorMap[section.accent],
+                                }}
                               />
                               <span className="truncate text-[14px] text-[var(--creed-text-primary)]">
                                 {section.name}
@@ -1019,7 +1054,9 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                             </div>
                             <SectionPermissionControl
                               value={section.agentPermission}
-                              onChange={(permission) => setSectionPermission(section.id, permission)}
+                              onChange={(permission) =>
+                                setSectionPermission(section.id, permission)
+                              }
                               layoutGroup={section.id}
                             />
                           </div>
@@ -1041,7 +1078,9 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
             <div className="mt-4 divide-y divide-[var(--creed-border)] overflow-hidden rounded-[var(--radius-xl)] border border-[var(--creed-border)] bg-[var(--creed-surface)]">
               <IntegrationRow
                 title="GitHub"
-                icon={<GitHubMark className="h-7 w-7 text-[#24292F] dark:text-[var(--creed-text-primary)]" />}
+                icon={
+                  <GitHubMark className="h-7 w-7 text-[#24292F] dark:text-[var(--creed-text-primary)]" />
+                }
                 status={effectiveGitHubStatus}
                 statusLabel={
                   githubConnected
@@ -1051,7 +1090,9 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                       : "Not connected"
                 }
                 secondaryLabel={
-                  githubConnected ? state.settings.integrations.github.accountLabel : undefined
+                  githubConnected
+                    ? state.settings.integrations.github.accountLabel
+                    : undefined
                 }
                 action={
                   githubConnected ? (
@@ -1082,7 +1123,8 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
               <h2 className="text-[16px] font-medium text-[var(--creed-text-primary)]">
                 Model usage
               </h2>
-              {hasManagedCredits ? <DropdownMenu>
+              {hasManagedCredits ? (
+                <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
@@ -1102,7 +1144,8 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                       onSelect={() => void handleModeChange(mode)}
                       className={cn(
                         "flex items-center justify-between gap-5 rounded-lg px-3 py-2 text-sm",
-                        aiSettings.aiMode === mode && "bg-[var(--creed-surface-selected)] font-medium"
+                          aiSettings.aiMode === mode &&
+                            "bg-[var(--creed-surface-selected)] font-medium",
                       )}
                     >
                       <span>{mode === "credits" ? "Credits" : "BYOK"}</span>
@@ -1112,7 +1155,8 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
-              </DropdownMenu> : (
+                </DropdownMenu>
+              ) : (
                 <span className="inline-flex h-8 items-center rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-sm text-[var(--creed-text-secondary)]">
                   BYOK
                 </span>
@@ -1139,7 +1183,7 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                           </div>
                         )}
                       </div>
-                      {credits == null || isCreditsHome ? (
+                      {credits?.allowanceResets && isCreditsHome ? (
                         <div className="rounded-[var(--radius-lg)] border border-[var(--creed-border)] px-4 py-2.5">
                           <div className="text-[13px] font-medium text-[var(--creed-text-secondary)]">
                             Bonus credits
@@ -1224,7 +1268,9 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                             setAiKeyDraft("");
                           }
                         }}
-                        disabled={aiSaving || (!aiKeyDraft && !aiSettings.keyLastFour)}
+                        disabled={
+                          aiSaving || (!aiKeyDraft && !aiSettings.keyLastFour)
+                        }
                       >
                         Clear
                       </Button>
@@ -1234,7 +1280,9 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                         disabled={!canSaveAiKey}
                       >
                         Save
-                        {aiSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                        {aiSaving ? (
+                          <LoaderCircle className="h-4 w-4 animate-spin" />
+                        ) : null}
                       </Button>
                     </div>
                   )}
@@ -1297,14 +1345,18 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                             : "Select a repo"
                       }
                       searchPlaceholder="Search repos..."
-                      disabled={!githubConnected || reposLoading || repos.length === 0}
+                      disabled={
+                        !githubConnected || reposLoading || repos.length === 0
+                      }
                       options={
                         repos.length > 0
                           ? repos.map((repo) => ({
                               key: String(repo.id),
                               value: repo.fullName,
                               label: repo.fullName,
-                              description: repo.private ? "Private repo" : "Public repo",
+                              description: repo.private
+                                ? "Private repo"
+                                : "Public repo",
                               search: `${repo.fullName} ${repo.defaultBranch}`,
                             }))
                           : selectedRepoFullName
@@ -1330,7 +1382,8 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                       onChange={handleBranchChange}
                       placeholder={
                         !githubConnected
-                          ? state.settings.versionControl.branch || "Select a branch"
+                          ? state.settings.versionControl.branch ||
+                            "Select a branch"
                           : branchesLoading
                             ? "Loading branches..."
                             : "Select a branch"
@@ -1370,7 +1423,10 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                   <span className="font-medium text-[var(--creed-text-secondary)]">
                     Last commit
                   </span>
-                  <span aria-hidden className="shrink-0 text-[var(--creed-text-tertiary)]">
+                  <span
+                    aria-hidden
+                    className="shrink-0 text-[var(--creed-text-tertiary)]"
+                  >
                     ·
                   </span>
                   {versionStatus?.remoteMessage ? (
@@ -1410,7 +1466,8 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
             <div className="mt-4 rounded-[var(--radius-xl)] border border-[var(--creed-border)] bg-[var(--creed-surface)] p-5">
               {archivedSections.length === 0 ? (
                 <p className="text-[14px] leading-7 text-[var(--creed-text-secondary)]">
-                  Nothing archived. Archived sections show up here, ready to restore.
+                  Nothing archived. Archived sections show up here, ready to
+                  restore.
                 </p>
               ) : (
                 <div className="space-y-2.5">
@@ -1428,7 +1485,7 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                             expanded={expanded}
                             onToggle={() =>
                               setExpandedArchived((current) =>
-                                current === section.id ? null : section.id
+                                current === section.id ? null : section.id,
                               )
                             }
                           />
@@ -1446,7 +1503,10 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                             <Button
                               className="rounded-md bg-[#DC2626] text-white hover:bg-[#B91C1C] hover:text-white"
                               onClick={() =>
-                                setArchivedDeleteTarget({ id: section.id, name: section.name })
+                                setArchivedDeleteTarget({
+                                  id: section.id,
+                                  name: section.name,
+                                })
                               }
                             >
                               Delete
@@ -1459,7 +1519,10 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: "auto", opacity: 1 }}
                               exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                              transition={{
+                                duration: 0.24,
+                                ease: [0.22, 1, 0.36, 1],
+                              }}
                               className="hidden overflow-hidden md:block"
                             >
                               <div className="border-t border-[var(--creed-border)] px-4 py-4">
@@ -1533,7 +1596,7 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                     downloadFile(
                       "creed-activity.json",
                       exportActivityJson(),
-                      "application/json;charset=utf-8"
+                      "application/json;charset=utf-8",
                     )
                   }
                 >
@@ -1547,7 +1610,7 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
                     downloadFile(
                       "creed-data.json",
                       exportAllDataJson(),
-                      "application/json;charset=utf-8"
+                      "application/json;charset=utf-8",
                     )
                   }
                 >
@@ -1648,8 +1711,8 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
           <DialogHeader>
             <DialogTitle>Delete archived section</DialogTitle>
             <DialogDescription>
-              This permanently deletes &ldquo;{archivedDeleteTarget?.name}&rdquo; and its history.
-              This can&apos;t be undone.
+              This permanently deletes &ldquo;{archivedDeleteTarget?.name}
+              &rdquo; and its history. This can&apos;t be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-row items-center justify-between border-t-[var(--creed-border)] bg-[var(--creed-surface)] sm:justify-between">
@@ -1663,7 +1726,8 @@ function PersonalSettingsScreen({ active }: { active: boolean }) {
             <Button
               className="rounded-md bg-[#DC2626] px-4 text-white hover:bg-[#B91C1C] hover:text-white"
               onClick={() => {
-                if (archivedDeleteTarget) deleteSection(archivedDeleteTarget.id);
+                if (archivedDeleteTarget)
+                  deleteSection(archivedDeleteTarget.id);
                 setArchivedDeleteTarget(null);
               }}
             >
@@ -1786,7 +1850,7 @@ export function IntegrationRow({
                     ? "bg-[#ECFDF5] text-[#047857] dark:bg-[#052e1a]/50 dark:text-[#4ade80]"
                     : isDisconnected
                       ? "bg-[#FEF2F2] text-[#B91C1C] dark:bg-[#3F1212]/40 dark:text-[#F87171]"
-                      : "bg-[var(--creed-surface-raised)] text-[var(--creed-text-secondary)]"
+                      : "bg-[var(--creed-surface-raised)] text-[var(--creed-text-secondary)]",
                 )}
               >
                 {statusLabel}
@@ -1824,9 +1888,9 @@ export function UsageCard({
   const present = Array.from(
     new Set(
       (usage?.days ?? []).flatMap((day) =>
-        day.segments.filter((s) => s.costUsd > 0).map((s) => s.feature)
-      )
-    )
+        day.segments.filter((s) => s.costUsd > 0).map((s) => s.feature),
+      ),
+    ),
   ).sort((a, b) => {
     const ai = featureOrder.indexOf(a);
     const bi = featureOrder.indexOf(b);
@@ -1838,13 +1902,18 @@ export function UsageCard({
       for (const feature of present) row[feature] = 0;
       for (const segment of day.segments) {
         if (present.includes(segment.feature)) {
-          row[segment.feature] = (Number(row[segment.feature]) || 0) + segment.costUsd;
+          row[segment.feature] =
+            (Number(row[segment.feature]) || 0) + segment.costUsd;
         }
       }
       return row;
     })
     // Only plot days that actually have spend.
-    .filter((row) => present.reduce((sum, feature) => sum + Number(row[feature] ?? 0), 0) > 0);
+    .filter(
+      (row) =>
+        present.reduce((sum, feature) => sum + Number(row[feature] ?? 0), 0) >
+        0,
+    );
   const chartConfig: ChartConfig = {};
   present.forEach((feature) => {
     const meta = featureMeta(feature);
@@ -1886,7 +1955,8 @@ export function UsageCard({
                 onSelect={() => onRangeChange(item)}
                 className={cn(
                   "flex items-center justify-between gap-5 rounded-lg px-3 py-2 text-sm",
-                  range === item && "bg-[var(--creed-surface-selected)] font-medium"
+                  range === item &&
+                    "bg-[var(--creed-surface-selected)] font-medium",
                 )}
               >
                 <span>{item}</span>
@@ -1917,21 +1987,32 @@ export function UsageCard({
             className="absolute inset-0"
           >
             {chartData.length > 0 ? (
-              <ChartContainer config={chartConfig} className="aspect-auto h-full w-full">
-                <BarChart data={chartData} margin={{ left: 4, right: 4, top: 8, bottom: 0 }}>
+                <ChartContainer
+                  config={chartConfig}
+                  className="aspect-auto h-full w-full"
+                >
+                  <BarChart
+                    data={chartData}
+                    margin={{ left: 4, right: 4, top: 8, bottom: 0 }}
+                  >
                   <CartesianGrid vertical={false} strokeDasharray="3 3" />
                   <XAxis dataKey="date" hide />
                   <YAxis hide />
                   <ChartTooltip
                     content={
                       <ChartTooltipContent
-                        labelFormatter={(value) => formatUsageDate(String(value))}
+                          labelFormatter={(value) =>
+                            formatUsageDate(String(value))
+                          }
                         formatter={(value, name, item) => (
                           <div className="flex w-full items-center justify-between gap-3">
                             <span className="flex items-center gap-1.5 text-[var(--creed-text-secondary)]">
                               <span
                                 className="h-2.5 w-2.5 rounded-[2px]"
-                                style={{ backgroundColor: item.color ?? item.payload?.fill }}
+                                  style={{
+                                    backgroundColor:
+                                      item.color ?? item.payload?.fill,
+                                  }}
                               />
                               {chartConfig[String(name)]?.label ?? name}
                             </span>
@@ -1949,7 +2030,12 @@ export function UsageCard({
                       dataKey={feature}
                       stackId="cost"
                       fill={`var(--color-${feature})`}
-                      shape={<StackTopBar orderedKeys={present} dataKey={feature} />}
+                        shape={
+                          <StackTopBar
+                            orderedKeys={present}
+                            dataKey={feature}
+                          />
+                        }
                     />
                   ))}
                 </BarChart>
@@ -1975,12 +2061,21 @@ export function UsageCard({
 function formatUsageDate(value: string) {
   const date = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function GitHubMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={className}
+      fill="currentColor"
+    >
       <path d="M12 .5C5.65.5.5 5.66.5 12.02c0 5.09 3.29 9.4 7.86 10.93.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.34-1.28-1.69-1.28-1.69-1.04-.71.08-.69.08-.69 1.15.08 1.75 1.18 1.75 1.18 1.02 1.76 2.68 1.25 3.34.96.1-.74.4-1.25.72-1.53-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.17 1.17a11 11 0 0 1 5.78 0c2.2-1.48 3.16-1.17 3.16-1.17.63 1.58.24 2.75.12 3.04.74.8 1.18 1.82 1.18 3.07 0 4.41-2.69 5.39-5.26 5.67.41.36.77 1.06.77 2.14 0 1.55-.01 2.79-.01 3.17 0 .31.21.68.8.56A11.53 11.53 0 0 0 23.5 12C23.5 5.66 18.35.5 12 .5Z" />
     </svg>
   );

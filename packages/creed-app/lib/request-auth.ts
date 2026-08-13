@@ -1,7 +1,10 @@
 import "server-only";
 import { cache } from "react";
 import { createSupabaseServerClient } from "@creed/persistence/supabase/server";
-import { authorizeInteractiveRequest } from "@creed/edition/auth";
+import {
+  authorizeAuthenticatedUser,
+  authorizeInteractiveRequest,
+} from "@creed/edition/auth";
 
 // Per-request cached auth accessor. React cache() dedupes within a single
 // server render, so the (creed-app) / onboarding layout and the
@@ -20,5 +23,8 @@ export const getRequestAuth = cache(async () => {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  return { supabase, user };
+  return {
+    supabase,
+    user: user && (await authorizeAuthenticatedUser(user)) ? user : null,
+  };
 });

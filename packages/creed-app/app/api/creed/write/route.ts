@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authorizeAuthenticatedUser } from "@creed/edition/auth";
 import type {
   AccentKey,
   ActivityEntry,
@@ -362,6 +363,9 @@ export async function POST(request: Request) {
   const { data: userData, error: userError } = await admin.auth.admin.getUserById(userId);
   if (userError || !userData.user) {
     return NextResponse.json({ error: userError?.message ?? "Could not load token owner." }, { status: 500 });
+  }
+  if (!(await authorizeAuthenticatedUser(userData.user))) {
+    return NextResponse.json({ error: "Invalid token." }, { status: 401 });
   }
 
   // Write route only uses sections + tokens for its mutation. Skip the

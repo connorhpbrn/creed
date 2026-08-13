@@ -3,6 +3,7 @@ import { SharedOnboardingScreen } from "@creed/cloud/components/creed/shared-onb
 import { getRequestAuth } from "@/lib/request-auth";
 import { hasActiveEntitlement } from "@creed/cloud/lib/stripe";
 import { isSupabaseConfigured } from "@creed/persistence/supabase/env";
+import { hasPrivateCloudAccess } from "@creed/cloud/lib/cloud-access";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +17,7 @@ export default async function SharedOnboardingPage({
   if (!user) redirect("/login?next=/onboarding/shared");
 
   const { creedId } = await searchParams;
-  if (!creedId) redirect("/file");
-
+  if (creedId) {
   const { data: membership } = await supabase
     .from("creed_members")
     .select("role, creeds!inner(type, onboarding_stage)")
@@ -35,8 +35,11 @@ export default async function SharedOnboardingPage({
   ) {
     redirect("/file");
   }
+  }
 
-  const paid = await hasActiveEntitlement(supabase, user.id);
+  const paid = hasPrivateCloudAccess(user.email)
+    ? true
+    : await hasActiveEntitlement(supabase, user.id);
 
-  return <SharedOnboardingScreen creedId={creedId} paid={paid} />;
+  return <SharedOnboardingScreen creedId={creedId ?? null} paid={paid} />;
 }

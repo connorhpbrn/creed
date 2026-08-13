@@ -26,14 +26,14 @@ export function FaqAccordion({ items }: { items: FaqItem[] }) {
               type="button"
               onClick={() => setOpenIndex(open ? -1 : index)}
               aria-expanded={open}
-              className="flex w-full items-center justify-between gap-6 py-7 text-left"
+              className="group flex w-full items-center justify-between gap-6 py-7 text-left"
             >
               <span className="t-body-lg font-medium text-[var(--creed-text-primary)]">
                 {item.question}
               </span>
               <ChevronDown
                 className={cn(
-                  "h-4 w-4 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                  "h-4 w-4 shrink-0 text-[var(--creed-text-tertiary)] transition-[color,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:text-[var(--creed-text-primary)]",
                   open && "rotate-180",
                 )}
               />

@@ -9,6 +9,7 @@ export const edition = {
     managedCredits: false,
     feedback: false,
     cli: false,
+    publicSignup: false,
   },
   routes: {
     unauthenticated: "/claim",

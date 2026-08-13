@@ -15,7 +15,8 @@ import { GITHUB_URL } from "@/lib/branding";
 const heroImage = "/assets/landing/scenery/garden.png";
 
 export function LandingHero({ configured }: { configured: boolean }) {
-  const hasHostedAccounts = useCreedEdition().capabilities.hostedAccounts;
+  const { hostedAccounts: hasHostedAccounts, publicSignup } =
+    useCreedEdition().capabilities;
   const cloudAuthEnabled = configured && hasHostedAccounts;
   const authState = useLandingAuthState(cloudAuthEnabled);
   const { href: ctaHref, isPaid, canResume } =
@@ -25,6 +26,8 @@ export function LandingHero({ configured }: { configured: boolean }) {
   const ctaLabel =
     !hasHostedAccounts
       ? "View on GitHub"
+      : !publicSignup && authState !== "signed-in"
+        ? "View roadmap"
       : authState !== "signed-in"
       ? "Get Started"
       : isPaid
@@ -37,6 +40,8 @@ export function LandingHero({ configured }: { configured: boolean }) {
   const resolvedHref =
     !hasHostedAccounts
       ? GITHUB_URL
+      : !publicSignup && authState !== "signed-in"
+        ? "/roadmap"
       : authState === "signed-in"
         ? ctaHref
         : "/signup?next=/onboarding";

@@ -252,7 +252,7 @@ function OnboardingDevPreview() {
     <div className="fixed inset-0 z-[100] overflow-y-auto">
       {branch === "shared" ? (
         <SharedOnboardingScreen
-          creedId="preview"
+          creedId={null}
           previewMode
           onPreviewClose={close}
           onPreviewBackToType={() => setBranch("personal")}

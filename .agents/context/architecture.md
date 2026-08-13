@@ -4,10 +4,11 @@ Current implementation truth. Code is canonical if this file drifts.
 
 ## Repository boundary
 
-Creed is one npm workspace monorepo with one root lockfile and three independent Next.js applications:
+Creed is one npm workspace monorepo with one root lockfile and four independent Next.js applications:
 
 - `apps/open/` composes the self-hosted product.
 - `apps/cloud/` composes the managed development product.
+- `apps/docs/` owns `docs.creed.md`.
 - `apps/status/` owns `status.creed.md`.
 
 The application code is split by responsibility:
@@ -29,6 +30,7 @@ Tailwind uses `source(none)` in `packages/creed-app/app/globals.css`. Every UI-b
 ```text
 apps/open  -> @creed/open  -> shared packages
 apps/cloud -> @creed/cloud -> shared packages
+apps/docs                  -> @creed/app interface primitives
 
 shared packages -X-> @creed/open or @creed/cloud
 @creed/open       -X-> @creed/cloud
@@ -45,6 +47,8 @@ Each app owns a thin `app/` tree. Route wrappers export implementations from the
 - Cloud-only routes export from `@creed/cloud/app/*`.
 
 Cloud-only surfaces include login, signup, password reset, billing, Stripe, feedback, invitations, members, Shared onboarding, managed credits, and account deletion. None may exist in the Open route manifest.
+
+Cloud's temporary private-development boundary lives in `packages/creed-cloud/lib/cloud-access.ts` and the Cloud edition auth adapter. `CREED_CLOUD_ACCESS=private` restricts authenticated page, app API, HTTP-token, and MCP access to the server-only comma-separated `CREED_CLOUD_TESTER_EMAILS` allowlist. It also disables managed billing and changes signed-out acquisition actions to `View roadmap`. The mode defaults to `public`, so removing the module wiring and the two variables restores the launch behavior without a data migration.
 
 The shared proxy implementation is `packages/creed-app/proxy.ts`. Each app supplies a compile-time policy. Open requires the owner cookie and redirects an unclaimed root request to `/claim`. Cloud retains hosted account behavior and managed-payment CSP origins.
 
@@ -81,6 +85,7 @@ Supabase is required for Open and Cloud. Canonical migrations live only in `pack
 Quality analysis is a durable server-owned lifecycle. `/api/app/ai/quality` creates a private `creed_quality_runs` row, deduplicated by Creed and request fingerprint, and schedules execution with Next.js `after()` inside the route's five-minute duration. Runs for one Creed execute in creation order so an older snapshot cannot overwrite a newer report. Clients poll the authenticated status endpoint, reload only the committed `creed_quality_reports` baseline after completion, announce runs across tabs with `BroadcastChannel`, and retain focus, visibility, and bounded interval revalidation as recovery paths. Queued work resumes on observation, stale running work is requeued, failed report persistence fails the run, and terminal runs erase their stored section snapshot.
 
 Open supports Personal Creeds only. Cloud retains Personal and Shared Creeds while it is developed privately.
+Cloud Shared onboarding remains client-side until the owner finishes or skips. It creates, seeds, and completes the Shared Creed immediately before paid entry or checkout, so abandoning the questionnaire does not leave an active placeholder Creed. Bonus-credit UI follows the owner's real subscription allowance and stays hidden for private-development access without an entitlement.
 
 ## Edition-specific interface
 
@@ -99,7 +104,7 @@ The CLI card remains visible but disabled in both editions. Its action is `View 
 
 ## Public surface
 
-The public site is shared, but calls to action resolve through the edition adapter. Open uses `View on GitHub` and never exposes signup. Cloud can retain hosted account flows in development. `/docs` remains in both apps until the separate documentation site is built.
+The public marketing site is shared, but calls to action resolve through the edition adapter. Open uses `View on GitHub` and never exposes signup. Cloud can retain hosted account flows in development. Documentation is an independent static application at `docs.creed.md`; Open and Cloud link to it and do not own a `/docs` route.
 
 ## Open installation
 

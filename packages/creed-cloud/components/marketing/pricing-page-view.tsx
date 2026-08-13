@@ -24,6 +24,7 @@ import {
   type BillingCycle,
 } from "@/lib/marketing/pricing";
 import { cn } from "@creed/ui/utils";
+import { useCreedEdition } from "@/components/creed/edition-provider";
 
 type Feature = { label: string; included: boolean };
 
@@ -495,15 +496,35 @@ function PlanCta({
   cycle: BillingCycle;
   billing?: BillingSummary;
 }) {
+  const publicSignup = useCreedEdition().capabilities.publicSignup;
   const fallbackBilling = useBillingSummary();
   const summary = billing ?? fallbackBilling;
   const { authState } = summary;
   const { startCheckout, submitting } = useStripeCheckout();
   const { openPortal, opening } = useBillingPortal();
+  const roadmapArrowRef = useRef<ArrowUpRightIconHandle | null>(null);
 
   const tone: "blue" | "amber" = "blue";
   const ownedStatus = summary.personal;
   const ownedCycle = planCycleFromStatus(ownedStatus);
+
+  if (!publicSignup) {
+    return (
+      <a
+        href="/roadmap"
+        onMouseEnter={() => roadmapArrowRef.current?.startAnimation()}
+        onMouseLeave={() => roadmapArrowRef.current?.stopAnimation()}
+        className={ctaClass("solid", tone)}
+      >
+        View roadmap
+        <ArrowUpRightIcon
+          ref={roadmapArrowRef}
+          size={16}
+          className="inline-flex h-4 w-4 items-center justify-center"
+        />
+      </a>
+    );
+  }
 
   if (ownedCycle === "monthly" || ownedCycle === "yearly") {
     const label =

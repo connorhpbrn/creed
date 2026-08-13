@@ -3,8 +3,15 @@
 import type { ReactNode } from "react";
 import { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, Check, ChevronDown, LoaderCircle, Mail, User, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  LoaderCircle,
+  Mail,
+  User,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@creed/ui/button";
@@ -16,10 +23,18 @@ import { useAnimatedIconControls } from "@/components/creed/animated-icon-contro
 import { CreedWordmark, IntegrationGlyph } from "@/components/creed/brand";
 import { ComposePromptCard } from "@/components/creed/compose-prompt-card";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
-import { DiffBadge, computeDiffParts, summarizeDiff } from "@/components/creed/inline-proposal-diff";
+import {
+  DiffBadge,
+  computeDiffParts,
+  summarizeDiff,
+} from "@/components/creed/inline-proposal-diff";
 import { RichTextEditor } from "@/components/creed/rich-text-editor";
 import { useStripeCheckout } from "@creed/cloud/components/marketing/use-stripe-checkout";
-import { accentColorMap, type AccentKey, type AgentIconKind } from "@creed/core/creed-data";
+import {
+  accentColorMap,
+  type AccentKey,
+  type AgentIconKind,
+} from "@creed/core/creed-data";
 import { splitPreservingLigatures } from "@/lib/landing-text";
 import {
   buildSharedOnboardingSections,
@@ -60,7 +75,12 @@ const PREVIEW = 13;
 const INVITE = 14;
 const TOTAL_STEPS = 15;
 
-type PreviewSection = { id: string; name: string; accent: AccentKey; content: string };
+type PreviewSection = {
+  id: string;
+  name: string;
+  accent: AccentKey;
+  content: string;
+};
 type InviteRow = { id: string; email: string };
 
 const INVITE_BUTTON =
@@ -73,7 +93,7 @@ export function SharedOnboardingScreen({
   onPreviewClose,
   onPreviewBackToType,
 }: {
-  creedId: string;
+  creedId: string | null;
   paid?: boolean;
   previewMode?: boolean;
   onPreviewClose?: () => void;
@@ -81,7 +101,6 @@ export function SharedOnboardingScreen({
   // closing the whole Cmd+O overlay.
   onPreviewBackToType?: () => void;
 }) {
-  const router = useRouter();
   const { startCheckout, submitting: checkoutSubmitting } = useStripeCheckout();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -104,6 +123,7 @@ export function SharedOnboardingScreen({
   const inviteId = useRef(1);
   const inviteIcon = useAnimatedIconControls();
   const [preview, setPreview] = useState<PreviewSection[] | null>(null);
+  const [createdCreedId, setCreatedCreedId] = useState<string | null>(null);
 
   function set(key: keyof SharedOnboardingState, value: string) {
     setAnswers((prev) => ({ ...prev, [key]: value }));
@@ -151,13 +171,21 @@ export function SharedOnboardingScreen({
     if (skipping || busy || checkoutSubmitting) return;
     setSkipping(true);
     try {
+      const persistedCreedId = await persistSharedCreed();
       if (paid) {
-        router.push("/file");
-        router.refresh();
+        window.location.href = "/file";
         return;
       }
+      window.history.replaceState(
+        null,
+        "",
+        `/onboarding/shared?creedId=${encodeURIComponent(persistedCreedId)}`,
+      );
       await startCheckout({ plan: "personal", cadence: "monthly" });
-    } catch {
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not finish setup.",
+      );
       setSkipping(false);
     }
   }
@@ -170,12 +198,12 @@ export function SharedOnboardingScreen({
         accent: s.accent,
         content: s.content,
       })),
-    [answers]
+    [answers],
   );
 
   async function ensureSeeded(): Promise<boolean> {
     if (seeded) return true;
-    if (previewMode) {
+    if (previewMode || !creedId) {
       setSeeded(true);
       return true;
     }
@@ -195,7 +223,10 @@ export function SharedOnboardingScreen({
 
   async function handleCopyPrompt() {
     await navigator.clipboard.writeText(
-      buildSharedComposePrompt(buildSharedOnboardingSections(answers), answers.sharedName)
+      buildSharedComposePrompt(
+        buildSharedOnboardingSections(answers),
+        answers.sharedName,
+      ),
     );
     setPromptCopied(true);
     window.setTimeout(() => setPromptCopied(false), 1600);
@@ -230,7 +261,7 @@ export function SharedOnboardingScreen({
       }
       setBusy(true);
       setPasteError(null);
-      if (previewMode) {
+      if (previewMode || !creedId) {
         setPreview(seedSections);
         setStep(PREVIEW);
         setBusy(false);
@@ -249,19 +280,25 @@ export function SharedOnboardingScreen({
           error?: string;
         };
         if (!res.ok) {
-          setPasteError(typeof data.error === "string" ? data.error : "Could not save that. Try again.");
+          setPasteError(
+            typeof data.error === "string"
+              ? data.error
+              : "Could not save that. Try again.",
+          );
           return;
         }
         if (!data.ok || !data.matched || !data.sections) {
           setPasteError(
-            "That doesn't look like your Creed. Paste the whole markdown your assistant gave you."
+            "That doesn't look like your Creed. Paste the whole markdown your assistant gave you.",
           );
           return;
         }
         setPreview(data.sections);
         setStep(PREVIEW);
       } catch {
-        setPasteError("Could not save that. Check your connection and try again.");
+        setPasteError(
+          "Could not save that. Check your connection and try again.",
+        );
       } finally {
         setBusy(false);
       }
@@ -282,25 +319,111 @@ export function SharedOnboardingScreen({
     }
     setBusy(true);
     try {
-      void withInvites;
-      const res = await fetch("/api/app/creeds/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creedId, action: "complete" }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        toast.error(data.error ?? "Could not finish setup.");
-        setBusy(false);
+      const persistedCreedId = await persistSharedCreed(withInvites);
+      toast.success("Your Shared Creed is ready.");
+      if (!paid) {
+        window.history.replaceState(
+          null,
+          "",
+          `/onboarding/shared?creedId=${encodeURIComponent(persistedCreedId)}`,
+        );
+        await startCheckout({ plan: "personal", cadence: "monthly" });
         return;
       }
-      toast.success("Your Shared Creed is ready.");
-      router.push("/file");
-      router.refresh();
-    } catch {
-      toast.error("Something went wrong. Please try again.");
+      window.location.href = "/file";
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again.",
+      );
       setBusy(false);
     }
+  }
+
+  async function persistSharedCreed(withInvites = false): Promise<string> {
+    let targetCreedId = creedId ?? createdCreedId;
+    if (!targetCreedId) {
+      const create = await fetch("/api/app/creeds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: answers.sharedName.trim() || "Shared Creed",
+          type: "shared",
+          forOnboarding: true,
+        }),
+      });
+      const data = (await create.json().catch(() => ({}))) as {
+        creed?: { id?: string };
+        error?: string;
+      };
+      if (!create.ok || !data.creed?.id) {
+        throw new Error(data.error ?? "Could not create your Shared Creed.");
+      }
+      targetCreedId = data.creed.id;
+      setCreatedCreedId(targetCreedId);
+    }
+
+    const seed = await fetch("/api/app/creeds/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ creedId: targetCreedId, action: "seed", answers }),
+    });
+    if (!seed.ok) {
+      const data = (await seed.json().catch(() => ({}))) as { error?: string };
+      throw new Error(data.error ?? "Could not save Shared Creed setup.");
+    }
+
+    if (pasted.trim()) {
+      const compose = await fetch("/api/app/creeds/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creedId: targetCreedId,
+          action: "compose",
+          markdown: pasted.trim(),
+        }),
+      });
+      if (!compose.ok) {
+        const data = (await compose.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(data.error ?? "Could not save your composed Creed.");
+      }
+    }
+
+    if (withInvites) {
+      for (const invite of invites) {
+        const response = await fetch("/api/app/creeds/invites", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            creedId: targetCreedId,
+            email: invite.email,
+            role: "member",
+          }),
+        });
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(data.error ?? `Could not invite ${invite.email}.`);
+        }
+      }
+    }
+
+    const complete = await fetch("/api/app/creeds/onboarding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ creedId: targetCreedId, action: "complete" }),
+    });
+    if (!complete.ok) {
+      const data = (await complete.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      throw new Error(data.error ?? "Could not finish setup.");
+    }
+    return targetCreedId;
   }
 
   async function sendInvite() {
@@ -309,7 +432,7 @@ export function SharedOnboardingScreen({
 
     setBusy(true);
     try {
-      if (previewMode) {
+      if (previewMode || !creedId) {
         setInvites((rows) => [
           ...rows.filter((invite) => invite.email !== email),
           { id: `preview-invite-${inviteId.current++}`, email },
@@ -332,7 +455,9 @@ export function SharedOnboardingScreen({
         return;
       }
       setInvites((rows) => [
-        ...rows.filter((invite) => invite.id !== data.inviteId && invite.email !== email),
+        ...rows.filter(
+          (invite) => invite.id !== data.inviteId && invite.email !== email,
+        ),
         { id: data.inviteId!, email },
       ]);
       setInviteEmail("");
@@ -366,7 +491,10 @@ export function SharedOnboardingScreen({
     <div className="min-h-dvh bg-[var(--creed-surface)] md:h-screen md:overflow-hidden">
       <motion.div
         className="h-[2px]"
-        animate={{ width: `${((step + 1) / TOTAL_STEPS) * 100}%`, backgroundColor: AMBER }}
+        animate={{
+          width: `${((step + 1) / TOTAL_STEPS) * 100}%`,
+          backgroundColor: AMBER,
+        }}
         transition={{ duration: 1.2, ease: [0.32, 0.06, 0.18, 1] }}
       />
 
@@ -382,7 +510,11 @@ export function SharedOnboardingScreen({
               <CreedWordmark className="ml-0" />
             </button>
           ) : (
-            <Link href="/home" aria-label="Creed home" className="-ml-2 inline-flex items-center rounded-sm px-2 py-1.5 transition-opacity duration-200 hover:opacity-60">
+            <Link
+              href="/home"
+              aria-label="Creed home"
+              className="-ml-2 inline-flex items-center rounded-sm px-2 py-1.5 transition-opacity duration-200 hover:opacity-60"
+            >
               <CreedWordmark className="ml-0" />
             </Link>
           )}
@@ -399,15 +531,24 @@ export function SharedOnboardingScreen({
                 exit={{ opacity: 0, y: -10, filter: "blur(6px)" }}
                 transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
               >
-                <div className={cn("mx-auto w-full", step === PREVIEW ? "max-w-5xl" : "max-w-3xl")}>
+                <div
+                  className={cn(
+                    "mx-auto w-full",
+                    step === PREVIEW ? "max-w-5xl" : "max-w-3xl",
+                  )}
+                >
                   {step === WELCOME ? (
                     <div className="text-center">
                       <AnimatedBlock index={0}>
-                        <AnimatedHeadline text="A Creed shaped together." className="t-section justify-center text-[var(--creed-text-primary)]" />
+                        <AnimatedHeadline
+                          text="A Creed shaped together."
+                          className="t-section justify-center text-[var(--creed-text-primary)]"
+                        />
                       </AnimatedBlock>
                       <AnimatedBlock index={1}>
                         <p className="t-lede mx-auto mt-6 max-w-xl text-[var(--creed-text-tertiary)]">
-                          One shared context file for the people and agents working toward the same thing.
+                          One shared context file for the people and agents
+                          working toward the same thing.
                         </p>
                       </AnimatedBlock>
                       <AnimatedBlock index={2}>
@@ -417,7 +558,10 @@ export function SharedOnboardingScreen({
                   ) : null}
 
                   {step === Q_NAME ? (
-                    <QuestionStep title="What's this Creed called?" subtitle="Use a name everyone will recognize.">
+                    <QuestionStep
+                      title="What's this Creed called?"
+                      subtitle="Use a name everyone will recognize."
+                    >
                       <Input
                         value={answers.sharedName}
                         onChange={(e) => set("sharedName", e.target.value)}
@@ -437,8 +581,15 @@ export function SharedOnboardingScreen({
                   ) : null}
 
                   {step === Q_DOES ? (
-                    <QuestionStep title="What brings this group together?" subtitle="Describe what you make, study, run, or care for, and who it serves.">
-                      <QTextarea value={answers.whatItDoes} onChange={(v) => set("whatItDoes", v)} placeholder="e.g. We build the Bad Engine, real-time simulation for game studios shipping AAA titles." />
+                    <QuestionStep
+                      title="What brings this group together?"
+                      subtitle="Describe what you make, study, run, or care for, and who it serves."
+                    >
+                      <QTextarea
+                        value={answers.whatItDoes}
+                        onChange={(v) => set("whatItDoes", v)}
+                        placeholder="e.g. We build the Bad Engine, real-time simulation for game studios shipping AAA titles."
+                      />
                     </QuestionStep>
                   ) : null}
 
@@ -452,8 +603,15 @@ export function SharedOnboardingScreen({
                   ) : null}
 
                   {step === Q_TEAM ? (
-                    <QuestionStep title="Who belongs here?" subtitle="Names are enough for now. You can add more detail later.">
-                      <QTextarea value={answers.people} onChange={(v) => set("people", v)} placeholder="e.g. Alex, Morgan, Riley, Sam" />
+                    <QuestionStep
+                      title="Who belongs here?"
+                      subtitle="Names are enough for now. You can add more detail later."
+                    >
+                      <QTextarea
+                        value={answers.people}
+                        onChange={(v) => set("people", v)}
+                        placeholder="e.g. Alex, Morgan, Riley, Sam"
+                      />
                     </QuestionStep>
                   ) : null}
 
@@ -467,8 +625,15 @@ export function SharedOnboardingScreen({
                   ) : null}
 
                   {step === Q_PROJECTS ? (
-                    <QuestionStep title="What should it know about?" subtitle="The projects and products in flight.">
-                      <QTextarea value={answers.projects} onChange={(v) => set("projects", v)} placeholder="e.g. Bad Engine, Creed, the Q3 launch" />
+                    <QuestionStep
+                      title="What should it know about?"
+                      subtitle="The projects and products in flight."
+                    >
+                      <QTextarea
+                        value={answers.projects}
+                        onChange={(v) => set("projects", v)}
+                        placeholder="e.g. Bad Engine, Creed, the Q3 launch"
+                      />
                     </QuestionStep>
                   ) : null}
 
@@ -482,8 +647,15 @@ export function SharedOnboardingScreen({
                   ) : null}
 
                   {step === Q_GUARD ? (
-                    <QuestionStep title="What's off-limits?" subtitle="What agents should never change or assume without asking first.">
-                      <QTextarea value={answers.neverChange} onChange={(v) => set("neverChange", v)} placeholder="e.g. Anything about finance, fundraising, or legal." />
+                    <QuestionStep
+                      title="What's off-limits?"
+                      subtitle="What agents should never change or assume without asking first."
+                    >
+                      <QTextarea
+                        value={answers.neverChange}
+                        onChange={(v) => set("neverChange", v)}
+                        placeholder="e.g. Anything about finance, fundraising, or legal."
+                      />
                     </QuestionStep>
                   ) : null}
 
@@ -499,22 +671,32 @@ export function SharedOnboardingScreen({
                   {step === PROMPT ? (
                     <div className="text-center">
                       <AnimatedBlock index={0}>
-                        <AnimatedHeadline text="Build it with your assistant." className="t-section justify-center text-[var(--creed-text-primary)]" />
+                        <AnimatedHeadline
+                          text="Build it with your assistant."
+                          className="t-section justify-center text-[var(--creed-text-primary)]"
+                        />
                       </AnimatedBlock>
                       <AnimatedBlock index={1}>
                         <p className="t-lede mx-auto mt-6 max-w-2xl text-[var(--creed-text-tertiary)]">
-                          Copy this prompt and paste it into ChatGPT, Claude, or any AI you use. It turns
-                          everything you just shared into your full Shared Creed.
+                          Copy this prompt and paste it into ChatGPT, Claude, or
+                          any AI you use. It turns everything you just shared
+                          into your full Shared Creed.
                         </p>
                       </AnimatedBlock>
                       <AnimatedBlock index={2}>
-                        <ComposePromptCard copied={promptCopied} onCopy={() => void handleCopyPrompt()} />
+                        <ComposePromptCard
+                          copied={promptCopied}
+                          onCopy={() => void handleCopyPrompt()}
+                        />
                       </AnimatedBlock>
                     </div>
                   ) : null}
 
                   {step === PASTE ? (
-                    <QuestionStep title="Paste your Shared Creed." subtitle="Paste the markdown your assistant gave you. We'll turn it into your Shared Creed.">
+                    <QuestionStep
+                      title="Paste your Shared Creed."
+                      subtitle="Paste the markdown your assistant gave you. We'll turn it into your Shared Creed."
+                    >
                       <Textarea
                         value={pasted}
                         data-disable-continue="true"
@@ -526,18 +708,27 @@ export function SharedOnboardingScreen({
                           "min-h-[220px] max-h-[44vh] resize-none overflow-y-auto rounded-xl px-4 py-4 font-mono text-[14px] leading-7",
                           pasteError
                             ? "border-[#DC2626] focus-visible:border-[#DC2626] focus-visible:ring-[#DC2626]/15"
-                            : "border-[var(--creed-border)]"
+                            : "border-[var(--creed-border)]",
                         )}
-                        placeholder={"## Shared\n\nPaste the full markdown your assistant produced here."}
+                        placeholder={
+                          "## Shared\n\nPaste the full markdown your assistant produced here."
+                        }
                       />
-                      {pasteError ? <p className="mt-3 text-[13px] text-[#DC2626]">{pasteError}</p> : null}
+                      {pasteError ? (
+                        <p className="mt-3 text-[13px] text-[#DC2626]">
+                          {pasteError}
+                        </p>
+                      ) : null}
                     </QuestionStep>
                   ) : null}
 
                   {step === PREVIEW ? (
                     <div className="text-center">
                       <AnimatedBlock index={0}>
-                        <AnimatedHeadline text="Your Shared Creed." className="t-section justify-center text-[var(--creed-text-primary)]" />
+                        <AnimatedHeadline
+                          text="Your Shared Creed."
+                          className="t-section justify-center text-[var(--creed-text-primary)]"
+                        />
                       </AnimatedBlock>
                       <AnimatedBlock index={1}>
                         <p className="t-lede mx-auto mt-6 max-w-2xl text-[var(--creed-text-tertiary)]">
@@ -546,9 +737,23 @@ export function SharedOnboardingScreen({
                       </AnimatedBlock>
                       <AnimatedBlock index={2}>
                         <motion.div
-                          initial={{ opacity: 0, y: 18, scale: 0.985, filter: "blur(10px)" }}
-                          animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-                          transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+                          initial={{
+                            opacity: 0,
+                            y: 18,
+                            scale: 0.985,
+                            filter: "blur(10px)",
+                          }}
+                          animate={{
+                            opacity: 1,
+                            y: 0,
+                            scale: 1,
+                            filter: "blur(0px)",
+                          }}
+                          transition={{
+                            duration: 0.6,
+                            delay: 0.1,
+                            ease: [0.22, 1, 0.36, 1],
+                          }}
                           className="mx-auto mt-10 max-w-[920px] overflow-hidden rounded-xl border border-[var(--creed-border)] bg-[var(--creed-surface)] text-left"
                         >
                           <div className="md:h-[440px] md:overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -556,12 +761,29 @@ export function SharedOnboardingScreen({
                               {previewSections.map((section) => (
                                 <section key={section.id}>
                                   <div className="mb-4 flex items-center gap-3">
-                                    <span className="inline-block h-9 w-[3px] rounded-full" style={{ backgroundColor: accentColorMap[section.accent] }} />
-                                    <span className="text-[15px] font-medium leading-none md:text-[16px]" style={{ color: accentColorMap[section.accent] }}>
+                                    <span
+                                      className="inline-block h-9 w-[3px] rounded-full"
+                                      style={{
+                                        backgroundColor:
+                                          accentColorMap[section.accent],
+                                      }}
+                                    />
+                                    <span
+                                      className="text-[15px] font-medium leading-none md:text-[16px]"
+                                      style={{
+                                        color: accentColorMap[section.accent],
+                                      }}
+                                    >
                                       {section.name}
                                     </span>
                                   </div>
-                                  <RichTextEditor sectionId={section.id} content={section.content} readOnly accentColor={accentColorMap[section.accent]} onChange={() => {}} />
+                                  <RichTextEditor
+                                    sectionId={section.id}
+                                    content={section.content}
+                                    readOnly
+                                    accentColor={accentColorMap[section.accent]}
+                                    onChange={() => {}}
+                                  />
                                 </section>
                               ))}
                             </div>
@@ -573,7 +795,10 @@ export function SharedOnboardingScreen({
 
                   {step === INVITE ? (
                     <div>
-                      <AnimatedHeadline text="Invite others." className="t-section text-[var(--creed-text-primary)]" />
+                      <AnimatedHeadline
+                        text="Invite others."
+                        className="t-section text-[var(--creed-text-primary)]"
+                      />
                       <p className="t-lede mt-4 max-w-2xl text-[var(--creed-text-tertiary)]">
                         Add teammates by email, or do it later in Settings.
                       </p>
@@ -584,7 +809,12 @@ export function SharedOnboardingScreen({
                             value={inviteEmail}
                             onChange={(e) => setInviteEmail(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter" && inviteEmail.trim() && !busy) void sendInvite();
+                              if (
+                                e.key === "Enter" &&
+                                inviteEmail.trim() &&
+                                !busy
+                              )
+                                void sendInvite();
                             }}
                             placeholder="person@example.com"
                             className="h-11 flex-1 rounded-md border-[var(--creed-border)] px-3 text-[14px]"
@@ -620,12 +850,18 @@ export function SharedOnboardingScreen({
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: "auto" }}
                               exit={{ opacity: 0, height: 0 }}
-                              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                              transition={{
+                                duration: 0.24,
+                                ease: [0.22, 1, 0.36, 1],
+                              }}
                               className="mt-5 overflow-hidden"
                             >
                               <div className="flex flex-col divide-y divide-[var(--creed-border)] rounded-lg border border-[var(--creed-border)] px-4">
                                 {invites.map((invite) => (
-                                  <div key={invite.id} className="flex items-center justify-between gap-4 py-4">
+                                  <div
+                                    key={invite.id}
+                                    className="flex items-center justify-between gap-4 py-4"
+                                  >
                                     <div className="flex min-w-0 items-center gap-3">
                                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-dashed border-[var(--creed-border-strong)] text-[var(--creed-text-tertiary)]">
                                         <Mail className="h-4 w-4" />
@@ -670,7 +906,9 @@ export function SharedOnboardingScreen({
             {busy || skipping ? null : (
               <button
                 type="button"
-                onClick={() => (step > 0 ? setStep((s) => s - 1) : backToTypePicker())}
+                onClick={() =>
+                  step > 0 ? setStep((s) => s - 1) : backToTypePicker()
+                }
                 className="inline-flex items-center gap-2 text-sm text-[var(--creed-text-secondary)] transition-colors duration-150 hover:text-[var(--creed-text-primary)]"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -699,13 +937,27 @@ export function SharedOnboardingScreen({
               </button>
             ) : null}
             <Button
-              style={{ borderRadius: "0.875rem", backgroundColor: SHARED_CONTINUE, color: "#fff" }}
+              style={{
+                borderRadius: "0.875rem",
+                backgroundColor: SHARED_CONTINUE,
+                color: "#fff",
+              }}
               className="px-5 hover:opacity-90 disabled:bg-[var(--creed-border-strong)] disabled:text-[var(--creed-text-tertiary)]"
               onClick={handleContinue}
               disabled={!canContinue}
             >
-              {busy ? (step === PASTE ? "Composing" : "Saving") : step === INVITE ? "Finish setup" : "Continue"}
-              {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ArrowRightIcon className="h-4 w-4" size={16} />}
+              {busy
+                ? step === PASTE
+                  ? "Composing"
+                  : "Saving"
+                : step === INVITE
+                  ? "Finish setup"
+                  : "Continue"}
+              {busy ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowRightIcon className="h-4 w-4" size={16} />
+              )}
             </Button>
           </div>
         </div>
@@ -714,11 +966,24 @@ export function SharedOnboardingScreen({
   );
 }
 
-function QuestionStep({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+function QuestionStep({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+}) {
   return (
     <div>
-      <AnimatedHeadline text={title} className="t-section text-[var(--creed-text-primary)]" />
-      <p className="t-lede mt-4 max-w-2xl text-[var(--creed-text-tertiary)]">{subtitle}</p>
+      <AnimatedHeadline
+        text={title}
+        className="t-section text-[var(--creed-text-primary)]"
+      />
+      <p className="t-lede mt-4 max-w-2xl text-[var(--creed-text-tertiary)]">
+        {subtitle}
+      </p>
       <div className="mt-9">
         <AnimatedBlock index={0}>{children}</AnimatedBlock>
       </div>
@@ -726,21 +991,42 @@ function QuestionStep({ title, subtitle, children }: { title: string; subtitle: 
   );
 }
 
-function ExplainerStep({ title, lede, children }: { title: string; lede: string; children: ReactNode }) {
+function ExplainerStep({
+  title,
+  lede,
+  children,
+}: {
+  title: string;
+  lede: string;
+  children: ReactNode;
+}) {
   return (
     <div className="text-center">
       <AnimatedBlock index={0}>
-        <AnimatedHeadline text={title} className="t-section justify-center text-[var(--creed-text-primary)]" />
+        <AnimatedHeadline
+          text={title}
+          className="t-section justify-center text-[var(--creed-text-primary)]"
+        />
       </AnimatedBlock>
       <AnimatedBlock index={1}>
-        <p className="t-lede mx-auto mt-6 max-w-xl text-[var(--creed-text-tertiary)]">{lede}</p>
+        <p className="t-lede mx-auto mt-6 max-w-xl text-[var(--creed-text-tertiary)]">
+          {lede}
+        </p>
       </AnimatedBlock>
       <AnimatedBlock index={2}>{children}</AnimatedBlock>
     </div>
   );
 }
 
-function QTextarea({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+function QTextarea({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
   return (
     <Textarea
       value={value}
@@ -773,11 +1059,21 @@ function SectionStripsCard() {
           className="flex items-start gap-3 py-2.5"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.15 + index * 0.1, ease: [0.22, 1, 0.36, 1] }}
+          transition={{
+            duration: 0.5,
+            delay: 0.15 + index * 0.1,
+            ease: [0.22, 1, 0.36, 1],
+          }}
         >
-          <span className="mt-0.5 h-9 w-[3px] shrink-0 rounded-full" style={{ backgroundColor: accentColorMap[row.accent] }} />
+          <span
+            className="mt-0.5 h-9 w-[3px] shrink-0 rounded-full"
+            style={{ backgroundColor: accentColorMap[row.accent] }}
+          />
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-medium" style={{ color: accentColorMap[row.accent] }}>
+            <div
+              className="text-[13px] font-medium"
+              style={{ color: accentColorMap[row.accent] }}
+            >
               {row.name}
             </div>
             <div className="mt-2 h-[6px] w-full rounded-full bg-[var(--creed-surface-raised)]" />
@@ -803,17 +1099,38 @@ type AttributionEntry = {
 };
 
 const ATTRIBUTION_ENTRIES: AttributionEntry[] = [
-  { section: "Projects", actor: "Alex's Claude Code", when: "just now", status: "Proposed", agent: "Claude" },
-  { section: "People", actor: "Morgan's Cursor", when: "4m ago", status: "Direct", agent: "Cursor" },
-  { section: "Ethos", actor: "Riley's ChatGPT", when: "1h ago", status: "Accepted", agent: "ChatGPT" },
+  {
+    section: "Projects",
+    actor: "Alex's Claude Code",
+    when: "just now",
+    status: "Proposed",
+    agent: "Claude",
+  },
+  {
+    section: "People",
+    actor: "Morgan's Cursor",
+    when: "4m ago",
+    status: "Direct",
+    agent: "Cursor",
+  },
+  {
+    section: "Ethos",
+    actor: "Riley's ChatGPT",
+    when: "1h ago",
+    status: "Accepted",
+    agent: "ChatGPT",
+  },
 ];
 
 // The exact activity-pill tokens from the app (getProposalStatusStyles): blue
 // for a pending proposal, amber for a direct edit, green for an accepted one.
 const ATTRIBUTION_STATUS_STYLES: Record<AttributionEntry["status"], string> = {
-  Proposed: "bg-[#EFF6FF] text-[var(--creed-accent-hover)] dark:bg-[#1e3a8a]/25 dark:text-[#93c5fd]",
-  Direct: "bg-[#FFF6E8] text-[#C26A00] dark:bg-[#451a03]/40 dark:text-[#fbbf24]",
-  Accepted: "bg-[#F0FDF4] text-[#15803D] dark:bg-[#052e1a]/50 dark:text-[#4ade80]",
+  Proposed:
+    "bg-[#EFF6FF] text-[var(--creed-accent-hover)] dark:bg-[#1e3a8a]/25 dark:text-[#93c5fd]",
+  Direct:
+    "bg-[#FFF6E8] text-[#C26A00] dark:bg-[#451a03]/40 dark:text-[#fbbf24]",
+  Accepted:
+    "bg-[#F0FDF4] text-[#15803D] dark:bg-[#052e1a]/50 dark:text-[#4ade80]",
 };
 
 function AttributionCard() {
@@ -827,23 +1144,45 @@ function AttributionCard() {
       {ATTRIBUTION_ENTRIES.map((entry, index) => (
         <motion.div
           key={entry.section}
-          className={cn("flex items-start gap-3 px-4 py-3", index > 0 && "border-t border-[var(--creed-border)]")}
+          className={cn(
+            "flex items-start gap-3 px-4 py-3",
+            index > 0 && "border-t border-[var(--creed-border)]",
+          )}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.25 + index * 0.12, ease: [0.22, 1, 0.36, 1] }}
+          transition={{
+            duration: 0.45,
+            delay: 0.25 + index * 0.12,
+            ease: [0.22, 1, 0.36, 1],
+          }}
         >
-          <AgentIconStack agents={[entry.agent]} variant="inline" className="mt-0.5 shrink-0" itemClassName="h-5 w-5" maxVisible={1} />
+          <AgentIconStack
+            agents={[entry.agent]}
+            variant="inline"
+            className="mt-0.5 shrink-0"
+            itemClassName="h-5 w-5"
+            maxVisible={1}
+          />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[13px] font-medium text-[var(--creed-text-primary)]">{entry.section}</span>
-              <span className={cn("rounded-[6px] px-2 py-0.5 text-[10px] font-medium", ATTRIBUTION_STATUS_STYLES[entry.status])}>
+              <span className="text-[13px] font-medium text-[var(--creed-text-primary)]">
+                {entry.section}
+              </span>
+              <span
+                className={cn(
+                  "rounded-[6px] px-2 py-0.5 text-[10px] font-medium",
+                  ATTRIBUTION_STATUS_STYLES[entry.status],
+                )}
+              >
                 {entry.status}
               </span>
             </div>
             <div className="mt-1 flex items-center gap-2 text-[12px] text-[var(--creed-text-secondary)]">
               <span className="truncate">{entry.actor}</span>
               <span className="text-[var(--creed-text-tertiary)]">·</span>
-              <span className="text-[var(--creed-text-tertiary)]">{entry.when}</span>
+              <span className="text-[var(--creed-text-tertiary)]">
+                {entry.when}
+              </span>
             </div>
           </div>
         </motion.div>
@@ -861,7 +1200,10 @@ const PROPOSAL_EXISTING = "Bad Engine, Creed.";
 const PROPOSAL_PROPOSED = "Bad Engine, Creed, the Q3 launch.";
 
 function ProposalCard() {
-  const parts = useMemo(() => computeDiffParts(PROPOSAL_EXISTING, PROPOSAL_PROPOSED), []);
+  const parts = useMemo(
+    () => computeDiffParts(PROPOSAL_EXISTING, PROPOSAL_PROPOSED),
+    [],
+  );
   const stats = useMemo(() => summarizeDiff(parts), [parts]);
 
   return (
@@ -874,9 +1216,18 @@ function ProposalCard() {
       <div className="flex items-center justify-between gap-3 px-3 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap text-sm text-[var(--creed-text-secondary)]">
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)]" />
-          <AgentIconStack agents={["Claude"]} variant="inline" itemClassName="h-5 w-5" maxVisible={1} />
-          <span className="font-medium text-[var(--creed-text-primary)]">Fergus&apos;s Claude</span>
-          <span className="text-[var(--creed-text-tertiary)]">proposed an update</span>
+          <AgentIconStack
+            agents={["Claude"]}
+            variant="inline"
+            itemClassName="h-5 w-5"
+            maxVisible={1}
+          />
+          <span className="font-medium text-[var(--creed-text-primary)]">
+            Fergus&apos;s Claude
+          </span>
+          <span className="text-[var(--creed-text-tertiary)]">
+            proposed an update
+          </span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
           <span className="inline-flex items-center gap-1">
             <DiffBadge tone="added" count={stats.added} size="md" />
@@ -931,16 +1282,25 @@ const PERM_ROWS: { name: string; accent: AccentKey; level: string }[] = [
 
 // A static replica of the SelectMenu trigger (components/ui/select-menu.tsx) so
 // the explainer reads as the real permission control without being interactive.
-function SelectPill({ label, className }: { label: string; className?: string }) {
+function SelectPill({
+  label,
+  className,
+}: {
+  label: string;
+  className?: string;
+}) {
   return (
     <span
       className={cn(
         "inline-flex h-9 shrink-0 items-center justify-between gap-2 rounded-md border border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[13px] text-[var(--creed-text-primary)]",
-        className
+        className,
       )}
     >
       <span className="truncate">{label}</span>
-      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)]" strokeWidth={2} />
+      <ChevronDown
+        className="h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)]"
+        strokeWidth={2}
+      />
     </span>
   );
 }
@@ -960,7 +1320,11 @@ function PermissionsCard() {
             key={row.name}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.25 + index * 0.08, ease: [0.22, 1, 0.36, 1] }}
+            transition={{
+              duration: 0.4,
+              delay: 0.25 + index * 0.08,
+              ease: [0.22, 1, 0.36, 1],
+            }}
             className="flex items-center justify-between gap-3 py-2"
           >
             <span className="flex min-w-0 items-center gap-2.5">
@@ -968,7 +1332,9 @@ function PermissionsCard() {
                 className="h-1.5 w-1.5 shrink-0 rounded-[2px]"
                 style={{ backgroundColor: accentColorMap[row.accent] }}
               />
-              <span className="truncate text-[13px] text-[var(--creed-text-primary)]">{row.name}</span>
+              <span className="truncate text-[13px] text-[var(--creed-text-primary)]">
+                {row.name}
+              </span>
             </span>
             <SelectPill label={row.level} className="min-w-[128px]" />
           </motion.div>
@@ -988,9 +1354,11 @@ const CONTROL_ACTIVITY_ITEMS = [
     status: "Direct",
     when: "now",
     before: "Agents should ask before changing finance or legal.",
-    after: "Agents should ask before changing finance, legal, fundraising, or public positioning.",
+    after:
+      "Agents should ask before changing finance, legal, fundraising, or public positioning.",
     avatar: "C",
-    avatarClassName: "bg-[#E0F2FE] text-[#0369A1] dark:bg-[#0C4A6E]/45 dark:text-[#7DD3FC]",
+    avatarClassName:
+      "bg-[#E0F2FE] text-[#0369A1] dark:bg-[#0C4A6E]/45 dark:text-[#7DD3FC]",
     agent: null,
   },
   {
@@ -999,9 +1367,11 @@ const CONTROL_ACTIVITY_ITEMS = [
     status: "Proposed",
     when: "2m ago",
     before: "Creed Shared is the current priority.",
-    after: "Creed Shared is the current priority, with onboarding polish and section permissions next.",
+    after:
+      "Creed Shared is the current priority, with onboarding polish and section permissions next.",
     avatar: "F",
-    avatarClassName: "bg-[#F3E8FF] text-[#7E22CE] dark:bg-[#581C87]/45 dark:text-[#D8B4FE]",
+    avatarClassName:
+      "bg-[#F3E8FF] text-[#7E22CE] dark:bg-[#581C87]/45 dark:text-[#D8B4FE]",
     agent: { name: "Claude Code", icon: "claudecode" },
   },
   {
@@ -1012,15 +1382,22 @@ const CONTROL_ACTIVITY_ITEMS = [
     before: "Sascha helps with customer workflow.",
     after: "Sascha owns customer workflow and onboarding clarity.",
     avatar: "S",
-    avatarClassName: "bg-[#FFE4E6] text-[#BE123C] dark:bg-[#881337]/45 dark:text-[#FDA4AF]",
+    avatarClassName:
+      "bg-[#FFE4E6] text-[#BE123C] dark:bg-[#881337]/45 dark:text-[#FDA4AF]",
     agent: null,
   },
 ] as const;
 
-const CONTROL_STATUS_STYLES: Record<(typeof CONTROL_ACTIVITY_ITEMS)[number]["status"], string> = {
-  Direct: "bg-[#FFF6E8] text-[#C26A00] dark:bg-[#451a03]/40 dark:text-[#fbbf24]",
-  Proposed: "bg-[#EFF6FF] text-[var(--creed-accent-hover)] dark:bg-[#1e3a8a]/25 dark:text-[#93c5fd]",
-  Accepted: "bg-[#F0FDF4] text-[#15803D] dark:bg-[#052e1a]/50 dark:text-[#4ade80]",
+const CONTROL_STATUS_STYLES: Record<
+  (typeof CONTROL_ACTIVITY_ITEMS)[number]["status"],
+  string
+> = {
+  Direct:
+    "bg-[#FFF6E8] text-[#C26A00] dark:bg-[#451a03]/40 dark:text-[#fbbf24]",
+  Proposed:
+    "bg-[#EFF6FF] text-[var(--creed-accent-hover)] dark:bg-[#1e3a8a]/25 dark:text-[#93c5fd]",
+  Accepted:
+    "bg-[#F0FDF4] text-[#15803D] dark:bg-[#052e1a]/50 dark:text-[#4ade80]",
 };
 
 function ControlFlowCard() {
@@ -1034,13 +1411,22 @@ function ControlFlowCard() {
     >
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="text-[14px] font-medium text-[var(--creed-text-primary)]">Activity</div>
-          <div className="mt-1 text-[12px] text-[var(--creed-text-tertiary)]">Everyone can see what changed.</div>
+          <div className="text-[14px] font-medium text-[var(--creed-text-primary)]">
+            Activity
+          </div>
+          <div className="mt-1 text-[12px] text-[var(--creed-text-tertiary)]">
+            Everyone can see what changed.
+          </div>
         </div>
       </div>
       <div className="space-y-2">
         {CONTROL_ACTIVITY_ITEMS.map((item, index) => (
-          <ControlActivityRow key={`${item.section}-${item.actor}`} item={item} open={index === openIndex} index={index} />
+          <ControlActivityRow
+            key={`${item.section}-${item.actor}`}
+            item={item}
+            open={index === openIndex}
+            index={index}
+          />
         ))}
       </div>
     </motion.div>
@@ -1056,7 +1442,10 @@ function ControlActivityRow({
   open: boolean;
   index: number;
 }) {
-  const parts = useMemo(() => computeDiffParts(item.before, item.after), [item.after, item.before]);
+  const parts = useMemo(
+    () => computeDiffParts(item.before, item.after),
+    [item.after, item.before],
+  );
   const stats = useMemo(() => summarizeDiff(parts), [parts]);
 
   return (
@@ -1064,7 +1453,11 @@ function ControlActivityRow({
       className="rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-3"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: 0.22 + index * 0.1, ease: [0.22, 1, 0.36, 1] }}
+      transition={{
+        duration: 0.45,
+        delay: 0.22 + index * 0.1,
+        ease: [0.22, 1, 0.36, 1],
+      }}
     >
       <div className="flex items-start gap-3">
         {item.agent ? (
@@ -1079,7 +1472,7 @@ function ControlActivityRow({
           <div
             className={cn(
               "flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] border border-[var(--creed-border)] text-[10px] font-medium",
-              item.avatarClassName
+              item.avatarClassName,
             )}
           >
             {item.avatar}
@@ -1087,8 +1480,15 @@ function ControlActivityRow({
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="text-[13px] font-medium text-[var(--creed-text-primary)]">{item.section}</div>
-            <span className={cn("rounded-[6px] px-2 py-0.5 text-[10px] font-medium", CONTROL_STATUS_STYLES[item.status])}>
+            <div className="text-[13px] font-medium text-[var(--creed-text-primary)]">
+              {item.section}
+            </div>
+            <span
+              className={cn(
+                "rounded-[6px] px-2 py-0.5 text-[10px] font-medium",
+                CONTROL_STATUS_STYLES[item.status],
+              )}
+            >
               {item.status}
             </span>
             <ChevronDown
@@ -1107,7 +1507,9 @@ function ControlActivityRow({
             </span>
           </div>
         </div>
-        <div className="text-[12px] text-[var(--creed-text-tertiary)]">{item.when}</div>
+        <div className="text-[12px] text-[var(--creed-text-tertiary)]">
+          {item.when}
+        </div>
       </div>
 
       {open ? (
@@ -1157,7 +1559,11 @@ const SHARED_NODES: ConstellationNode[] = [
 function SharedConstellation() {
   return (
     <div className="relative mx-auto mt-10 aspect-square w-full max-w-[400px]">
-      <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
+      <svg
+        viewBox="0 0 100 100"
+        className="absolute inset-0 h-full w-full overflow-visible"
+        aria-hidden="true"
+      >
         {SHARED_NODES.map((node, index) => (
           <motion.line
             key={`line-${index}`}
@@ -1171,7 +1577,11 @@ function SharedConstellation() {
             initial={{ pathLength: 0, opacity: 0 }}
             animate={{ pathLength: 1, opacity: 1 }}
             transition={{
-              pathLength: { duration: 0.85, delay: 0.2 + index * 0.05, ease: [0.22, 1, 0.36, 1] },
+              pathLength: {
+                duration: 0.85,
+                delay: 0.2 + index * 0.05,
+                ease: [0.22, 1, 0.36, 1],
+              },
               opacity: { duration: 0.3, delay: 0.2 + index * 0.05 },
             }}
           />
@@ -1182,22 +1592,49 @@ function SharedConstellation() {
             r={1.15}
             fill={RED}
             initial={{ cx: node.x, cy: node.y, opacity: 0 }}
-            animate={{ cx: [node.x, (node.x + 50) / 2, 50], cy: [node.y, (node.y + 50) / 2, 50], opacity: [0, 0.9, 0] }}
-            transition={{ duration: 1.9, delay: 1 + index * 0.12, repeat: Infinity, repeatDelay: 0.5, ease: "easeInOut" }}
+            animate={{
+              cx: [node.x, (node.x + 50) / 2, 50],
+              cy: [node.y, (node.y + 50) / 2, 50],
+              opacity: [0, 0.9, 0],
+            }}
+            transition={{
+              duration: 1.9,
+              delay: 1 + index * 0.12,
+              repeat: Infinity,
+              repeatDelay: 0.5,
+              ease: "easeInOut",
+            }}
           />
         ))}
       </svg>
 
       {SHARED_NODES.map((node, index) => (
-        <div key={`chip-${index}`} className="absolute z-10" style={{ left: `${node.x}%`, top: `${node.y}%`, transform: "translate(-50%, -50%)" }}>
+        <div
+          key={`chip-${index}`}
+          className="absolute z-10"
+          style={{
+            left: `${node.x}%`,
+            top: `${node.y}%`,
+            transform: "translate(-50%, -50%)",
+          }}
+        >
           <motion.div
             className="flex h-14 w-14 items-center justify-center rounded-full border border-[var(--creed-border)] bg-[var(--creed-surface)]"
             initial={{ opacity: 0, scale: 0.55 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.55, delay: 0.35 + index * 0.05, ease: [0.22, 1, 0.36, 1] }}
+            transition={{
+              duration: 0.55,
+              delay: 0.35 + index * 0.05,
+              ease: [0.22, 1, 0.36, 1],
+            }}
           >
             {node.kind === "agent" ? (
-              <IntegrationGlyph kind={node.icon} framed={false} className="h-7 w-7" assetClassName="h-7 w-7" />
+              <IntegrationGlyph
+                kind={node.icon}
+                framed={false}
+                className="h-7 w-7"
+                assetClassName="h-7 w-7"
+              />
             ) : (
               <User className="h-6 w-6 text-white" strokeWidth={1.8} />
             )}
@@ -1206,16 +1643,34 @@ function SharedConstellation() {
       ))}
 
       <div className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2">
-        <motion.div initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}>
-          <div className="relative flex h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: AMBER }}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div
+            className="relative flex h-16 w-16 items-center justify-center rounded-full"
+            style={{ backgroundColor: AMBER }}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/assets/brand/logo.svg" alt="Creed" className="h-8 w-auto select-none" style={{ filter: "brightness(0) invert(1)" }} draggable={false} />
+            <img
+              src="/assets/brand/logo.svg"
+              alt="Creed"
+              className="h-8 w-auto select-none"
+              style={{ filter: "brightness(0) invert(1)" }}
+              draggable={false}
+            />
             <motion.span
               className="absolute inset-0 rounded-full border"
               style={{ borderColor: AMBER }}
               initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: [0, 0.2, 0], scale: [0.92, 1.32, 1.42] }}
-              transition={{ duration: 3.2, repeat: Infinity, ease: [0.22, 1, 0.36, 1], delay: 0.9 }}
+              transition={{
+                duration: 3.2,
+                repeat: Infinity,
+                ease: [0.22, 1, 0.36, 1],
+                delay: 0.9,
+              }}
             />
           </div>
         </motion.div>
@@ -1224,13 +1679,22 @@ function SharedConstellation() {
   );
 }
 
-function AnimatedHeadline({ text, className }: { text: string; className?: string }) {
+function AnimatedHeadline({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
   const lines = useMemo(() => text.split("\n"), [text]);
   return (
     <motion.h1
       initial="hidden"
       animate="visible"
-      variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.042 } } }}
+      variants={{
+        hidden: {},
+        visible: { transition: { staggerChildren: 0.042 } },
+      }}
       className={cn("flex flex-wrap", className)}
     >
       {lines.map((line, lineIndex) => {
@@ -1238,11 +1702,17 @@ function AnimatedHeadline({ text, className }: { text: string; className?: strin
         return (
           <span key={`${line}-${lineIndex}`} className="basis-full">
             {words.map((word, wordIndex) => (
-              <span key={`${word}-${lineIndex}-${wordIndex}`} className="inline-block whitespace-nowrap align-baseline">
+              <span
+                key={`${word}-${lineIndex}-${wordIndex}`}
+                className="inline-block whitespace-nowrap align-baseline"
+              >
                 {splitPreservingLigatures(word).map((glyph, glyphIndex) => (
                   <motion.span
                     key={`${glyph}-${lineIndex}-${wordIndex}-${glyphIndex}`}
-                    variants={{ hidden: { opacity: 0, filter: "blur(10px)", y: 10 }, visible: { opacity: 1, filter: "blur(0px)", y: 0 } }}
+                    variants={{
+                      hidden: { opacity: 0, filter: "blur(10px)", y: 10 },
+                      visible: { opacity: 1, filter: "blur(0px)", y: 0 },
+                    }}
                     transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
                     className="inline-block whitespace-pre"
                   >
@@ -1251,7 +1721,10 @@ function AnimatedHeadline({ text, className }: { text: string; className?: strin
                 ))}
                 {wordIndex < words.length - 1 ? (
                   <motion.span
-                    variants={{ hidden: { opacity: 0, filter: "blur(10px)", y: 10 }, visible: { opacity: 1, filter: "blur(0px)", y: 0 } }}
+                    variants={{
+                      hidden: { opacity: 0, filter: "blur(10px)", y: 10 },
+                      visible: { opacity: 1, filter: "blur(0px)", y: 0 },
+                    }}
                     transition={{ duration: 0.62, ease: [0.22, 1, 0.36, 1] }}
                     className="inline-block whitespace-pre"
                   >
@@ -1267,12 +1740,22 @@ function AnimatedHeadline({ text, className }: { text: string; className?: strin
   );
 }
 
-function AnimatedBlock({ children, index }: { children: ReactNode; index: number }) {
+function AnimatedBlock({
+  children,
+  index,
+}: {
+  children: ReactNode;
+  index: number;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10, filter: "blur(6px)" }}
       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-      transition={{ delay: index * 0.045, duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+      transition={{
+        delay: index * 0.045,
+        duration: 0.24,
+        ease: [0.22, 1, 0.36, 1],
+      }}
     >
       {children}
     </motion.div>

@@ -22,7 +22,7 @@ Full plain-text content: ${base}/llms-full.txt
 
 - [Home](${base}/home): What Creed is and how it works.
 - [Roadmap](${base}/roadmap): What is available now and what is planned.
-- [Docs](${base}/docs): Setting up Creed, connecting agents, and keeping context useful over time.
+- [Docs](https://docs.creed.md): Setting up Creed, connecting agents, and keeping context useful over time.
 - [Stack](${base}/stack): The technology Creed runs on.
 
 ## Details

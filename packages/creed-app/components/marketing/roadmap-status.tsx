@@ -48,3 +48,29 @@ export function RoadmapStatusPill({
     </span>
   );
 }
+
+const ROADMAP_LABEL_STYLE: Record<string, string> = {
+  feature:
+    "bg-[#EFF6FF] text-[#1D4ED8] dark:bg-[#102341]/60 dark:text-[#60A5FA]",
+  improvement:
+    "bg-[#F5F3FF] text-[#6D28D9] dark:bg-[#2E175F]/55 dark:text-[#C4B5FD]",
+  bug: "bg-[#FEF2F2] text-[#B91C1C] dark:bg-[#3F1212]/55 dark:text-[#FCA5A5]",
+};
+
+export function RoadmapLabelTag({ label }: { label: string }) {
+  const style =
+    ROADMAP_LABEL_STYLE[label.toLocaleLowerCase()] ??
+    "bg-[var(--creed-surface-raised)] text-[var(--creed-text-secondary)]";
+  const displayLabel = `${label.charAt(0).toLocaleUpperCase()}${label.slice(1)}`;
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center whitespace-nowrap rounded-[6px] px-1.5 py-0.5 text-[12px] font-medium",
+        style,
+      )}
+    >
+      {displayLabel}
+    </span>
+  );
+}

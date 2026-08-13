@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getDisplayName } from "@/lib/user-name";
+import { authorizeAuthenticatedUser } from "@creed/edition/auth";
 import {
   buildAgentReadPayload,
   inferSectionTemplate,
@@ -2603,6 +2604,9 @@ export async function buildAgentPayloadForToken(
   if (userError || !userData?.user) {
     throw new Error(userError?.message || "Could not load token owner.");
   }
+  if (!(await authorizeAuthenticatedUser(userData.user))) {
+    return null;
+  }
 
   const { state } = await loadCreedState(db, userData.user, {
     proposalLimit: 100,
@@ -2625,7 +2629,7 @@ export async function buildAgentPayloadForToken(
     payload: buildAgentReadPayload(state, {
       proposalUrl: buildProposalUrl(),
       directEditUrl: buildDirectEditUrl(),
-      docsUrl: `${getSiteUrl()}/docs`,
+      docsUrl: "https://docs.creed.md",
     }),
   };
 }

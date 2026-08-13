@@ -6,7 +6,18 @@ import {
   MarketingFooter,
   MarketingHeroBanner,
 } from "@/components/marketing/site-chrome";
-import { RoadmapStatusPill } from "@/components/marketing/roadmap-status";
+import {
+  RoadmapLabelTag,
+  RoadmapStatusPill,
+} from "@/components/marketing/roadmap-status";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@creed/ui/dialog";
 import type { RoadmapColumn, RoadmapTask } from "@/lib/marketing/roadmap";
 
 export function RoadmapPageView({ columns }: { columns: RoadmapColumn[] }) {
@@ -85,29 +96,50 @@ function RoadmapColumnView({ column }: { column: RoadmapColumn }) {
 
 function RoadmapCard({ task }: { task: RoadmapTask }) {
   return (
-    <article className="rounded-xl bg-[var(--creed-surface)] p-5">
-      <h3 className="text-[16px] font-medium leading-snug tracking-[-0.01em] text-[var(--creed-text-primary)]">
-        {task.title}
-      </h3>
+    <Dialog>
+      <DialogTrigger asChild>
+        <button
+          type="button"
+          className="w-full cursor-pointer rounded-xl bg-[var(--creed-surface)] p-5 text-left transition-colors duration-200 hover:bg-[var(--creed-surface-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--creed-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--creed-background)]"
+        >
+          <span className="block text-[16px] font-medium leading-snug tracking-[-0.01em] text-[var(--creed-text-primary)]">
+            {task.title}
+          </span>
 
-      {task.description ? (
-        <p className="t-body mt-2 line-clamp-2 text-[var(--creed-text-secondary)]">
-          {task.description}
-        </p>
-      ) : null}
-
-      {task.labels.length > 0 ? (
-        <div className="mt-3.5 flex flex-wrap gap-1.5">
-          {task.labels.map((label) => (
-            <span
-              key={label}
-              className="rounded-[6px] bg-[var(--creed-surface-raised)] px-2 py-0.5 font-mono text-[12px] text-[var(--creed-text-tertiary)]"
-            >
-              {label}
+          {task.description ? (
+            <span className="t-body mt-2 line-clamp-2 text-[var(--creed-text-secondary)]">
+              {task.description}
             </span>
-          ))}
-        </div>
-      ) : null}
-    </article>
+          ) : null}
+
+          {task.labels.length > 0 ? (
+            <span className="mt-3.5 flex flex-wrap gap-1.5">
+              {task.labels.map((label) => (
+                <RoadmapLabelTag key={label} label={label} />
+              ))}
+            </span>
+          ) : null}
+        </button>
+      </DialogTrigger>
+
+      <DialogContent className="max-h-[min(80vh,42rem)] overflow-y-auto rounded-[var(--radius-xl)] border-[var(--creed-border)] bg-[var(--creed-surface)] sm:max-w-lg">
+        <DialogHeader className="gap-3 pr-8">
+          <DialogTitle className="text-[20px] leading-snug tracking-[-0.01em]">
+            {task.title}
+          </DialogTitle>
+          <DialogDescription className="t-body whitespace-pre-wrap text-[var(--creed-text-secondary)]">
+            {task.description ?? "No additional details yet."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {task.labels.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {task.labels.map((label) => (
+              <RoadmapLabelTag key={label} label={label} />
+            ))}
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   );
 }

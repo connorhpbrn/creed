@@ -80,12 +80,16 @@ export function AuthScreen({
   mode,
   configured = true,
   nextPath = "/",
+  privateAccess = false,
+  accessDenied = false,
 }: {
   mode: AuthMode;
   configured?: boolean;
   // Where to land after a successful auth (e.g. back to /authorize for an MCP
   // connect). Defaults to the root router.
   nextPath?: string;
+  privateAccess?: boolean;
+  accessDenied?: boolean;
 }) {
   const t = copy[mode];
   const isSignup = mode === "signup";
@@ -262,12 +266,14 @@ export function AuthScreen({
   return (
     <AuthShell
       topRight={
+        mode === "login" && privateAccess ? null : (
         <Link
           href={withNext(t.topHref)}
           className="text-[14px] font-medium text-[var(--creed-text-primary)] transition-colors hover:text-[var(--creed-accent)]"
         >
           {t.topAction}
         </Link>
+        )
       }
     >
       {confirmation ? (
@@ -285,6 +291,14 @@ export function AuthScreen({
             text={t.heading}
             className="text-center text-[2rem]! md:text-[2.65rem]!"
           />
+
+          {privateAccess ? (
+            <p className="mx-auto mt-3 max-w-sm text-center text-[14px] leading-6 text-[var(--creed-text-secondary)]">
+              {accessDenied
+                ? "This account does not have access to Creed Cloud."
+                : "Creed Cloud is in private development for approved testers."}
+            </p>
+          ) : null}
 
           <div className="mt-8 flex flex-col gap-3">
             <ProviderButton
@@ -393,6 +407,7 @@ export function AuthScreen({
             />
           </form>
 
+          {mode === "login" && privateAccess ? null : (
           <p className="mt-7 text-center text-[14px] text-[var(--creed-text-tertiary)]">
             {t.switchPrompt}{" "}
             <Link
@@ -402,6 +417,7 @@ export function AuthScreen({
               {t.switchAction}
             </Link>
           </p>
+          )}
         </>
       )}
     </AuthShell>

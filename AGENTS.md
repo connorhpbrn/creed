@@ -35,6 +35,7 @@ Supabase (Postgres + RLS + auth)   OpenRouter (credits + BYOK)
 apps/
 ├── open/                     thin self-hosted Next.js composition
 ├── cloud/                    thin managed Next.js composition
+├── docs/                     independent docs.creed.md Next.js app
 └── status/                   independent status.creed.md Next.js app
 packages/
 ├── creed-app/                shared product, marketing, routes, and AI
@@ -106,6 +107,9 @@ not bypass its permission, confirmation, or safety gates.
 - Read and apply `.agents/skills/tasks/debug/SKILL.md` whenever diagnosing or
   fixing a bug, regression, failed check, unexpected behavior, or performance
   problem.
+- Read and apply `.agents/skills/tasks/docs/SKILL.md` whenever changing
+  documentation or shipped behavior involving setup, hosting, configuration,
+  connections, protocols, maintenance, troubleshooting, security, or privacy.
 - Read and apply `.agents/skills/tasks/release/SKILL.md` only when the user
   explicitly asks to prepare or execute a release, deployment, publication, or
   tag.

@@ -756,7 +756,7 @@ export function CreedShell({
                     icon={BookTextIcon}
                     className="gap-2 text-[13px]"
                     onSelect={() => {
-                      router.push("/docs");
+                      window.location.assign("https://docs.creed.md");
                     }}
                   >
                     Docs

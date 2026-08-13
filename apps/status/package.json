@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@creed/ui": "*",
     "@upstash/redis": "^1.38.0",
     "@vercel/blob": "^2.6.1",
     "motion": "^12.38.0",

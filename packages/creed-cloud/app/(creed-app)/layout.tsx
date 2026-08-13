@@ -14,6 +14,7 @@ import { resolveActiveCreed } from "@/lib/creed-context";
 import { getRequestAuth } from "@/lib/request-auth";
 import { getSupabaseAdminClient } from "@creed/persistence/supabase/admin";
 import { isSupabaseConfigured } from "@creed/persistence/supabase/env";
+import { hasPrivateCloudAccess } from "@creed/cloud/lib/cloud-access";
 
 // Entitlement + onboarding gate for everything inside the (creed-app)
 // route group (/file, /connections, /settings). Three-layer check:
@@ -64,7 +65,9 @@ export default async function CreedAppLayout({ children }: { children: ReactNode
   }
 
   const [cloudEntitled, active] = await Promise.all([
-    hasActiveEntitlement(supabase, user.id),
+    hasPrivateCloudAccess(user.email)
+      ? Promise.resolve(true)
+      : hasActiveEntitlement(supabase, user.id),
     resolveActiveCreed(supabase, user),
   ]);
   const activeEntry = active?.creeds.find((creed) => creed.id === active.creedId);
@@ -83,7 +86,7 @@ export default async function CreedAppLayout({ children }: { children: ReactNode
       ? await hasActiveEntitlement(admin, ownerUserId)
       : false;
   }
-  const hasAccess = sharedAccess ? sharedOwnerEntitled : cloudEntitled;
+  const hasAccess = cloudEntitled || (sharedAccess && sharedOwnerEntitled);
 
   if (!hasAccess) {
     redirect("/onboarding");

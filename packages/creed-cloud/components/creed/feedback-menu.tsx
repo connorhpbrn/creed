@@ -232,7 +232,7 @@ export function FeedbackMenuItem({
                         {" "}
                         or{" "}
                         <Link
-                          href="/docs"
+                          href="https://docs.creed.md"
                           className="font-medium text-[var(--creed-accent)] transition-colors hover:text-[var(--creed-accent-hover)]"
                         >
                           see docs

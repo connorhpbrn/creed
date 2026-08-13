@@ -1020,7 +1020,8 @@ function FaqSection() {
 }
 
 function ClosingCtaSection({ configured }: { configured: boolean }) {
-  const hasHostedAccounts = useCreedEdition().capabilities.hostedAccounts;
+  const { hostedAccounts: hasHostedAccounts, publicSignup } =
+    useCreedEdition().capabilities;
   const cloudAuthEnabled = configured && hasHostedAccounts;
   const authState = useLandingAuthState(cloudAuthEnabled);
   const { href, isPaid, canResume } =
@@ -1029,6 +1030,8 @@ function ClosingCtaSection({ configured }: { configured: boolean }) {
   const label =
     !hasHostedAccounts
       ? "View on GitHub"
+      : !publicSignup && authState !== "signed-in"
+        ? "View roadmap"
       : authState !== "signed-in"
       ? "Get Started"
       : isPaid
@@ -1039,6 +1042,8 @@ function ClosingCtaSection({ configured }: { configured: boolean }) {
   const resolvedHref =
     !hasHostedAccounts
       ? GITHUB_URL
+      : !publicSignup && authState !== "signed-in"
+        ? "/roadmap"
       : authState === "signed-in"
         ? href
         : "/signup?next=/onboarding";

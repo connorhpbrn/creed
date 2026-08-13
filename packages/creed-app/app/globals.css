@@ -332,6 +332,28 @@
   }
 }
 
+.github-star-icon {
+  fill: transparent;
+  transform-origin: center;
+  transform: rotate(0deg);
+  will-change: transform;
+  transition:
+    fill 160ms ease,
+    transform 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.github-star-button:hover .github-star-icon {
+  fill: currentColor;
+  transform: rotate(360deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .github-star-icon {
+    transition: fill 160ms ease;
+  }
+
+}
+
 .creed-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: var(--creed-border-strong) transparent;
