@@ -142,8 +142,9 @@ export const FileStickyHeader = forwardRef<
   {
     children: ReactNode;
     compact?: boolean;
+    className?: string;
   }
->(function FileStickyHeader({ children, compact = false }, ref) {
+>(function FileStickyHeader({ children, compact = false, className }, ref) {
   return (
     <div
       ref={ref}
@@ -153,6 +154,7 @@ export const FileStickyHeader = forwardRef<
         compact
           ? "z-[60] mb-7 pb-4 pt-3"
           : "z-20 mb-8 -mx-4 px-4 pb-5 pt-2 md:-mx-12 md:mb-12 md:px-12 md:pb-7 xl:-mx-16 xl:px-16",
+        className,
       )}
     >
       {children}

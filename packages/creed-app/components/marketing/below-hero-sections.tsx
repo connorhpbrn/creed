@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import type { StaticImageData } from "next/image";
 import Link from "next/link";
+import { Check, X } from "lucide-react";
 import { FaqAccordion } from "@/components/marketing/faq-accordion";
 import {
   DirectEditDemo,
@@ -151,6 +152,7 @@ export function BelowHeroSections({ configured }: { configured: boolean }) {
   return (
     <main className="bg-[var(--creed-background)]">
       <WhyUseItSection />
+      <WhyNotOtherToolsSection />
       <HowCreedWorksSection />
       <GovernedCollaborationSection />
       <AiFeaturesSection />
@@ -273,7 +275,6 @@ function WhyUseItSection() {
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading
         headline="Why Use It?"
-        subline="AI adoption is exploding. Context is still trapped in the last tool you used."
         className="max-w-[64rem]"
       />
 
@@ -303,6 +304,146 @@ function WhyUseItSection() {
             </div>
           </article>
         ))}
+      </div>
+    </section>
+  );
+}
+
+const COMPARISON_PRODUCTS = [
+  {
+    name: "Creed",
+    icon: "/assets/landing/comparison/creed.ico",
+  },
+  {
+    name: "Supermemory",
+    icon: "/assets/landing/comparison/supermemory.svg",
+  },
+  {
+    name: "Obsidian",
+    icon: "/assets/landing/comparison/obsidian.svg",
+  },
+  {
+    name: "Notion",
+    icon: "/assets/landing/comparison/notion.ico",
+  },
+] as const;
+
+const COMPARISON_ROWS = [
+  {
+    label: "Context loaded before every answer",
+    values: [true, true, false, false],
+  },
+  {
+    label: "One human-readable profile",
+    values: [true, true, false, false],
+  },
+  {
+    label: "Agent changes require approval",
+    values: [true, false, false, false],
+  },
+  {
+    label: "Section-level edit permissions",
+    values: [true, false, false, false],
+  },
+  {
+    label: "Plain Markdown is the source",
+    values: [true, false, true, false],
+  },
+  {
+    label: "Open source and self-hostable",
+    values: [true, false, false, false],
+  },
+] as const;
+
+function WhyNotOtherToolsSection() {
+  return (
+    <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
+      <SectionHeading
+        headline="Why Not Other Tools?"
+        className="max-w-[64rem]"
+      />
+
+      <div className="mx-auto mt-14 max-w-4xl">
+        <div className="overflow-x-auto rounded-lg border border-[var(--creed-border)]">
+          <table className="w-full min-w-[38rem] table-fixed border-collapse text-left text-[14px] md:min-w-[44rem]">
+            <colgroup>
+              <col className="w-[38%] md:w-[44%]" />
+              {COMPARISON_PRODUCTS.map((product) => (
+                <col key={product.name} className="w-[15.5%] md:w-[14%]" />
+              ))}
+            </colgroup>
+            <thead>
+              <tr className="border-b border-[var(--creed-border)] bg-[var(--creed-surface)]">
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left text-[16px] font-medium text-[var(--creed-text-primary)]"
+                >
+                  Native features
+                </th>
+                {COMPARISON_PRODUCTS.map((product) => (
+                  <th
+                    key={product.name}
+                    scope="col"
+                    className="px-4 py-3 text-center font-medium text-[var(--creed-text-primary)]"
+                  >
+                    <span
+                      className="mx-auto flex size-9 items-center justify-center"
+                    >
+                      <Image
+                        src={product.icon}
+                        alt={product.name}
+                        width={28}
+                        height={28}
+                        unoptimized
+                        className={cn(
+                          "h-7 w-auto max-w-7 object-contain",
+                          product.name === "Supermemory" && "creed-invert-on-dark",
+                        )}
+                      />
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {COMPARISON_ROWS.map((row) => (
+                <tr
+                  key={row.label}
+                  className="border-b border-[var(--creed-border)] last:border-0"
+                >
+                  <th
+                    scope="row"
+                    className="px-4 py-3 text-left font-medium text-[var(--creed-text-primary)]"
+                  >
+                    {row.label}
+                  </th>
+                  {row.values.map((supported, index) => {
+                    const product = COMPARISON_PRODUCTS[index];
+                    return (
+                      <td key={product.name} className="px-4 py-3 text-center">
+                        <span
+                          className={cn(
+                            "mx-auto inline-flex size-7 items-center justify-center",
+                            supported
+                              ? "text-[var(--creed-success)]"
+                              : "text-[var(--creed-danger)]",
+                          )}
+                          aria-label={`${product.name}: ${supported ? "Yes" : "No"}`}
+                        >
+                          {supported ? (
+                            <Check className="size-4" aria-hidden="true" />
+                          ) : (
+                            <X className="size-4" aria-hidden="true" />
+                          )}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );
@@ -388,7 +529,6 @@ function HowCreedWorksSection() {
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading
         headline="How It Works"
-        subline="The profile your agents read, update, and keep sharp."
         className="max-w-[60rem]"
       />
 
@@ -480,12 +620,14 @@ function GovernedCollaborationSection() {
       <div className="mx-auto max-w-5xl">
         <SectionHeading
           headline="Review everything or nothing"
-          subline="Approve every agent edit, or let them write directly."
         />
 
         <div className="mt-12 grid items-stretch gap-5 md:grid-cols-2">
+          {/* Keep Chrome from anchoring the viewport to the centred autoplay
+              card as its internal diff expands and collapses. */}
           <PlateCard
             plateColor="var(--plate-proposal)"
+            plateClassName="[overflow-anchor:none]"
             title="You control what gets remembered."
             body="Agents propose updates in real time, but nothing changes until you approve it."
           >
@@ -726,7 +868,6 @@ function AiFeaturesSection() {
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading
         headline="AI inside the file"
-        subline="Three focused surfaces, each built for a different kind of help."
         className="max-w-[64rem]"
       />
 
@@ -769,7 +910,6 @@ function HowItWorksSection() {
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading
         headline="Get started in minutes"
-        subline="Three steps to a profile every agent can read."
         className="max-w-[52rem]"
       />
 
@@ -931,7 +1071,6 @@ function IntegrationsSection() {
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading
         headline="Works with your stack"
-        subline="Connect Creed once, then every AI you talk to knows you instantly."
         className="max-w-[64rem]"
       />
 
@@ -963,7 +1102,6 @@ function WhatsOnTheWaySection() {
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading
         headline="What's on the way"
-        subline="The top of each stage, pulled live from our task board."
         className="max-w-[56rem]"
       />
 
@@ -987,13 +1125,16 @@ function RoadmapTeaserCard({
 }) {
   const style = ROADMAP_STATUS_STYLE[column.id];
   return (
-    <article className="flex w-full flex-col overflow-hidden rounded-xl bg-[var(--creed-surface)] sm:w-[340px]">
+    <Link
+      href={`/roadmap?item=${encodeURIComponent(task.id)}`}
+      className="group flex w-full cursor-pointer flex-col overflow-hidden rounded-xl bg-[var(--creed-surface)] shadow-sm transition-shadow duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--creed-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--creed-background)] sm:w-[340px]"
+    >
       <div className={cn("px-5 py-2.5", style.fill)}>
         <span className={cn("text-[14px] font-medium", style.text)}>
           {column.label}
         </span>
       </div>
-      <div className="flex flex-1 flex-col p-5">
+      <div className="flex flex-1 flex-col p-5 transition-colors duration-200 group-hover:bg-[var(--creed-surface-raised)]">
         <h3 className="text-[16px] font-medium leading-snug tracking-[-0.01em] text-[var(--creed-text-primary)]">
           {task.title}
         </h3>
@@ -1003,7 +1144,7 @@ function RoadmapTeaserCard({
           </p>
         ) : null}
       </div>
-    </article>
+    </Link>
   );
 }
 

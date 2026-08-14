@@ -275,9 +275,6 @@ export function TermsPageView() {
       <main className="mx-auto max-w-3xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
         <div className="border-b border-[var(--creed-border)] pb-8">
           <AnimatedPageTitle text="Terms and Conditions" />
-          <p className="t-lede mt-5 max-w-2xl text-[var(--creed-text-secondary)]">
-            The rules that govern your use of Creed.
-          </p>
         </div>
 
         <div className="border-b border-[var(--creed-border)] pb-8 pt-8 text-[var(--creed-text-secondary)]">

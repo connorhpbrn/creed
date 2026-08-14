@@ -85,7 +85,7 @@ export function LandingHero({ configured }: { configured: boolean }) {
                 </h1>
 
                 <p className="mx-auto mt-5 max-w-xl text-[15px] font-semibold text-white/90 md:mt-6 md:whitespace-nowrap md:text-[18px]">
-                  One markdown file every AI reads before it answers.
+                  Tell every agent who you are, once.
                 </p>
 
                 <div className="mt-7 flex justify-center">

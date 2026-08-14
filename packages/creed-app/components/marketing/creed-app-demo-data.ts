@@ -512,15 +512,15 @@ const elonSections = [
     "elon-identity",
     "Chief Engineer",
     "identity",
-    "<p>Engineer and entrepreneur leading work across <strong>SpaceX</strong>, <strong>Tesla</strong>, <strong>xAI</strong>, Neuralink, and The Boring Shared.</p><p>I allocate attention to bottlenecks that block scale.</p>",
+    "<p>Engineer and entrepreneur leading work across <strong>SpaceX</strong>, <strong>Tesla</strong>, <strong>xAI</strong>, Neuralink, and The Boring Company.</p><p>I allocate attention to bottlenecks that block scale.</p>",
     "Edited by Elon, 9m ago",
     "Elon"
   ),
   section("elon-missions", "Missions", "projects", bulletList(elonMissions), "Edited by Elon, today", "Elon"),
   section("elon-principles", "First Principles", "operating-principles", bulletList(elonPrinciples), "Updated by Grok, 28m ago", "Grok", "agent"),
   section(
-    "elon-Shared Creeds",
-    "Shared Creeds",
+    "elon-companies",
+    "Companies",
     "stack",
     `${tagList(["Missions", "Manufacturing", "Constraints"])}<p>Review by the constraint that currently limits mission velocity: launch cadence, factories, compute, clinical progress, or tunnelling cost.</p>`,
     "Updated by Grok, 1h ago",
@@ -558,7 +558,7 @@ const elonProposals = [
   proposal("elon-p-missions", "elon-missions", "Missions", "projects", "Grok", "Your latest shared review ranked projects by their effect on civilisation-scale outcomes.", [...elonMissions, elonMissionsNew].join("\n"), "9m ago"),
   proposal("elon-p-principles", "elon-principles", "First Principles", "operating-principles", "Grok", "Two recent reviews clarified that speed follows deletion and simplification.", [...elonPrinciples, elonPrinciplesNew].join("\n"), "28m ago"),
   proposal("elon-p-manufacturing", "elon-manufacturing", "Manufacturing", "workflows", "Grok", "The line review now names the slowest station before discussing total output.", "Design for production rate, not only for the first successful prototype.\nPut engineering near the line when reality disagrees with the model.\nTrack the slowest station and the highest-frequency failure every day.\nBegin every production review at the current bottleneck station.", "1h ago"),
-  proposal("elon-p-Shared Creeds", "elon-Shared Creeds", "Shared Creeds", "stack", "Grok", "The weekly review now starts with one named bottleneck per shared.", "SpaceX\nTesla\nxAI\nNeuralink\nThe Boring Shared\nStart the cross-shared review with the single constraint currently limiting each mission.", "2h ago"),
+  proposal("elon-p-companies", "elon-companies", "Companies", "stack", "Grok", "The weekly review now starts with one named bottleneck per company.", "SpaceX\nTesla\nxAI\nNeuralink\nThe Boring Company\nStart the cross-company review with the single constraint currently limiting each mission.", "2h ago"),
   proposal("elon-p-constraints", "elon-constraints", "Constraints", "boundaries", "Grok", "Three recent requirements disappeared when nobody could name their owner.", "Do not accept a requirement without finding the person and reason behind it.\nDo not add automation to a process that should first be deleted.\nEscalate safety-critical ambiguity with evidence, not optimism.\nIf a requirement has no named owner, treat it as a candidate for deletion.", "4h ago"),
 ];
 
@@ -574,6 +574,26 @@ const ACTIVITY_DIFF_COPY: Record<string, { beforeText: string; afterText: string
   "steve-a3": {
     beforeText: "More options can show progress.",
     afterText: "Do not confuse more features with a better product.",
+  },
+  "steve-a4": {
+    beforeText: "Keep the current product line focused.",
+    afterText: "Bring back the Newton MessagePad as a second personal-computing platform.",
+  },
+  "steve-a5": {
+    beforeText: "Own the complete product experience.",
+    afterText: "Restore OpenDoc as a shared component standard across applications.",
+  },
+  "steve-a6": {
+    beforeText: "Every product must have a clear reason to exist.",
+    afterText: "Revisit Pippin as a dedicated living-room gaming platform.",
+  },
+  "steve-a7": {
+    beforeText: "Beauty and utility must survive contact with the market.",
+    afterText: "Treat the Power Mac G4 Cube as the model for the next desktop line.",
+  },
+  "steve-a8": {
+    beforeText: "One device should tell one coherent story.",
+    afterText: "Revive Macintosh TV as a combined television and personal computer.",
   },
   "marc-a1": {
     beforeText: "Prioritise large technical markets.",
@@ -683,6 +703,11 @@ export const DEMO_PROFILES = [
       { id: "steve-a1", sectionName: "Product Craft", accent: "rose", actor: "Claude", actorType: "agent", status: "accepted", timeLabel: "3h ago", added: 8, removed: 2 },
       { id: "steve-a2", sectionName: "Launches", accent: "output", actor: "Claude", actorType: "agent", status: "accepted", timeLabel: "Yesterday", added: 12, removed: 5 },
       { id: "steve-a3", sectionName: "Standards", accent: "boundaries", actor: "ChatGPT", actorType: "agent", status: "direct", timeLabel: "4d ago", added: 9, removed: 4 },
+      { id: "steve-a4", sectionName: "Focus", accent: "projects", actor: "Claude", actorType: "agent", status: "rejected", timeLabel: "5d ago", added: 11, removed: 6 },
+      { id: "steve-a5", sectionName: "Standards", accent: "boundaries", actor: "ChatGPT", actorType: "agent", status: "rejected", timeLabel: "6d ago", added: 10, removed: 5 },
+      { id: "steve-a6", sectionName: "Focus", accent: "projects", actor: "Claude", actorType: "agent", status: "rejected", timeLabel: "1w ago", added: 9, removed: 6 },
+      { id: "steve-a7", sectionName: "Product Craft", accent: "rose", actor: "ChatGPT", actorType: "agent", status: "rejected", timeLabel: "2w ago", added: 12, removed: 7 },
+      { id: "steve-a8", sectionName: "Launches", accent: "output", actor: "Claude", actorType: "agent", status: "rejected", timeLabel: "3w ago", added: 10, removed: 7 },
     ]
   ),
   profile(
@@ -757,16 +782,16 @@ export const DEMO_PROFILES = [
       "elon-p-missions": { base: elonMissionsPlain, html: bulletList([...elonMissions, elonMissionsNew]), score: 94, added: 15 },
       "elon-p-principles": { base: elonPrinciplesPlain, html: bulletList([...elonPrinciples, elonPrinciplesNew]), score: 93, added: 13 },
       "elon-p-manufacturing": { base: "Design for production rate, not only for the first successful prototype.\nPut engineering near the line when reality disagrees with the model.\nTrack the slowest station and the highest-frequency failure every day.", html: bulletList(["Design for production rate, not only for the first successful prototype.", "Put engineering near the line when reality disagrees with the model.", "Track the slowest station and the highest-frequency failure every day.", "Begin every production review at the current bottleneck station."]), score: 91, added: 9 },
-      "elon-p-Shared Creeds": { base: "Missions\nManufacturing\nConstraints", html: `${tagList(["Missions", "Manufacturing", "Constraints"])}<p>Start the cross-shared review with the single constraint currently limiting each mission.</p>`, score: 90, added: 12 },
+      "elon-p-companies": { base: "Missions\nManufacturing\nConstraints", html: `${tagList(["Missions", "Manufacturing", "Constraints"])}<p>Start the cross-company review with the single constraint currently limiting each mission.</p>`, score: 90, added: 12 },
       "elon-p-constraints": { base: "Do not accept a requirement without finding the person and reason behind it.\nDo not add automation to a process that should first be deleted.\nEscalate safety-critical ambiguity with evidence, not optimism.", html: bulletList(["Do not accept a requirement without finding the person and reason behind it.", "Do not add automation to a process that should first be deleted.", "Escalate safety-critical ambiguity with evidence, not optimism.", "If a requirement has no named owner, treat it as a candidate for deletion."]), score: 92, added: 11 },
     },
     [94, 91, 89, 86, 84, 90],
     "Mission-dense and engineering-led, with five Grok refinements pending.",
     "The file connects civilisation-scale goals to concrete engineering review habits.",
-    "Name the current bottleneck per shared so the broad mission stack remains actionable.",
+    "Name the current bottleneck per company so the broad mission stack remains actionable.",
     [
       { id: "elon-a1", sectionName: "First Principles", accent: "operating-principles", actor: "Grok", actorType: "agent", status: "accepted", timeLabel: "28m ago", added: 12, removed: 5 },
-      { id: "elon-a2", sectionName: "Shared Creeds", accent: "stack", actor: "Grok", actorType: "agent", status: "accepted", timeLabel: "1h ago", added: 8, removed: 2 },
+      { id: "elon-a2", sectionName: "Companies", accent: "stack", actor: "Grok", actorType: "agent", status: "accepted", timeLabel: "1h ago", added: 8, removed: 2 },
       { id: "elon-a3", sectionName: "Manufacturing", accent: "workflows", actor: "Grok", actorType: "agent", status: "accepted", timeLabel: "3h ago", added: 10, removed: 3 },
       { id: "elon-a4", sectionName: "Constraints", accent: "boundaries", actor: "Grok", actorType: "agent", status: "direct", timeLabel: "Yesterday", added: 16, removed: 7 },
     ]

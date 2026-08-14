@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@creed/ui/dropdown-menu";
 import { ProfileAvatar } from "@/components/creed/profile-avatar";
+import { cn } from "@creed/ui/utils";
 
 // The spaces a connecting agent can be granted, shown on the OAuth consent
 // screen. One connection reaches exactly one Creed - personal OR a single
@@ -24,7 +25,13 @@ export type SpaceOption = {
   avatarUrl?: string;
 };
 
-export function AuthorizeSpacePicker({ spaces }: { spaces: SpaceOption[] }) {
+export function AuthorizeSpacePicker({
+  spaces,
+  contentClassName,
+}: {
+  spaces: SpaceOption[];
+  contentClassName?: string;
+}) {
   // Default to the personal Creed (or the first space if there is none), so the
   // common case is a single click. The choice is required and always resolves
   // to exactly one space.
@@ -62,7 +69,10 @@ export function AuthorizeSpacePicker({ spaces }: { spaces: SpaceOption[] }) {
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="start"
-          className="w-[var(--radix-dropdown-menu-trigger-width)] max-w-[min(24rem,90vw)] border-[var(--creed-border)] bg-[var(--creed-surface)]"
+          className={cn(
+            "w-[var(--radix-dropdown-menu-trigger-width)] max-w-[min(24rem,90vw)] border-[var(--creed-border)] bg-[var(--creed-surface)]",
+            contentClassName,
+          )}
         >
           {spaces.map((space) => {
             const isSelected = space.id === selectedId;

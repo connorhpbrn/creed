@@ -81,9 +81,6 @@ export function StackPageView() {
       <main className="mx-auto max-w-4xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
         <div className="border-b border-[var(--creed-border)] pb-8">
           <AnimatedPageTitle text="Stack" />
-          <p className="t-lede mt-5 max-w-2xl text-[var(--creed-text-secondary)]">
-            The technology Creed uses to run, store, and process your data.
-          </p>
         </div>
 
         <section className="py-8 md:py-10">

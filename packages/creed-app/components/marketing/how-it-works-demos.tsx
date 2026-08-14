@@ -10,7 +10,7 @@
 //  - UsageDemo: a small stacked usage chart for the three AI features.
 // Client-only mock state, mobile-first (everything stacks vertically), no backend.
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check } from "lucide-react";
 import { AnimatedIconButton } from "@/components/creed/animated-icon-action";
@@ -157,6 +157,9 @@ const CONNECT_PHASE_DURATIONS = [1200, 1800, 2800] as const;
 
 export function ConnectDemo() {
   const [phase, setPhase] = useState(0);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [activeCard, setActiveCard] = useState<HTMLDivElement | null>(null);
+  const [frameHeight, setFrameHeight] = useState<number | null>(null);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(
@@ -169,19 +172,43 @@ export function ConnectDemo() {
     return () => window.clearTimeout(timeoutId);
   }, [phase]);
 
+  useLayoutEffect(() => {
+    if (!activeCard) return;
+
+    const measure = () => {
+      const frame = frameRef.current;
+      const styles = frame ? window.getComputedStyle(frame) : null;
+      const borderHeight = styles
+        ? Number.parseFloat(styles.borderTopWidth) +
+          Number.parseFloat(styles.borderBottomWidth)
+        : 0;
+      setFrameHeight(activeCard.offsetHeight + borderHeight);
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(activeCard);
+    return () => observer.disconnect();
+  }, [activeCard]);
+
   return (
     <div className="w-full">
       <motion.div
-        className="relative min-h-[232px] w-full overflow-hidden rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] text-left lg:min-h-0"
+        ref={frameRef}
+        initial={false}
+        animate={frameHeight === null ? undefined : { height: frameHeight }}
+        transition={{ height: { duration: 0.32, ease: EASE } }}
+        className="w-full overflow-hidden rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] text-left"
       >
-        <AnimatePresence mode="popLayout" initial={false}>
+        <AnimatePresence mode="wait" initial={false}>
           {phase <= 1 ? (
             <motion.div
+              ref={setActiveCard}
               key="copy"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.26, ease: EASE }}
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.015 }}
+              transition={{ duration: 0.3, ease: EASE }}
               className="flex flex-col p-5"
             >
               <div className="flex items-center gap-3">
@@ -223,11 +250,12 @@ export function ConnectDemo() {
 
           {phase === 2 ? (
             <motion.div
+              ref={setActiveCard}
               key="paste"
-              initial={{ opacity: 0, x: 12 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -12 }}
-              transition={{ duration: 0.28, ease: EASE }}
+              initial={{ opacity: 0, scale: 0.985 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.015 }}
+              transition={{ duration: 0.3, ease: EASE }}
               className="flex flex-col p-4"
             >
               <div className="text-[15px] font-medium text-[var(--creed-text-primary)]">

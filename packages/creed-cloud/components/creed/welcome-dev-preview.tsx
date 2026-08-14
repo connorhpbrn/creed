@@ -11,14 +11,21 @@
 //   ⌘/Ctrl+O - first-run onboarding (local only, no writes)
 //   ⌘/Ctrl+V - "New version available" toast
 //   ⌘/Ctrl+L - Creed first-load screen (any key or click dismisses)
+//   ⌘/Ctrl+U - OAuth consent screen (local only, no submission)
 //   ⌘/Ctrl+B - Billing dialog carrying every plan state at once
 import { useEffect, useState } from "react";
 import { CreedLoader } from "@/components/creed/creed-loader";
+import { CreedWordmark, IntegrationGlyph } from "@/components/creed/brand";
+import {
+  AuthorizeSpacePicker,
+  type SpaceOption,
+} from "@/components/creed/authorize-space-picker";
 import {
   BillingDialog,
   type PlanCard,
 } from "@creed/cloud/components/creed/billing-dialog";
 import { cn } from "@creed/ui/utils";
+import { Button } from "@creed/ui/button";
 import { WelcomeDialog } from "@/components/creed/welcome-dialog";
 import { WelcomeVideoPreloader } from "@/components/creed/welcome-video-preloader";
 import { showVersionUpdateToast } from "@/components/creed/app-version-notifier";
@@ -353,6 +360,98 @@ function CreedLoaderDevPreview() {
   );
 }
 
+function OAuthDevPreview() {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (isDevChord(event, "u")) {
+        event.preventDefault();
+        setOpen((current) => !current);
+        return;
+      }
+      if (open && event.key === "Escape" && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault();
+        setOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    const unsubscribe = onDevPreviewRequest((id) => {
+      if (id === "oauth") setOpen(true);
+    });
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      unsubscribe();
+    };
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-[var(--creed-background)] text-[var(--creed-text-primary)]">
+      <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-6 py-16">
+        <CreedWordmark className="mb-10 h-[20px]" />
+        <div className="w-full rounded-[var(--radius-xl)] bg-[var(--creed-surface)] p-7 text-center">
+          <div className="flex items-center justify-center gap-4">
+            <IntegrationGlyph kind="mcp" framed={false} className="h-14 w-14" />
+            <span className="text-[18px] text-[var(--creed-text-tertiary)]">+</span>
+            <IntegrationGlyph kind="codex" framed={false} className="h-14 w-14" />
+          </div>
+          <h1 className="mt-6 text-[18px] font-medium text-[var(--creed-text-primary)]">
+            Connect Codex to your Creed
+          </h1>
+          <p className="mt-3 text-[14px] leading-7 text-[var(--creed-text-secondary)]">
+            Codex can read your Creed and propose updates, and edits a section
+            directly only where you allow direct edits.
+          </p>
+          <p className="mt-2 text-[13px] text-[var(--creed-text-tertiary)]">
+            Signed in to Creed
+          </p>
+          <p className="mt-2 text-[13px] text-[var(--creed-text-tertiary)]">
+            After Allow, you return to Codex.
+          </p>
+          <AuthorizeSpacePicker
+            spaces={OAUTH_PREVIEW_SPACES}
+            contentClassName="z-[110]"
+          />
+          <div className="mt-6 flex items-center gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-9 flex-1 rounded-md"
+              onClick={() => setOpen(false)}
+            >
+              Deny
+            </Button>
+            <Button
+              type="button"
+              className="h-9 flex-1 rounded-md bg-[var(--creed-accent)] text-white hover:bg-[var(--creed-accent-hover)]"
+              onClick={() => setOpen(false)}
+            >
+              Allow
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const OAUTH_PREVIEW_SPACES: SpaceOption[] = [
+  {
+    id: "preview-personal",
+    label: "Personal Creed",
+    type: "personal",
+    avatarInitials: "PC",
+  },
+  {
+    id: "preview-shared",
+    label: "Northstar",
+    type: "shared",
+    avatarInitials: "N",
+  },
+];
+
 // One row per Cloud subscription state the dialog can render.
 const BILLING_PREVIEW_PLANS: PlanCard[] = [
   {
@@ -417,6 +516,7 @@ export function WelcomeDevPreview() {
       <OnboardingDevPreview />
       <VersionToastDevPreview />
       <CreedLoaderDevPreview />
+      <OAuthDevPreview />
       <BillingDevPreview />
     </>
   );

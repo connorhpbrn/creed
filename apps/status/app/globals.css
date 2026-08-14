@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@source "../../../packages/creed-ui/**/*.{js,jsx,ts,tsx}";
+
 /* Status uses the Creed palette while keeping its state colours independent. */
 :root {
   --status-bg: #f9f9f8;

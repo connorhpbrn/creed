@@ -219,7 +219,7 @@ async function renderAuthorize(params: SearchParams) {
       <p className="mt-2 text-[13px] text-[var(--creed-text-tertiary)]">
         Authorised installation owner
       </p>
-      <p className="mt-1 text-[12px] text-[var(--creed-text-tertiary)]">
+      <p className="mt-2 text-[13px] text-[var(--creed-text-tertiary)]">
         After Allow, you return to {redirectHost}.
       </p>
 

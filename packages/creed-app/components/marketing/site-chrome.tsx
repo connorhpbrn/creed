@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -19,6 +20,7 @@ import {
   Star,
 } from "lucide-react";
 import { MenuIcon } from "@creed/ui/menu";
+import { ContrastIcon, type ContrastIconHandle } from "@creed/ui/contrast";
 import { BrandedCredit } from "@creed/ui/branded-credit";
 import {
   ArrowUpRightIcon,
@@ -35,6 +37,7 @@ import { useGitHubStars } from "@/components/marketing/use-github-stars";
 import { CREED_TAGLINE } from "@/lib/marketing/brand";
 import { cn } from "@creed/ui/utils";
 import { useCreedEdition } from "@/components/creed/edition-provider";
+import { useTheme } from "@/components/creed/theme-provider";
 
 import {
   DISCORD_URL,
@@ -127,6 +130,8 @@ export function MarketingHeader({
   const authState = useLandingAuthState(cloudAuthEnabled);
   const { href: continueHref } = useEditionContinueHref();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  const [mobileMenuSurfaceHeight, setMobileMenuSurfaceHeight] = useState<number>();
   // Which mobile dropdown row is expanded (one at a time).
   const [openMobileGroup, setOpenMobileGroup] = useState<string | null>(null);
   // Sticky-header morph: once scrolled past the hero's top edge the header
@@ -158,6 +163,22 @@ export function MarketingHeader({
     return () => window.removeEventListener("scroll", closeOnScroll);
   }, [mobileMenuOpen]);
 
+  useLayoutEffect(() => {
+    if (!mobileMenuOpen || !mobileMenuRef.current) {
+      setMobileMenuSurfaceHeight(undefined);
+      return;
+    }
+
+    const menu = mobileMenuRef.current;
+    const measure = () => {
+      setMobileMenuSurfaceHeight(menu.offsetTop + menu.offsetHeight + 12);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(menu);
+    measure();
+    return () => observer.disconnect();
+  }, [mobileMenuOpen, authState]);
+
   return (
     <div className="pointer-events-none fixed inset-x-0 top-0 z-50 isolate px-3 pt-3 md:px-4 md:pt-4">
       <div
@@ -171,7 +192,12 @@ export function MarketingHeader({
         <motion.div
           aria-hidden="true"
           initial={false}
-          animate={{ height: mobileMenuOpen ? "18rem" : "100%" }}
+          animate={{
+            height:
+              mobileMenuOpen && mobileMenuSurfaceHeight
+                ? mobileMenuSurfaceHeight
+                : "100%",
+          }}
           transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
           className={cn(
             "pointer-events-none absolute inset-x-0 top-0 drop-shadow-[0_10px_18px_rgba(0,0,0,0.16)]",
@@ -246,6 +272,7 @@ export function MarketingHeader({
               transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             />
             <motion.div
+              ref={mobileMenuRef}
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
@@ -827,9 +854,8 @@ export function MarketingFooter() {
           accent="var(--creed-accent)"
           className="t-meta justify-start text-[var(--creed-text-tertiary)]"
         />
-        {/* Social icons: Discord and GitHub use the same full inline marks as
-            the product UI; Instagram and X remain local SVG masks. */}
         <div className="flex items-center gap-4 text-[var(--creed-text-tertiary)]">
+          <FooterThemeToggle />
           <InlineSocialIconLink
             href={DISCORD_URL}
             label="Discord"
@@ -857,6 +883,34 @@ export function MarketingFooter() {
         </div>
       </div>
     </footer>
+  );
+}
+
+function FooterThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  const iconRef = useRef<ContrastIconHandle | null>(null);
+  const label = theme === "dark" ? "Light mode" : "Dark mode";
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        toggleTheme({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        });
+      }}
+      onMouseEnter={() => iconRef.current?.startAnimation()}
+      onMouseLeave={() => iconRef.current?.stopAnimation()}
+      onFocus={() => iconRef.current?.startAnimation()}
+      onBlur={() => iconRef.current?.stopAnimation()}
+      className="inline-flex h-5 w-5 items-center justify-center transition-colors hover:text-[var(--creed-accent)]"
+    >
+      <ContrastIcon ref={iconRef} size={20} className="h-5 w-5" />
+    </button>
   );
 }
 

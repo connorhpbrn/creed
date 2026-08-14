@@ -46,9 +46,6 @@ export default function ChangelogPage() {
         <main className="mx-auto max-w-3xl px-6 pb-20 pt-8 md:px-10 md:pb-24 md:pt-10">
           <header className="border-b border-[var(--creed-border)] pb-8">
             <AnimatedPageTitle text="Changelog" />
-            <p className="mt-4 max-w-2xl text-[18px] leading-8 text-[var(--creed-text-secondary)]">
-              What&apos;s new in Creed, newest first.
-            </p>
           </header>
 
           <ChangelogAccordion entries={changelog} />

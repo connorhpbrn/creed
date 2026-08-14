@@ -50,29 +50,20 @@ import {
   SectionQualityPopover,
 } from "@/components/creed/file-quality-ui";
 import { useAnimatedIconControls } from "@/components/creed/animated-icon-controls";
-import { AnimatedMenuIconItem } from "@/components/creed/animated-icon-action";
 import { Avatar, AvatarImage } from "@creed/ui/avatar";
 import { Button } from "@creed/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@creed/ui/dropdown-menu";
-import { ArchiveIcon } from "@creed/ui/archive";
-import { ClockIcon } from "@creed/ui/clock";
+  CloudBackupIcon,
+  type CloudBackupIconHandle,
+} from "@creed/ui/cloud-backup";
 import { CloudUploadIcon } from "@creed/ui/cloud-upload";
 import { ConnectIcon } from "@creed/ui/connect";
-import { CopyIcon } from "@creed/ui/copy";
-import { DeleteIcon } from "@creed/ui/delete";
 import { DownloadIcon } from "@creed/ui/download";
 import { FileTextIcon } from "@creed/ui/file-text";
-import { FolderUpIcon } from "@creed/ui/folder-up";
 import { HistoryIcon } from "@creed/ui/history";
-import { LockIcon } from "@creed/ui/lock";
-import { LockOpenIcon } from "@creed/ui/lock-open";
+import { LockIcon, type LockIconHandle } from "@creed/ui/lock";
+import { LockOpenIcon, type LockOpenIconHandle } from "@creed/ui/lock-open";
 import { SettingsIcon } from "@creed/ui/settings";
-import { SquarePenIcon } from "@creed/ui/square-pen";
 import { UploadIcon } from "@creed/ui/upload";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -130,6 +121,40 @@ function BrowserChrome() {
         <ChromeIcon><Plus /></ChromeIcon>
         <ChromeIcon><Copy /></ChromeIcon>
       </div>
+    </div>
+  );
+}
+
+function DemoCloudSaveStatus({ syncing }: { syncing: boolean }) {
+  const cloudRef = useRef<CloudBackupIconHandle>(null);
+
+  useEffect(() => {
+    if (syncing) void cloudRef.current?.startAnimation();
+    else void cloudRef.current?.stopAnimation();
+  }, [syncing]);
+
+  return (
+    <div
+      className="mt-2 flex h-5 items-center gap-2 text-sm text-[var(--creed-accent)] transition-colors duration-200"
+      aria-live="polite"
+    >
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+        <CloudBackupIcon ref={cloudRef} size={16} aria-hidden="true" />
+      </span>
+      <span className="grid">
+        <AnimatePresence initial={false}>
+          <motion.span
+            key={syncing ? "syncing" : "synced"}
+            className="col-start-1 row-start-1"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {syncing ? "Syncing…" : "Synced to cloud · just now"}
+          </motion.span>
+        </AnimatePresence>
+      </span>
     </div>
   );
 }
@@ -233,27 +258,102 @@ function NavRail({
 
 
 function LockButton({ locked, onToggle }: { locked: boolean; onToggle: () => void }) {
-  const lockCtl = useAnimatedIconControls(80);
-  const openCtl = useAnimatedIconControls(80);
-  const ctl = locked ? lockCtl : openCtl;
+  const mobileLockRef = useRef<LockIconHandle | null>(null);
+  const mobileOpenRef = useRef<LockOpenIconHandle | null>(null);
+  const desktopLockRef = useRef<LockIconHandle | null>(null);
+  const desktopOpenRef = useRef<LockOpenIconHandle | null>(null);
+  const title = locked ? "Locked" : "Unlocked";
+
+  function trigger(refs: {
+    lock: typeof mobileLockRef;
+    open: typeof mobileOpenRef;
+  }) {
+    const next = !locked;
+    onToggle();
+    window.requestAnimationFrame(() => {
+      if (next) refs.lock.current?.startAnimation();
+      else refs.open.current?.startAnimation();
+    });
+  }
+
   return (
-    <Button
-      variant="outline"
-      size="sm"
+    <>
+      <Button
+        variant="outline"
+        size="icon-sm"
+        aria-label={title}
+        aria-pressed={locked}
+        style={{ borderRadius: 13, height: 32, width: 32, minHeight: 32, minWidth: 32 }}
+        className={cn(
+          "border-[var(--creed-border)] bg-[var(--creed-surface)] md:hidden",
+          locked &&
+            "bg-[var(--creed-surface-raised)]! hover:bg-[var(--creed-surface-raised)]! dark:bg-input/50! dark:hover:bg-input/50!"
+        )}
+        onClick={() => trigger({ lock: mobileLockRef, open: mobileOpenRef })}
+      >
+        {locked ? (
+          <LockIcon ref={mobileLockRef} size={14} className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none" />
+        ) : (
+          <LockOpenIcon ref={mobileOpenRef} size={14} className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none" />
+        )}
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        aria-pressed={locked}
+        style={{ borderRadius: 13, height: 32, minHeight: 32 }}
+        className={cn(
+          "hidden border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[12px] md:inline-flex md:px-3.5 md:text-sm",
+          locked &&
+            "bg-[var(--creed-surface-raised)]! hover:bg-[var(--creed-surface-raised)]! dark:bg-input/50! dark:hover:bg-input/50!"
+        )}
+        onClick={() => trigger({ lock: desktopLockRef, open: desktopOpenRef })}
+      >
+        {locked ? (
+          <LockIcon ref={desktopLockRef} size={14} className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none" />
+        ) : (
+          <LockOpenIcon ref={desktopOpenRef} size={14} className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none" />
+        )}
+        <LockLabel locked={locked} />
+      </Button>
+    </>
+  );
+}
+
+function DemoSectionLockButton({
+  locked,
+  sectionName,
+  onToggle,
+}: {
+  locked: boolean;
+  sectionName: string;
+  onToggle: () => void;
+}) {
+  const lockRef = useRef<LockIconHandle | null>(null);
+  const openRef = useRef<LockOpenIconHandle | null>(null);
+
+  return (
+    <button
+      type="button"
+      aria-label={locked ? `Unlock ${sectionName}` : `Lock ${sectionName}`}
+      title={locked ? `Unlock ${sectionName}` : `Lock ${sectionName}`}
       aria-pressed={locked}
-      style={{ borderRadius: 13, height: 32, minHeight: 32 }}
-      className="border-[var(--creed-border)] bg-[var(--creed-surface)] px-2.5 text-[12px] md:px-3.5 md:text-sm"
-      onMouseEnter={ctl.start}
-      onMouseLeave={ctl.settle}
-      onClick={onToggle}
+      onClick={() => {
+        const next = !locked;
+        onToggle();
+        window.requestAnimationFrame(() => {
+          if (next) lockRef.current?.startAnimation();
+          else openRef.current?.startAnimation();
+        });
+      }}
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--creed-text-secondary)] transition-colors duration-150 hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]"
     >
       {locked ? (
-        <LockIcon ref={lockCtl.iconRef} size={14} className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none" />
+        <LockIcon ref={lockRef} size={16} className="h-4 w-4" />
       ) : (
-        <LockOpenIcon ref={openCtl.iconRef} size={14} className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none" />
+        <LockOpenIcon ref={openRef} size={16} className="h-4 w-4" />
       )}
-      <LockLabel locked={locked} className="hidden md:grid" />
-    </Button>
+    </button>
   );
 }
 
@@ -283,6 +383,7 @@ function SectionCard({
 }) {
   const accent = accentColorMap[section.accent];
   const [collapsed, setCollapsed] = useState(false);
+  const [sectionLocked, setSectionLocked] = useState(true);
   return (
     <section className="group relative">
       <FileSectionHeading
@@ -298,31 +399,39 @@ function SectionCard({
             onAction={onRefreshQuality}
           />
         }
-        supplemental={
-          globalLocked ? (
-            <Lock className="h-3.5 w-3.5 text-[var(--creed-text-tertiary)]" />
-          ) : null
-        }
         collapsible
         collapsed={collapsed}
         onToggleCollapsed={() => setCollapsed((value) => !value)}
         controls={
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="text-[var(--creed-text-secondary)] transition-colors duration-150 hover:text-[var(--creed-text-primary)] data-[state=open]:text-[var(--creed-text-primary)]"
-              >
-                <Ellipsis className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="border-[var(--creed-border)] bg-[var(--creed-surface)]">
-              <AnimatedMenuIconItem icon={SquarePenIcon} className="text-sm" onSelect={() => {}}>Rename</AnimatedMenuIconItem>
-              <AnimatedMenuIconItem icon={CopyIcon} className="text-sm" onSelect={() => {}}>Duplicate</AnimatedMenuIconItem>
-              <AnimatedMenuIconItem icon={ArchiveIcon} className="text-sm" onSelect={() => {}}>Archive</AnimatedMenuIconItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <>
+            <AnimatePresence initial={false}>
+              {globalLocked ? (
+                <motion.div
+                  key={`${section.id}-section-lock`}
+                  initial={{ opacity: 0, scale: 0.88, width: 0 }}
+                  animate={{ opacity: 1, scale: 1, width: 28 }}
+                  exit={{ opacity: 0, scale: 0.88, width: 0 }}
+                  transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                  className="overflow-hidden"
+                >
+                  <DemoSectionLockButton
+                    locked={sectionLocked}
+                    sectionName={section.name}
+                    onToggle={() => setSectionLocked((value) => !value)}
+                  />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled
+              aria-label="More section actions"
+              className="text-[var(--creed-text-secondary)]"
+            >
+              <Ellipsis className="h-4 w-4" />
+            </Button>
+          </>
         }
       />
 
@@ -533,6 +642,7 @@ export function CreedAppDemo() {
   const [saving, setSaving] = useState(false);
   const [qualityLoading, setQualityLoading] = useState(false);
   const [profileIndex, setProfileIndex] = useState(0);
+  const [headerSettled, setHeaderSettled] = useState(false);
 
   const profile = DEMO_PROFILES[profileIndex] ?? DEMO_PROFILES[0];
 
@@ -677,9 +787,10 @@ export function CreedAppDemo() {
   );
 
   return (
-    <div className="relative w-full min-w-0 max-w-full touch-pan-y overflow-x-hidden overscroll-x-none">
-      <div className="relative min-w-0 max-w-full overflow-x-hidden overscroll-x-none">
-        <div className="mx-auto min-w-0 max-w-full touch-pan-y overflow-hidden overscroll-x-none rounded-lg bg-[var(--creed-surface)] shadow-[0_18px_50px_-30px_rgba(0,0,0,0.32)]">
+    <div className="relative w-full min-w-0 max-w-full touch-pan-y overscroll-x-none">
+      <div className="relative min-w-0 max-w-full overscroll-x-none">
+        <div className="relative isolate mx-auto min-w-0 max-w-full touch-pan-y overscroll-x-none rounded-lg bg-[var(--creed-surface)] shadow-[0_18px_50px_-30px_rgba(0,0,0,0.32)] before:absolute before:-inset-2.5 before:-z-10 before:rounded-[18px] before:bg-white/35 before:backdrop-blur-md before:content-[''] dark:before:bg-black/30">
+          <div className="min-w-0 max-w-full overflow-hidden rounded-lg">
           <BrowserChrome />
 
           <div className="relative flex h-[540px] sm:h-[580px] lg:h-[620px]">
@@ -694,19 +805,25 @@ export function CreedAppDemo() {
 
             <div
               ref={scrollRef}
+              onScroll={(event) => {
+                setHeaderSettled(event.currentTarget.scrollTop > 12);
+              }}
               className="creed-scrollbar relative min-w-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-x-none bg-[var(--creed-surface)] [overflow-anchor:none]"
             >
               <FileStickyHeader
                 ref={stickyHeaderRef}
                 compact
+                className={cn(
+                  "transition-[background-color,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+                  headerSettled
+                    ? "bg-[color:var(--creed-surface)]/98 shadow-[0_10px_24px_-22px_rgba(0,0,0,0.45)]"
+                    : "shadow-[0_10px_24px_-22px_rgba(0,0,0,0)]"
+                )}
               >
                 <FileStickyHeaderRow compact>
                   <div>
                     <div className="whitespace-nowrap text-[18px] font-medium tracking-[-0.02em] text-[var(--creed-text-primary)] md:text-[20px]">{profile.name}.md</div>
-                    <div className="mt-2 flex items-center gap-2 text-sm text-[var(--creed-text-secondary)]">
-                      <ClockIcon size={14} className="h-3.5 w-3.5 shrink-0" />
-                      {saving ? "Saving…" : "Saved just now"}
-                    </div>
+                    <DemoCloudSaveStatus syncing={saving} />
                   </div>
 
                   <div className="flex items-center gap-2 self-start">
@@ -772,35 +889,19 @@ export function CreedAppDemo() {
 
                     <LockButton locked={locked} onToggle={() => setLocked((v) => !v)} />
 
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="icon-sm"
-                          style={{ borderRadius: 13, height: 32, width: 32, minHeight: 32, minWidth: 32 }}
-                          className={cn(
-                            "border-[var(--creed-border)] bg-[var(--creed-surface)] data-[state=open]:bg-[var(--creed-surface-raised)]",
-                            activityOpen && "lg:mr-2"
-                          )}
-                        >
-                          <Ellipsis className="h-3.5 w-3.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="border-[var(--creed-border)] bg-[var(--creed-surface)]">
-                        <AnimatedMenuIconItem icon={FolderUpIcon} className="text-sm" onSelect={() => {}}>Import</AnimatedMenuIconItem>
-                        <AnimatedMenuIconItem icon={CopyIcon} className="text-sm" onSelect={() => {}}>Copy</AnimatedMenuIconItem>
-                        <AnimatedMenuIconItem icon={DownloadIcon} className="text-sm" onSelect={() => {}}>Download</AnimatedMenuIconItem>
-                        <DropdownMenuSeparator />
-                        <AnimatedMenuIconItem icon={ArchiveIcon} className="text-sm" onSelect={() => {}}>Archive</AnimatedMenuIconItem>
-                        <AnimatedMenuIconItem
-                          icon={DeleteIcon}
-                          className="mt-1 bg-[#DC2626] text-sm text-white hover:bg-[#B91C1C] hover:text-white focus:bg-[#B91C1C] focus:text-white data-[highlighted]:bg-[#B91C1C] data-[highlighted]:text-white"
-                          onSelect={() => {}}
-                        >
-                          Delete
-                        </AnimatedMenuIconItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      disabled
+                      aria-label="More file actions"
+                      style={{ borderRadius: 13, height: 32, width: 32, minHeight: 32, minWidth: 32 }}
+                      className={cn(
+                        "border-[var(--creed-border)] bg-[var(--creed-surface)]",
+                        activityOpen && "lg:mr-2"
+                      )}
+                    >
+                      <Ellipsis className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </FileStickyHeaderRow>
 
@@ -861,6 +962,7 @@ export function CreedAppDemo() {
                 </>
               ) : null}
             </AnimatePresence>
+          </div>
           </div>
         </div>
       </div>

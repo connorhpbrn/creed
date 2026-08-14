@@ -22,6 +22,7 @@ import type { RoadmapColumn, RoadmapTask } from "@/lib/marketing/roadmap";
 
 export function RoadmapPageView({ columns }: { columns: RoadmapColumn[] }) {
   const [scrolled, setScrolled] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     function onScroll() {
@@ -31,6 +32,10 @@ export function RoadmapPageView({ columns }: { columns: RoadmapColumn[] }) {
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    setSelectedTaskId(new URLSearchParams(window.location.search).get("item"));
   }, []);
 
   const total = columns.reduce((sum, column) => sum + column.tasks.length, 0);
@@ -45,10 +50,6 @@ export function RoadmapPageView({ columns }: { columns: RoadmapColumn[] }) {
             text="Roadmap"
             className="justify-center"
           />
-          <p className="t-lede mx-auto mt-5 max-w-xl text-[var(--creed-text-tertiary)]">
-            A live view of what we&apos;re building, straight from our task
-            board.
-          </p>
         </div>
 
         {total === 0 ? (
@@ -58,7 +59,11 @@ export function RoadmapPageView({ columns }: { columns: RoadmapColumn[] }) {
         ) : (
           <div className="mt-14 grid gap-5 md:mt-16 lg:grid-cols-3">
             {columns.map((column) => (
-              <RoadmapColumnView key={column.id} column={column} />
+              <RoadmapColumnView
+                key={column.id}
+                column={column}
+                selectedTaskId={selectedTaskId}
+              />
             ))}
           </div>
         )}
@@ -69,7 +74,13 @@ export function RoadmapPageView({ columns }: { columns: RoadmapColumn[] }) {
   );
 }
 
-function RoadmapColumnView({ column }: { column: RoadmapColumn }) {
+function RoadmapColumnView({
+  column,
+  selectedTaskId,
+}: {
+  column: RoadmapColumn;
+  selectedTaskId: string | null;
+}) {
   return (
     <section className="flex flex-col">
       <div className="mb-4 flex items-center gap-2.5">
@@ -86,7 +97,11 @@ function RoadmapColumnView({ column }: { column: RoadmapColumn }) {
       ) : (
         <div className="flex flex-col gap-4">
           {column.tasks.map((task) => (
-            <RoadmapCard key={task.id} task={task} />
+            <RoadmapCard
+              key={task.id}
+              task={task}
+              selected={task.id === selectedTaskId}
+            />
           ))}
         </div>
       )}
@@ -94,9 +109,21 @@ function RoadmapColumnView({ column }: { column: RoadmapColumn }) {
   );
 }
 
-function RoadmapCard({ task }: { task: RoadmapTask }) {
+function RoadmapCard({
+  task,
+  selected,
+}: {
+  task: RoadmapTask;
+  selected: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (selected) setOpen(true);
+  }, [selected]);
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button
           type="button"

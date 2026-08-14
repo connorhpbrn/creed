@@ -456,13 +456,13 @@ export function CreedShell({
     <ShellActionsContext.Provider value={shellActions}>
       <div
         className={cn(
-          "grid h-screen grid-cols-[48px_minmax(0,1fr)] overflow-hidden bg-[var(--creed-surface)] transition-[grid-template-columns] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          "grid h-dvh grid-cols-[48px_minmax(0,1fr)] overflow-hidden bg-[var(--creed-surface)] transition-[grid-template-columns] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
           !collapsed && "lg:grid-cols-[220px_minmax(0,1fr)]"
         )}
       >
         <aside
           className={cn(
-            "h-screen overflow-hidden border-r border-[var(--creed-border)] bg-[var(--creed-surface)] px-1.5 py-3",
+            "h-dvh overflow-hidden border-r border-[var(--creed-border)] bg-[var(--creed-surface)] px-1.5 py-3",
             !collapsed && "lg:px-5 lg:py-5"
           )}
         >
@@ -809,7 +809,7 @@ export function CreedShell({
           </div>
         </aside>
 
-        <main className="h-screen min-w-0 overflow-hidden bg-[var(--creed-surface)]">
+        <main className="h-dvh min-w-0 overflow-hidden bg-[var(--creed-surface)]">
           {children}
         </main>
       </div>

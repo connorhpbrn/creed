@@ -7,6 +7,7 @@ export type DevPreviewId =
   | "onboarding"
   | "version"
   | "loader"
+  | "oauth"
   | "billing";
 
 export type DevPreviewItem = {
@@ -21,6 +22,7 @@ export const DEV_PREVIEW_ITEMS: readonly DevPreviewItem[] = [
   { id: "onboarding", key: "O", label: "Onboarding" },
   { id: "version", key: "V", label: "New version toast" },
   { id: "loader", key: "L", label: "First-load screen" },
+  { id: "oauth", key: "U", label: "OAuth consent" },
   { id: "billing", key: "B", label: "Billing dialog" },
 ] as const;
 

@@ -117,10 +117,6 @@ export default function BenchPage() {
         <main className="mx-auto w-full max-w-4xl flex-1 px-4 pb-20 pt-8 sm:px-6 md:px-10 md:pb-24 md:pt-10">
           <header className="border-b border-[var(--creed-border)] pb-8">
             <AnimatedPageTitle text={TITLE} />
-            <p className="mt-4 max-w-2xl text-[18px] leading-8 text-[var(--creed-text-secondary)]">
-              How well frontier models read and maintain a Creed through its
-              tools.
-            </p>
           </header>
           <div className="mt-12">
             <CreedBenchChart />
