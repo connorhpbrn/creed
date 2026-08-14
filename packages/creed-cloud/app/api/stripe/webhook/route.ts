@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import {
   assertWebhookSignature,
   creditBalanceFromPaymentIntent,
+  getStripeClient,
   getStripeWebhookSecret,
   revokeEntitlementForRefund,
   syncSubscriptionFromStripe,
@@ -10,30 +11,33 @@ import {
 } from "@creed/cloud/lib/stripe";
 import { log } from "@/lib/observability";
 import { refundCreditTopup } from "@creed/cloud/lib/ai/credits";
+import {
+  disputeSponsorPayment,
+  failSponsorPayment,
+  recordSponsorPayment,
+  refundSponsorPayment,
+} from "@creed/cloud/lib/sponsors";
 
-// Stripe webhook receiver.
-//
-// Verifies the `Stripe-Signature` header against the raw body, then handles:
-//   - checkout.session.completed       → grant entitlement
-//   - customer.subscription.updated/.deleted → sync subscription lifecycle
-//   - charge.refunded                  → revoke Cloud entitlement
-//   - payment_intent.succeeded         → credit prepaid balance
-// Other event types are acknowledged with 200 (so Stripe doesn't retry)
-// and noted in the log.
-//
-// NOTE: `charge.refunded` must be enabled on the webhook endpoint in the
-// Stripe Dashboard for refund revocation to fire - Stripe only delivers the
-// event types the endpoint subscribes to.
-//
-// Idempotency: the row's PK is `user_id` and `stripe_session_id` is
-// UNIQUE, so a retry from Stripe (or a race with /payment/success'
-// belt-and-braces upsert) is a no-op.
-//
-// Raw body required: `request.text()` preserves the bytes Stripe signed.
-// `request.json()` would re-serialise and invalidate the HMAC.
+// Stripe signs the original bytes, so this route must read the body as text.
+// Persistent Stripe identifiers and atomic sponsor facts make every handler
+// safe to retry, including when lifecycle events arrive out of order.
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+async function sponsorPaymentIntentFromCharge(charge: Stripe.Charge) {
+  const paymentIntentId = typeof charge.payment_intent === "string"
+    ? charge.payment_intent
+    : charge.payment_intent?.id;
+  return paymentIntentId
+    ? getStripeClient().paymentIntents.retrieve(paymentIntentId)
+    : null;
+}
+
+async function chargeFromRefund(refund: Stripe.Refund) {
+  const chargeId = typeof refund.charge === "string" ? refund.charge : refund.charge?.id;
+  return chargeId ? getStripeClient().charges.retrieve(chargeId) : null;
+}
 
 export async function POST(request: Request) {
   const webhookSecret = getStripeWebhookSecret();
@@ -117,33 +121,93 @@ export async function POST(request: Request) {
       const creditsRefunded = paymentIntentId
         ? await refundCreditTopup(paymentIntentId)
         : false;
+      const sponsorIntent = await sponsorPaymentIntentFromCharge(charge);
+      const sponsorRefunded = sponsorIntent
+        ? await refundSponsorPayment(sponsorIntent, charge.amount_refunded, event.created)
+        : false;
       log.info("stripe_webhook_refund_processed", {
         eventId: event.id,
         chargeId: charge.id,
         revoked: personalRevoked,
         creditsRefunded,
+        sponsorRefunded,
         scope: "personal",
       });
-      return NextResponse.json({ ok: true, applied: personalRevoked || creditsRefunded });
+      return NextResponse.json({
+        ok: true,
+        applied: personalRevoked || creditsRefunded || sponsorRefunded,
+      });
     }
 
     if (event.type === "payment_intent.succeeded") {
-      // Prepaid credits top-up. Non-credit payment intents are acknowledged
-      // without crediting.
+      // PaymentIntent metadata separates credit and sponsor writes so other
+      // Stripe payments are acknowledged without changing either balance.
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const credited = await creditBalanceFromPaymentIntent(paymentIntent);
-      if (!credited) {
+      const sponsored = await recordSponsorPayment(paymentIntent, event.created);
+      if (!credited && !sponsored) {
         log.info("stripe_webhook_payment_intent_skipped", {
           eventId: event.id,
           paymentIntentId: paymentIntent.id,
         });
         return NextResponse.json({ ok: true, applied: false });
       }
-      log.info("stripe_webhook_credits_topped_up", {
+      log.info("stripe_webhook_payment_intent_applied", {
         eventId: event.id,
         paymentIntentId: paymentIntent.id,
+        credited,
+        sponsored,
       });
-      return NextResponse.json({ ok: true, applied: true });
+      return NextResponse.json({ ok: true, applied: credited || sponsored });
+    }
+
+    if (event.type === "payment_intent.payment_failed") {
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      const applied = await failSponsorPayment(paymentIntent, event.created);
+      return NextResponse.json({ ok: true, applied });
+    }
+
+    if (
+      event.type === "charge.dispute.created" ||
+      event.type === "charge.dispute.updated" ||
+      event.type === "charge.dispute.closed" ||
+      event.type === "charge.dispute.funds_reinstated" ||
+      event.type === "charge.dispute.funds_withdrawn"
+    ) {
+      const dispute = event.data.object as Stripe.Dispute;
+      const chargeId = typeof dispute.charge === "string" ? dispute.charge : dispute.charge.id;
+      const charge = await getStripeClient().charges.retrieve(chargeId);
+      const paymentIntent = await sponsorPaymentIntentFromCharge(charge);
+      const applied = paymentIntent
+        ? await disputeSponsorPayment(paymentIntent, dispute.status, event.created)
+        : false;
+      log.info("stripe_webhook_sponsor_dispute_processed", {
+        eventId: event.id,
+        disputeId: dispute.id,
+        status: dispute.status,
+        applied,
+      });
+      return NextResponse.json({ ok: true, applied });
+    }
+
+    if (
+      event.type === "refund.created" ||
+      event.type === "refund.updated" ||
+      event.type === "refund.failed"
+    ) {
+      const refund = event.data.object as Stripe.Refund;
+      const charge = await chargeFromRefund(refund);
+      const paymentIntent = charge ? await sponsorPaymentIntentFromCharge(charge) : null;
+      const applied = charge && paymentIntent
+        ? await refundSponsorPayment(paymentIntent, charge.amount_refunded, event.created)
+        : false;
+      log.info("stripe_webhook_sponsor_refund_synced", {
+        eventId: event.id,
+        refundId: refund.id,
+        refundStatus: refund.status,
+        applied,
+      });
+      return NextResponse.json({ ok: true, applied });
     }
 
     // Acknowledge everything else without action. Returning 200 stops

@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-08-10.
+Last updated: 2026-08-15.
 
 ## Release focus
 
@@ -24,6 +24,7 @@ The hosted Cloud deployment can be kept private with `CREED_CLOUD_ACCESS=private
 - Public Open calls to action say `View on GitHub`.
 - The CLI card is visibly disabled in Open and Cloud and links to `creed.md/roadmap`.
 - The standalone documentation site lives in `apps/docs/` and owns its content, navigation, and purple brand treatment. Open and Cloud no longer ship a `/docs` route; product links and agent contracts point to `docs.creed.md`.
+- Cloud owns the public sponsor wall and one-time Stripe contributions. Sponsor data stays isolated behind server-only persistence and bounded public read routes.
 
 ## Supported Open setup
 

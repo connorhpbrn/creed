@@ -1,6 +1,7 @@
 "use client";
 
 import type { CreditsState } from "@/components/creed/settings-preload";
+export { SponsorDialog } from "@creed/open/components/marketing/sponsor-dialog";
 
 export function EditionDevPreview() {
   return null;

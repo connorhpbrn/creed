@@ -147,6 +147,7 @@ export function EditableProfileAvatar({
   onFile: (file: File) => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
   const uploadIconRef = useRef<UploadIconHandle | null>(null);
   const overlayIconSize =
     size === "input" ? 16 : size === "sm" || size === "md" ? 18 : 30;
@@ -166,10 +167,14 @@ export function EditableProfileAvatar({
         className="h-full w-full"
       />
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled || uploading}
         aria-label={`Upload ${kind === "shared" ? "shared" : "profile"} picture`}
-        onClick={() => inputRef.current?.click()}
+        onClick={() => {
+          inputRef.current?.click();
+          requestAnimationFrame(() => buttonRef.current?.blur());
+        }}
         onMouseEnter={() => uploadIconRef.current?.startAnimation()}
         onMouseLeave={() => uploadIconRef.current?.stopAnimation()}
         onFocus={() => uploadIconRef.current?.startAnimation()}

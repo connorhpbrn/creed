@@ -9,6 +9,7 @@ export { AddCreditsDialog } from "@creed/cloud/components/creed/add-credits-dial
 export { CreditsHistoryDialog } from "@creed/cloud/components/creed/credits-history-dialog";
 export { useStripeCheckout as useEditionCheckout } from "@creed/cloud/components/marketing/use-stripe-checkout";
 export { useSignedInContinueHref as useEditionContinueHref } from "@creed/cloud/components/marketing/signed-in-continue";
+export { SponsorDialog } from "@creed/cloud/components/marketing/sponsor-dialog";
 export {
   GRANT_MONTHLY_USD,
   LOW_ALLOWANCE_RATIO,

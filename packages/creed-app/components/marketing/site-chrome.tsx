@@ -20,6 +20,10 @@ import {
   Star,
 } from "lucide-react";
 import { MenuIcon } from "@creed/ui/menu";
+import {
+  HandHeartIcon,
+  type HandHeartIconHandle,
+} from "@creed/ui/hand-heart";
 import { ContrastIcon, type ContrastIconHandle } from "@creed/ui/contrast";
 import { BrandedCredit } from "@creed/ui/branded-credit";
 import {
@@ -56,6 +60,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: "Product",
     items: [
       { label: "Pricing", href: "/pricing" },
+      { label: "Sponsor", href: "/sponsor" },
       { label: "Roadmap", href: "/roadmap" },
       { label: "Status", href: "https://status.creed.md" },
     ],
@@ -77,6 +82,14 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     ],
   },
 ];
+
+function editionNavGroups(hasHostedAccounts: boolean) {
+  if (hasHostedAccounts) return navGroups;
+  return navGroups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => item.href !== "/sponsor"),
+  }));
+}
 
 const heroImage = "/assets/landing/scenery/garden.png";
 
@@ -123,8 +136,8 @@ export function MarketingHeader({
   configured: boolean;
   scrolled: boolean;
 }) {
-  const { hostedAccounts: hasHostedAccounts, publicSignup } =
-    useCreedEdition().capabilities;
+  const { hostedAccounts: hasHostedAccounts } = useCreedEdition().capabilities;
+  const visibleNavGroups = editionNavGroups(hasHostedAccounts);
   const cloudAuthEnabled = configured && hasHostedAccounts;
   void scrolled;
   const authState = useLandingAuthState(cloudAuthEnabled);
@@ -235,7 +248,7 @@ export function MarketingHeader({
       </Link>
 
       <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
-        {navGroups.map((group) => (
+        {visibleNavGroups.map((group) => (
           <HeaderDropdown
             key={group.label}
             label={group.label}
@@ -248,7 +261,6 @@ export function MarketingHeader({
 
       <HeaderAuthActions
         hasHostedAccounts={hasHostedAccounts}
-        publicSignup={publicSignup}
         authState={authState}
         continueHref={continueHref}
         scrolled={stickyChromeActive}
@@ -279,7 +291,7 @@ export function MarketingHeader({
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
               className="absolute right-2 top-[4rem] z-10 flex flex-col items-end gap-2 text-[var(--creed-text-primary)]"
             >
-              {navGroups.map((group, gIndex) => (
+              {visibleNavGroups.map((group, gIndex) => (
                 <motion.div
                   key={group.label}
                   className="relative z-10"
@@ -290,7 +302,7 @@ export function MarketingHeader({
                     x: 10,
                     transition: {
                       duration: 0.24,
-                      delay: (navGroups.length + 1 - gIndex) * 0.04,
+                        delay: (visibleNavGroups.length + 1 - gIndex) * 0.04,
                       ease: [0.22, 1, 0.36, 1],
                     },
                   }}
@@ -314,7 +326,7 @@ export function MarketingHeader({
                 </motion.div>
               ))}
 
-              {hasHostedAccounts && publicSignup && authState !== "loading" ? (
+              {hasHostedAccounts && authState !== "loading" ? (
                 <motion.div
                   className="relative z-10"
                   initial={{ opacity: 0, x: 10 }}
@@ -326,26 +338,23 @@ export function MarketingHeader({
                   }}
                   transition={{
                     duration: 0.24,
-                    delay: 0.04 + navGroups.length * 0.05,
+                    delay: 0.04 + visibleNavGroups.length * 0.05,
                     ease: [0.22, 1, 0.36, 1],
                   }}
                 >
-                  <MobileNavRow
-                    label="Start"
-                    items={
-                      authState === "signed-in"
-                        ? [{ label: "Continue", href: continueHref }]
-                        : [
-                            { label: "Login", href: "/login" },
-                            { label: "Sign up", href: "/signup" },
-                          ]
-                    }
-                    open={openMobileGroup === "Start"}
-                    onToggle={() =>
-                      setOpenMobileGroup((cur) => (cur === "Start" ? null : "Start"))
-                    }
-                    onNavigate={() => setMobileMenuOpen(false)}
-                  />
+                  {authState === "signed-in" ? (
+                    <MobileNavRow
+                      label="Start"
+                      items={[{ label: "Continue", href: continueHref }]}
+                      open={openMobileGroup === "Start"}
+                      onToggle={() =>
+                        setOpenMobileGroup((cur) => (cur === "Start" ? null : "Start"))
+                      }
+                      onNavigate={() => setMobileMenuOpen(false)}
+                    />
+                  ) : (
+                    <MobileSponsorLink onNavigate={() => setMobileMenuOpen(false)} />
+                  )}
                 </motion.div>
               ) : null}
 
@@ -361,7 +370,7 @@ export function MarketingHeader({
                   }}
                   transition={{
                     duration: 0.24,
-                    delay: 0.04 + (navGroups.length + 1) * 0.05,
+                    delay: 0.04 + (visibleNavGroups.length + 1) * 0.05,
                     ease: [0.22, 1, 0.36, 1],
                   }}
                 >
@@ -594,7 +603,6 @@ function HeaderDropdown({
 
 function HeaderAuthActions({
   hasHostedAccounts,
-  publicSignup,
   authState,
   continueHref,
   scrolled,
@@ -602,7 +610,6 @@ function HeaderAuthActions({
   setMobileMenuOpen,
 }: {
   hasHostedAccounts: boolean;
-  publicSignup: boolean;
   authState: "loading" | "signed-in" | "signed-out";
   continueHref: SignedInContinueHref;
   scrolled?: boolean;
@@ -709,33 +716,33 @@ function HeaderAuthActions({
     );
   }
 
-  if (!publicSignup) {
-    return (
-      <div className="flex items-center gap-2">
-        <GitHubStarButton scrolled={scrolled} className="hidden md:inline-flex" />
-        {mobileLinksTrigger}
-      </div>
-    );
-  }
-
-  // Signed out → "Start" dropdown (Login / Sign up) + the GitHub star pill.
-  // No "Get Started" pill in the chrome anymore; that lives on the landing
-  // page itself.
   return (
     <div className="flex items-center gap-2">
-      <HeaderDropdown
-        label="Start"
-        items={[
-          { label: "Login", href: "/login" },
-          { label: "Sign up", href: "/signup" },
-        ]}
-        align="right"
-        scrolled={scrolled}
-        className="hidden md:block"
-      />
+      <SponsorHeaderLink scrolled={scrolled} />
       <GitHubStarButton scrolled={scrolled} className="hidden md:inline-flex" />
       {mobileLinksTrigger}
     </div>
+  );
+}
+
+function SponsorHeaderLink({ scrolled }: { scrolled?: boolean }) {
+  const iconRef = useRef<HandHeartIconHandle>(null);
+
+  return (
+    <Link
+      href="/sponsor"
+      className={cn(
+        "hidden h-9 items-center gap-1.5 rounded-md px-3.5 text-[14px] font-medium transition-colors duration-200 md:inline-flex",
+        scrolled
+          ? "text-[var(--creed-text-primary)] hover:text-[var(--creed-text-secondary)]"
+          : "text-white hover:text-white/55",
+      )}
+      onMouseEnter={() => iconRef.current?.startAnimation()}
+      onMouseLeave={() => iconRef.current?.stopAnimation()}
+    >
+      Sponsor
+      <HandHeartIcon ref={iconRef} size={15} aria-hidden="true" />
+    </Link>
   );
 }
 
@@ -820,7 +827,23 @@ function MobileNavRow({
   );
 }
 
+function MobileSponsorLink({ onNavigate }: { onNavigate: () => void }) {
+  return (
+    <Link
+      href="/sponsor"
+      onClick={onNavigate}
+      className="flex h-9 items-center justify-end gap-2 px-3.5 text-[14px] font-medium transition-opacity duration-200 hover:opacity-55"
+    >
+      <HandHeartIcon size={16} aria-hidden="true" />
+      Sponsor
+    </Link>
+  );
+}
+
 export function MarketingFooter() {
+  const { hostedAccounts: hasHostedAccounts } = useCreedEdition().capabilities;
+  const visibleNavGroups = editionNavGroups(hasHostedAccounts);
+
   return (
     <footer className="border-t border-[var(--creed-border)] px-6 pt-12 md:px-10 md:pt-16 lg:px-12">
       <div className="mx-auto grid max-w-7xl gap-10 md:grid-cols-[1.1fr_0.9fr]">
@@ -843,7 +866,7 @@ export function MarketingFooter() {
         </div>
 
         <div className="grid gap-8 sm:grid-cols-3">
-          {navGroups.map((group) => (
+          {visibleNavGroups.map((group) => (
             <FooterColumn key={group.label} title={group.label} items={group.items} />
           ))}
         </div>
