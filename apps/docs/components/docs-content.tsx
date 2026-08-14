@@ -42,7 +42,7 @@ export const docsEntries: DocsEntry[] = [
     content: (
       <>
         <p>You need Node.js 22 or newer, npm 10 or newer, Git, and a Supabase project.</p>
-        <DocsCommand>{`git clone https://github.com/connorhpbrn/creed.git
+        <DocsCommand>{`git clone https://github.com/hpbrn/creed.git
 cd creed
 npm install
 npm run setup

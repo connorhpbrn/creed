@@ -18,7 +18,7 @@ The repository includes a pinned Supabase CLI. You do not need to install it glo
 Clone Creed and install its dependencies:
 
 ```bash
-git clone https://github.com/connorhpbrn/creed.git
+git clone https://github.com/hpbrn/creed.git
 cd creed
 npm install
 ```

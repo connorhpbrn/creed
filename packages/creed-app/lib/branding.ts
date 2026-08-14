@@ -27,7 +27,7 @@ export const TWITTER_URL =
 export const INSTAGRAM_URL =
   process.env.NEXT_PUBLIC_INSTAGRAM_URL?.trim() || "";
 export const GITHUB_URL =
-  process.env.NEXT_PUBLIC_GITHUB_URL?.trim() || "https://github.com/connorhpbrn/creed";
+  process.env.NEXT_PUBLIC_GITHUB_URL?.trim() || "https://github.com/hpbrn/creed";
 export const HPBRN_URL =
   process.env.NEXT_PUBLIC_HPBRN_URL?.trim() || "";
 

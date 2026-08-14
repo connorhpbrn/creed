@@ -23,7 +23,7 @@ Shared Creeds, managed Creed Cloud, and the Creed CLI are in development. They l
 You need Node.js 22 or newer, npm 10 or newer, Git, and a Supabase project. The repository includes the supported Supabase CLI.
 
 ```bash
-git clone https://github.com/connorhpbrn/creed.git
+git clone https://github.com/hpbrn/creed.git
 cd creed
 npm install
 npm run setup
