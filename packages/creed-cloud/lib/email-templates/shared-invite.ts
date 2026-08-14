@@ -43,7 +43,7 @@ export function renderSharedInviteEmail(input: SharedInviteEmailInput): string {
           <table role="presentation" width="460" cellpadding="0" cellspacing="0" border="0" style="width:460px; max-width:460px;">
             <tr>
               <td style="padding-bottom:40px;">
-                <img src="${siteUrl}/assets/brand/brandmark-email.png" alt="Creed" width="85" height="20" style="width:85px; height:20px; display:block; border:0;" />
+                <img src="${siteUrl}/assets/brand/email.png" alt="Creed" width="85" height="20" style="width:85px; height:20px; display:block; border:0;" />
               </td>
             </tr>
             <tr>

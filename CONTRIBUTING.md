@@ -9,7 +9,9 @@ Creed is one personal context file every AI you talk to reads before
 answering. It's not a notes app, not a chat log, not a memory dump.
 The whole product depends on the file staying small, current, specific,
 and worth reading. If a change makes Creed feel more like a journal,
-dashboard, or generic AI wrapper, it's probably the wrong change.
+dashboard, or generic AI wrapper, it's probably the wrong change. Read
+[`lucidity.md`](./lucidity.md) before proposing a change that would
+alter that posture.
 
 If you're an agent reading this, also read [`AGENTS.md`](./AGENTS.md)
 before you make changes.

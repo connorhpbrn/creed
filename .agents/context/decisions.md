@@ -4,6 +4,8 @@ Durable decisions future agents should not reopen casually.
 
 ## Product
 
+- [`lucidity.md`](../../lucidity.md) is the frozen project backbone. Product
+  decisions should not contradict it. Do not rewrite it casually.
 - Creed is a curation product, not a notes app, journal, memory feed, dashboard, or generic AI wrapper.
 - Creed Open is the public v1 product: free, MIT licensed, self-hosted, single-owner, and Personal-only.
 - Cloud, Shared Creeds, and the CLI remain private development products until separate launches.

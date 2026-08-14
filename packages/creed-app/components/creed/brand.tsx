@@ -21,7 +21,10 @@ const grokIcon = "/assets/agents/grok.svg";
 const hermesIcon = "/assets/agents/hermes.svg";
 const factoryIcon = "/assets/agents/factory.svg";
 const manusIcon = "/assets/agents/manus.svg";
-const logo = "/assets/brand/logo.svg";
+const icon = "/assets/brand/icon.svg";
+// The mark on a solid surface. Distinct from --creed-accent (#2563eb), which
+// is the product UI accent, not the brand-mark blue.
+const CREED_BRAND_BLUE = "#0066FF";
 const openClawIcon = "/assets/agents/openclaw.svg";
 const openCodeIcon = "/assets/agents/opencode.svg";
 const v0Icon = "/assets/agents/v0.svg";
@@ -60,33 +63,43 @@ export function CreedWordmark({
       {!onTransparent ? (
         <span
           className="absolute inset-0 [clip-path:inset(0_84.77%_0_0)]"
-          style={{ ...creedWordmarkMask, backgroundColor: "#0066FF" }}
+          style={{ ...creedWordmarkMask, backgroundColor: CREED_BRAND_BLUE }}
         />
       ) : null}
     </span>
   );
 }
 
-export function CreedMark({ className }: { className?: string }) {
+export function CreedMark({
+  className,
+  onTransparent = false,
+}: {
+  className?: string;
+  onTransparent?: boolean;
+}) {
   return (
-    <div className={cn("h-[18px] w-[18px] shrink-0", className)}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={logo}
-        alt="Creed"
-        width={18}
-        height={18}
-        decoding="async"
-        className="creed-invert-on-dark block h-[18px] w-[18px] select-none"
-        draggable={false}
-      />
-    </div>
+    <div
+      role="img"
+      aria-label="Creed"
+      className={cn("h-[18px] w-[18px] shrink-0", className)}
+      style={{
+        backgroundColor: onTransparent ? "#ffffff" : CREED_BRAND_BLUE,
+        WebkitMaskImage: `url(${icon})`,
+        maskImage: `url(${icon})`,
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+      }}
+    />
   );
 }
 
 // The Creed brandmark rendered in brand blue, for the in-app "Creed" agent's
-// identity on proposal cards and activity rows. The logo SVG is used as a mask
-// over a solid accent fill, so the shape reads as exactly --creed-accent in
+// identity on proposal cards and activity rows. The icon SVG is used as a mask
+// over a solid fill, so the shape reads as exactly the brand-mark blue in
 // both themes (a plain <img> can't be recoloured to an exact hue).
 export function CreedAgentGlyph({ className }: { className?: string }) {
   return (
@@ -95,9 +108,9 @@ export function CreedAgentGlyph({ className }: { className?: string }) {
       aria-label="Creed"
       className={cn("block shrink-0", className)}
       style={{
-        backgroundColor: "var(--creed-accent)",
-        WebkitMaskImage: `url(${logo})`,
-        maskImage: `url(${logo})`,
+        backgroundColor: CREED_BRAND_BLUE,
+        WebkitMaskImage: `url(${icon})`,
+        maskImage: `url(${icon})`,
         WebkitMaskRepeat: "no-repeat",
         maskRepeat: "no-repeat",
         WebkitMaskPosition: "center",

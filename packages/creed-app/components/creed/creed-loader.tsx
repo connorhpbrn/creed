@@ -20,9 +20,9 @@
 //     will sooner or later paint over content the reader can already see. The
 //     trigger has to be something that cannot fire late.
 //
-// The logo is painted as a mask over --creed-text-primary rather than rendered
-// as an <img>, so it takes the exact foreground colour in both themes and scales
-// to any size without a second asset. No client JS - the animation is CSS
+// The mark is painted as a mask over the brand-mark blue rather than rendered
+// as an <img>, so it matches the wordmark's icon on a solid surface and scales
+// without a second asset. No client JS - the animation is CSS
 // (`creed-logo-spin` in globals.css), so it can render in a server-only
 // fallback.
 //
@@ -31,7 +31,7 @@
 // it wherever the screen might not be needed at all; leave it off where the
 // screen is already on show.
 
-const logo = "/assets/brand/logo.svg";
+const icon = "/assets/brand/icon.svg";
 
 export function CreedLoader({
   label = "Loading your Creed",
@@ -56,9 +56,9 @@ export function CreedLoader({
         style={{
           height: size,
           width: size,
-          backgroundColor: "var(--creed-text-primary)",
-          WebkitMaskImage: `url(${logo})`,
-          maskImage: `url(${logo})`,
+          backgroundColor: "#0066FF",
+          WebkitMaskImage: `url(${icon})`,
+          maskImage: `url(${icon})`,
           WebkitMaskRepeat: "no-repeat",
           maskRepeat: "no-repeat",
           WebkitMaskPosition: "center",

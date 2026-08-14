@@ -63,12 +63,14 @@ The four "god" files to be careful in:
 
 ## Reading order before edits
 
-1. `.agents/context/index.md`
-2. The task-relevant files in `.agents/context/` listed by `index.md`
-3. The exact code path you're about to change
+1. [`lucidity.md`](./lucidity.md)
+2. `.agents/context/index.md`
+3. The task-relevant files in `.agents/context/` listed by `index.md`
+4. The exact code path you're about to change
 
-If `.agents/context/` is unexpectedly missing, read `README.md` +
-`CONTRIBUTING.md` + `SECURITY.md` and then this file end-to-end.
+If `.agents/context/` is unexpectedly missing, read `lucidity.md` +
+`README.md` + `CONTRIBUTING.md` + `SECURITY.md` and then this file
+end-to-end.
 
 ---
 

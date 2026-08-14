@@ -1654,7 +1654,7 @@ function SharedConstellation() {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/assets/brand/logo.svg"
+              src="/assets/brand/icon.svg"
               alt="Creed"
               className="h-8 w-auto select-none"
               style={{ filter: "brightness(0) invert(1)" }}

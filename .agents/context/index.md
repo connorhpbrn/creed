@@ -5,10 +5,12 @@ working on Creed. Code remains canonical when documentation drifts.
 
 ## Start here
 
-1. Read `current.md` for shipped behaviour and active risks.
-2. Read only the task-relevant files below.
-3. Inspect the exact code path before editing.
-4. Use a matching repository skill from `.agents/skills/` when one exists.
+1. Read [`lucidity.md`](../../lucidity.md) at the repo root. It is the
+   decision backbone for this project. Do not casually rewrite it.
+2. Read `current.md` for shipped behaviour and active risks.
+3. Read only the task-relevant files below.
+4. Inspect the exact code path before editing.
+5. Use a matching repository skill from `.agents/skills/` when one exists.
 
 ## File guide
 

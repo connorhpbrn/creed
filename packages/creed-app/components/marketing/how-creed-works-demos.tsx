@@ -99,8 +99,8 @@ function CreedGlyph({ className }: { className?: string }) {
       aria-hidden
       className={cn("inline-block shrink-0 bg-current", className)}
       style={{
-        WebkitMaskImage: "url(/assets/brand/logo.svg)",
-        maskImage: "url(/assets/brand/logo.svg)",
+        WebkitMaskImage: "url(/assets/brand/icon.svg)",
+        maskImage: "url(/assets/brand/icon.svg)",
         WebkitMaskRepeat: "no-repeat",
         maskRepeat: "no-repeat",
         WebkitMaskPosition: "center",
