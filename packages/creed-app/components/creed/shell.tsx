@@ -50,6 +50,7 @@ import {
 import { Separator } from "@creed/ui/separator";
 import {
   accentColorMap,
+  isAccentKey,
   normalizeLegacyProposalDraft,
   type CreedSection,
   type CreedState,
@@ -335,34 +336,37 @@ export function CreedShell({
     return counts;
   }, [state.proposals, pendingProposalSectionIds]);
 
-  // Sidebar previews for structural proposals. Existing sections with a
-  // pending delete-section proposal get a red wash; pending new-section
-  // proposals render a green phantom row so the proposed section is
-  // visible alongside real ones.
-  const pendingDeleteSectionIds = useMemo(() => {
-    const ids = new Set<string>();
+  // Sidebar previews for structural proposals. Delete-section rows keep
+  // the real section in the list; new-section proposals render a phantom
+  // row so the proposed section is visible alongside real ones.
+  const pendingDeleteBySectionId = useMemo(() => {
+    const ids = new Map<string, string>();
     for (const proposal of state.proposals) {
       if (proposal.status !== "pending") continue;
       const draft = proposal.draft
         ? normalizeLegacyProposalDraft(proposal.draft)
         : null;
-      if (draft?.kind === "delete-section") {
-        ids.add(proposal.sectionId);
+      if (draft?.kind === "delete-section" && !ids.has(proposal.sectionId)) {
+        ids.set(proposal.sectionId, proposal.id);
       }
     }
     return ids;
   }, [state.proposals]);
   const pendingNewSections = useMemo(() => {
-    const rows: Array<{ id: string; name: string }> = [];
+    const rows: Array<{ id: string; name: string; accent: string }> = [];
     for (const proposal of state.proposals) {
       if (proposal.status !== "pending") continue;
       const draft = proposal.draft
         ? normalizeLegacyProposalDraft(proposal.draft)
         : null;
       if (draft?.kind !== "new-section") continue;
+      const accentKey = isAccentKey(draft.accent)
+        ? draft.accent
+        : proposal.accent;
       rows.push({
         id: proposal.id,
         name: draft.name?.trim() || "New section",
+        accent: accentColorMap[accentKey],
       });
     }
     return rows;
@@ -632,6 +636,7 @@ export function CreedShell({
                 !collapsed && "lg:mt-4 lg:pr-1"
               )}
             >
+              <div className="flex flex-col gap-1">
               <Reorder.Group
                 axis="y"
                 values={sidebarOrder ?? canonicalSidebarOrder}
@@ -640,8 +645,9 @@ export function CreedShell({
               >
               {orderedSidebarSections.map((section, reorderPosition) => {
                 const pendingCount = pendingProposalCountBySection.get(section.id) ?? 0;
-                const isActive = activeSectionId === section.id && pathname === "/file";
-                const pendingDelete = pendingDeleteSectionIds.has(section.id);
+                const deleteProposalId = pendingDeleteBySectionId.get(section.id);
+                const isActive =
+                  pathname === "/file" && activeSectionId === section.id;
                 return (
                   <FileSectionNavButton
                     key={section.id}
@@ -650,7 +656,7 @@ export function CreedShell({
                     accent={accentColorMap[section.accent]}
                     active={isActive}
                     pendingCount={pendingCount}
-                    pendingDelete={pendingDelete}
+                    pendingDelete={Boolean(deleteProposalId)}
                     collapsed={collapsed}
                     reorderPosition={reorderPosition}
                     canDrag={canReorderSidebar}
@@ -659,46 +665,35 @@ export function CreedShell({
                         ? beginSidebarReorder()
                         : finishSidebarReorder()
                     }
-                    onClick={() => handleSectionClick(section.id)}
+                    onClick={() =>
+                      deleteProposalId
+                        ? handleProposalClick(deleteProposalId)
+                        : handleSectionClick(section.id)
+                    }
                   />
                 );
               })}
               </Reorder.Group>
 
-              {/* Phantom rows for pending new-section proposals. Visually a
-                  preview of what the sidebar would look like if the user
-                  accepts the proposal. Clicking jumps to /file so the user
-                  can review the proposal in context. */}
+              {/* Phantom rows for pending new-section proposals. Kept in
+                  the same gap-1 stack as real rows so they do not sit flush
+                  against the last existing section. */}
               {pendingNewSections.map((row) => {
-                const isActive = activeSectionId === row.id && pathname === "/file";
+                const isActive =
+                  activeSectionId === row.id && pathname === "/file";
                 return (
-                <button
-                  key={row.id}
-                  type="button"
-                  onClick={() => handleProposalClick(row.id)}
-                  className={cn(
-                    "flex h-8 w-8 mx-auto items-center justify-center rounded-sm bg-[#ECFDF5] text-left text-[14px] font-medium text-[#047857] hover:bg-[#D1FAE5] hover:text-[#065F46] dark:bg-[#052e1a]/40 dark:text-[#4ade80] dark:hover:bg-[#052e1a]/60 dark:hover:text-[#4ade80]",
-                    SIDEBAR_PRESS_CLASS,
-                    !collapsed &&
-                      "lg:h-auto lg:w-full lg:mx-0 lg:min-h-0 lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
-                    // Same active-equals-hover rule as the pending-delete
-                    // rows above: once the user has scrolled into the
-                    // proposal preview, lock the row into its hover tone.
-                    isActive && "bg-[#D1FAE5] text-[#065F46] dark:bg-[#052e1a]/60"
-                  )}
-                  aria-label={`Proposed: ${row.name}`}
-                >
-                  <span
-                    className={cn(
-                      "h-2.5 w-2.5 shrink-0 rounded-[3px]",
-                      !collapsed && "lg:h-1.5 lg:w-1.5 lg:rounded-[2px]"
-                    )}
-                    style={{ backgroundColor: "#10B981" }}
+                  <FileSectionNavButton
+                    key={row.id}
+                    name={row.name}
+                    accent={row.accent}
+                    active={isActive}
+                    pendingCreate
+                    collapsed={collapsed}
+                    onClick={() => handleProposalClick(row.id)}
                   />
-                  <span className={cn("hidden truncate", !collapsed && "lg:inline")}>{row.name}</span>
-                </button>
                 );
               })}
+              </div>
 
               <button
                 type="button"

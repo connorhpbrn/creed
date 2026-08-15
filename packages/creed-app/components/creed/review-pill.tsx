@@ -484,12 +484,14 @@ function ReviewPillItem({
         className="flex w-full min-w-0 items-center gap-2 rounded-[var(--radius-md)] px-2 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--creed-accent)]/45"
         aria-expanded={open}
       >
-        <ChevronDown
-          className={cn(
-            "h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-200",
-            open ? "rotate-0" : "-rotate-90",
-          )}
-        />
+        {isDeleteProposal || isNewSectionProposal ? null : (
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 text-[var(--creed-text-tertiary)] transition-transform duration-200",
+              open ? "rotate-0" : "-rotate-90",
+            )}
+          />
+        )}
         <ProposalAuthor
           authorType={item.proposal.authorType}
           avatarUrl={item.proposal.authorAvatarUrl}
@@ -497,7 +499,9 @@ function ReviewPillItem({
           agentName={item.proposal.agentName}
         />
         <span className="min-w-0 flex-1 truncate font-medium text-[var(--creed-text-primary)]">
-          {item.sectionName ?? item.proposal.sectionName}
+          {isDeleteProposal || isNewSectionProposal
+            ? "proposed"
+            : (item.sectionName ?? item.proposal.sectionName)}
         </span>
         <span className="inline-flex items-center gap-1">
           <DiffBadge tone="added" count={stats.added} size="md" />

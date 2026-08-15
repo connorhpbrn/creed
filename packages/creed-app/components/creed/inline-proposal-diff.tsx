@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, ChevronDown, Pencil, Trash2, X } from "lucide-react";
+import { Check, Pencil, Trash2, X } from "lucide-react";
 import type { Proposal } from "@creed/core/creed-data";
 import { accentColorMap, getProposalPreviewText } from "@creed/core/creed-data";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
@@ -127,14 +127,31 @@ export function DiffBadge({
 }
 
 function DiffLineContent({ line }: { line: DiffLine }) {
-  if (!line.inlineParts) return line.value || " ";
+  if (!line.inlineParts) {
+    if (line.kind === "added") {
+      return <span className="creed-diff-add">{line.value || " "}</span>;
+    }
+    if (line.kind === "removed") {
+      return <span className="creed-diff-remove">{line.value || " "}</span>;
+    }
+    return line.value || " ";
+  }
 
   return line.inlineParts.map((part, index) => {
     if (line.kind === "removed" && part.added) return null;
     if (line.kind === "added" && part.removed) return null;
     const changed = line.kind === "removed" ? part.removed : part.added;
     return (
-      <span key={index} className={changed ? "creed-diff-word" : undefined}>
+      <span
+        key={index}
+        className={
+          changed
+            ? line.kind === "removed"
+              ? "creed-diff-remove"
+              : "creed-diff-add"
+            : undefined
+        }
+      >
         {part.value}
       </span>
     );
@@ -153,16 +170,8 @@ export function CreedDiffView({ diff }: { diff: CreedDiff }) {
   return (
     <div className="creed-diff-lines">
       {diff.lines.map((line, index) => (
-        <div
-          key={`${line.kind}-${index}`}
-          className={cn("creed-diff-line", `creed-diff-line-${line.kind}`)}
-        >
-          <span className="creed-diff-gutter" aria-hidden="true">
-            {line.kind === "added" ? "+" : line.kind === "removed" ? "−" : " "}
-          </span>
-          <span className="creed-diff-code">
-            <DiffLineContent line={line} />
-          </span>
+        <div key={`${line.kind}-${index}`} className="creed-diff-line">
+          <DiffLineContent line={line} />
         </div>
       ))}
     </div>
@@ -292,7 +301,7 @@ export function InlineProposalDiff({
 
       <ExpandRegion open={expanded}>
         <div className="border-t border-[var(--creed-border)]" />
-        <div className="creed-diff-block px-4 py-3">
+        <div className="creed-diff-block py-3">
           <CreedDiffView diff={diff} />
         </div>
         {proposal.reason ? (
@@ -338,37 +347,35 @@ export function InlineNewSectionProposal({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-[var(--creed-text-secondary)]"
+          className="group/diff flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-[var(--creed-text-secondary)]"
         >
-          <ChevronDown
-            className={cn(
-              // Chevron tinted green to match the proposal tone - same
-              // affordance as the destructive (red) chevron on the delete
-              // card so the colour also carries semantic information.
-              "h-3.5 w-3.5 shrink-0 text-[#10b981] transition-transform duration-200 dark:text-[#4ade80]",
-              expanded ? "rotate-0" : "-rotate-90",
-            )}
-          />
           <AgentIconStack
             agents={[agentName]}
             variant="inline"
             itemClassName="h-5 w-5"
             maxVisible={1}
           />
-          <span className="truncate font-medium text-[var(--creed-text-primary)]">
+          <span className="hidden truncate font-medium text-[var(--creed-text-primary)] sm:inline">
             {agentName}
           </span>
-          {/* Tinted green to match the chevron / `+` glyph - the colour
-              now also carries the meaning of the headline. */}
           <span className="text-[#10b981] dark:text-[#4ade80]">
-            proposed a new section
+            proposed
           </span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
           <span className="inline-flex items-center gap-1 text-sm">
             <DiffBadge tone="added" count={diff.added} size="md" />
-            <span className="text-[var(--creed-text-primary)]">
+            <span className="hidden text-[var(--creed-text-primary)] sm:inline">
               {sectionName}
             </span>
+          </span>
+          <span className="hidden sm:inline-flex">
+            <AnimatedChevronDown
+              size={14}
+              className={cn(
+                "shrink-0 -rotate-90 text-[#10b981] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] dark:text-[#4ade80]",
+                expanded && "rotate-0",
+              )}
+            />
           </span>
         </button>
         {canReview ? (
@@ -403,7 +410,7 @@ export function InlineNewSectionProposal({
       </div>
       <ExpandRegion open={expanded}>
         <div className="border-t border-[#10b981]/20" />
-        <div className="creed-diff-block py-2 text-[14px] leading-7 text-[var(--creed-text-primary)]">
+        <div className="creed-diff-block py-3 text-[14px] leading-7 text-[var(--creed-text-primary)]">
           <CreedDiffView diff={diff} />
         </div>
         {proposal.reason ? (
@@ -473,32 +480,17 @@ export function InlineMetaProposal({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-[var(--creed-text-secondary)]"
+          className="group/diff flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-[var(--creed-text-secondary)]"
         >
-          <ChevronDown
-            className={cn(
-              // Tint the chevron to the proposal tone so the colour also
-              // signals what the card does - red for destructive, neutral
-              // tertiary for the non-destructive meta kinds.
-              "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
-              isDelete
-                ? "text-[#dc2626] dark:text-[#f87171]"
-                : "text-[var(--creed-text-tertiary)]",
-              expanded ? "rotate-0" : "-rotate-90",
-            )}
-          />
           <AgentIconStack
             agents={[agentName]}
             variant="inline"
             itemClassName="h-5 w-5"
             maxVisible={1}
           />
-          <span className="truncate font-medium text-[var(--creed-text-primary)]">
+          <span className="hidden truncate font-medium text-[var(--creed-text-primary)] sm:inline">
             {agentName}
           </span>
-          {/* Tint the headline red on delete to match the rest of the
-              card's colour signalling. Non-destructive meta kinds stay
-              tertiary so they don't shout. */}
           <span
             className={cn(
               isDelete
@@ -510,13 +502,10 @@ export function InlineMetaProposal({
             <span className="hidden sm:inline">{headline}</span>
           </span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
-          {/* Delete proposals get a red `−` prefix mirroring the green `+`
-              on new-section cards. Non-destructive meta kinds (rename /
-              recolor) stay neutral. */}
           {isDelete ? (
             <span className="inline-flex items-center gap-1 text-sm">
               <DiffBadge tone="removed" count={deleteDiff?.removed ?? 0} size="md" />
-              <span className="truncate text-[var(--creed-text-primary)]">
+              <span className="hidden truncate text-[var(--creed-text-primary)] sm:inline">
                 {existingName}
               </span>
             </span>
@@ -525,6 +514,21 @@ export function InlineMetaProposal({
               {existingName}
             </span>
           )}
+          <span className={cn(isDelete && "hidden sm:inline-flex")}>
+            <AnimatedChevronDown
+              size={14}
+              className={cn(
+                "shrink-0 -rotate-90 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                isDelete
+                  ? "text-[#dc2626] dark:text-[#f87171]"
+                  : "text-[var(--creed-text-tertiary)] group-hover/diff:text-[var(--creed-text-primary)]",
+                expanded && "rotate-0",
+                expanded &&
+                  !isDelete &&
+                  "text-[var(--creed-text-primary)]",
+              )}
+            />
+          </span>
         </button>
         {canReview ? (
           <div className="-mr-1 flex items-center gap-1">
@@ -570,12 +574,13 @@ export function InlineMetaProposal({
         <div className={dividerClass} />
         {/* Typography matched to the new-section card: 14px / leading-7
             so the two card bodies read at the same visual weight. */}
-        <div className="px-4 py-3 text-[14px] leading-7 text-[var(--creed-text-primary)]">
-          {isDelete ? (
-            <div className="-mx-4 -my-3 py-2">
-              <CreedDiffView diff={deleteDiff!} />
-            </div>
-          ) : isRename ? (
+        {isDelete ? (
+          <div className="creed-diff-block py-3 text-[14px] leading-7 text-[var(--creed-text-primary)]">
+            <CreedDiffView diff={deleteDiff!} />
+          </div>
+        ) : (
+          <div className="px-4 py-3 text-[14px] leading-7 text-[var(--creed-text-primary)]">
+          {isRename ? (
             <span className="inline-flex items-center gap-2">
               <span className="text-[var(--creed-text-secondary)] line-through">
                 {existingName}
@@ -610,7 +615,8 @@ export function InlineMetaProposal({
               </span>
             </span>
           )}
-        </div>
+          </div>
+        )}
         {proposal.reason ? (
           // Delete reason picks up the red tint to match the rest of the
           // card's colour signalling. Non-destructive meta kinds stay on

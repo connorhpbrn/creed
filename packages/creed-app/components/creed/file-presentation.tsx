@@ -12,6 +12,23 @@ import { cn } from "@creed/ui/utils";
 const FILE_NAV_PRESS_CLASS =
   "transform-gpu transition-[color,background-color,transform,filter] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] active:translate-y-px active:scale-[0.98] active:brightness-[0.96]";
 
+const PENDING_NAV_TONE = {
+  delete: {
+    text: "text-[#B91C1C] dark:text-[#F87171]",
+    hover:
+      "hover:bg-[#FDE2E2]! hover:text-[#991B1B]! dark:hover:bg-[#3F1212]/55! dark:hover:text-[#F87171]!",
+    selected:
+      "bg-[#FDE2E2]! text-[#991B1B]! dark:bg-[#3F1212]/55! dark:text-[#F87171]!",
+  },
+  create: {
+    text: "text-[#047857] dark:text-[#4ade80]",
+    hover:
+      "hover:bg-[#D1FAE5]! hover:text-[#065F46]! dark:hover:bg-[#052e1a]/60! dark:hover:text-[#4ade80]!",
+    selected:
+      "bg-[#D1FAE5]! text-[#065F46]! dark:bg-[#052e1a]/60! dark:text-[#4ade80]!",
+  },
+} as const;
+
 export function FileSectionNavButton({
   sectionId,
   name,
@@ -19,6 +36,7 @@ export function FileSectionNavButton({
   active,
   pendingCount = 0,
   pendingDelete = false,
+  pendingCreate = false,
   collapsed = false,
   reorderPosition,
   canDrag = false,
@@ -31,6 +49,7 @@ export function FileSectionNavButton({
   active: boolean;
   pendingCount?: number;
   pendingDelete?: boolean;
+  pendingCreate?: boolean;
   collapsed?: boolean;
   reorderPosition?: number;
   canDrag?: boolean;
@@ -39,6 +58,12 @@ export function FileSectionNavButton({
 }) {
   const dragControls = useDragControls();
   const draggedRef = useRef(false);
+
+  const pendingTone = pendingDelete
+    ? PENDING_NAV_TONE.delete
+    : pendingCreate
+      ? PENDING_NAV_TONE.create
+      : null;
 
   const button = (
     <button
@@ -56,22 +81,21 @@ export function FileSectionNavButton({
           FILE_NAV_PRESS_CLASS,
           !collapsed &&
             "lg:mx-0 lg:h-auto lg:min-h-0 lg:w-full lg:justify-start lg:gap-3 lg:px-2 lg:py-2",
+          pendingTone?.text,
+          pendingTone?.hover,
+          active && pendingTone?.selected,
           active &&
+            !pendingTone &&
             "bg-[var(--creed-surface-raised)]! text-[var(--creed-text-primary)] hover:bg-[var(--creed-surface-raised)]!",
-          pendingDelete &&
-            "bg-[#FEF2F2] text-[#B91C1C] hover:bg-[#FDE2E2] hover:text-[#991B1B] dark:bg-[#3F1212]/35 dark:text-[#F87171] dark:hover:bg-[#3F1212]/55 dark:hover:text-[#F87171]",
-          pendingDelete &&
-            active &&
-            "bg-[#FDE2E2] text-[#991B1B] dark:bg-[#3F1212]/55",
         )}
-        aria-label={name}
+        aria-label={pendingCreate ? `Proposed: ${name}` : name}
       >
         <span
           className={cn(
             "h-2.5 w-2.5 shrink-0 rounded-[3px]",
             !collapsed && "lg:h-1.5 lg:w-1.5 lg:rounded-[2px]",
           )}
-          style={{ backgroundColor: pendingDelete ? "#DC2626" : accent }}
+          style={{ backgroundColor: accent }}
         />
         <span
           className={cn(

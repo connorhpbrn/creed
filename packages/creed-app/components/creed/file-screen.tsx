@@ -173,8 +173,36 @@ import { cn } from "@creed/ui/utils";
 
 const FILE_NAV_INTENT_KEY = "creed:file-nav-intent";
 const COLLAPSED_SECTIONS_STORAGE_PREFIX = "creed:collapsed-sections:";
-type FileRevealTarget =
-  { type: "section"; id: string } | { type: "proposal"; id: string };
+
+// Sidebar highlight id can differ from the scrolled element: a delete row is
+// the section, but the reveal target is the proposal card inside it.
+type FileRevealTarget = {
+  highlightId: string;
+  locate: { type: "section"; id: string } | { type: "proposal"; id: string };
+};
+
+function sectionReveal(sectionId: string): FileRevealTarget {
+  return {
+    highlightId: sectionId,
+    locate: { type: "section", id: sectionId },
+  };
+}
+
+function proposalReveal(proposal: Proposal): FileRevealTarget {
+  if (proposal.draft.kind === "new-section") {
+    return {
+      highlightId: proposal.id,
+      locate: { type: "proposal", id: proposal.id },
+    };
+  }
+  if (proposal.draft.kind === "delete-section") {
+    return {
+      highlightId: proposal.sectionId,
+      locate: { type: "proposal", id: proposal.id },
+    };
+  }
+  return sectionReveal(proposal.sectionId);
+}
 
 // Per-section fingerprints keyed by object identity. Unchanged sections keep
 // their references across commits and sync polls, so a keystroke re-stringifies
@@ -308,15 +336,15 @@ function resolveSectionAccent(
 
 function findFileRevealElement(
   container: HTMLElement,
-  target: FileRevealTarget,
+  locate: FileRevealTarget["locate"],
 ) {
   const attribute =
-    target.type === "proposal" ? "data-proposal-id" : "data-section-id";
-  const datasetKey = target.type === "proposal" ? "proposalId" : "sectionId";
+    locate.type === "proposal" ? "data-proposal-id" : "data-section-id";
+  const datasetKey = locate.type === "proposal" ? "proposalId" : "sectionId";
 
   return (
     Array.from(container.querySelectorAll<HTMLElement>(`[${attribute}]`)).find(
-      (element) => element.dataset[datasetKey] === target.id,
+      (element) => element.dataset[datasetKey] === locate.id,
     ) ?? null
   );
 }
@@ -571,7 +599,7 @@ function SectionChangeRow({ change }: { change: SectionChange }) {
             colour (no border) so the diff stays legible regardless of the
             section's accent tint. */}
         <div className="px-2 pb-2">
-          <div className="creed-diff-block rounded-sm bg-[var(--creed-surface)] px-3.5 py-3">
+          <div className="creed-diff-block rounded-sm bg-[var(--creed-surface)] py-3">
             <CreedDiffView diff={diff} />
           </div>
         </div>
@@ -2246,7 +2274,7 @@ export function FileScreen({ active = true }: { active?: boolean }) {
   }
 
   const setActiveShellSection = useCreedShellActiveSection();
-  const scrollLockRef = useRef<{ sectionId: string; until: number } | null>(
+  const scrollLockRef = useRef<{ highlightId: string; until: number } | null>(
     null,
   );
   const revealFrameRef = useRef<number | null>(null);
@@ -2254,8 +2282,8 @@ export function FileScreen({ active = true }: { active?: boolean }) {
   const revealEditorTarget = useCallback(
     (target: FileRevealTarget, behavior: ScrollBehavior = "smooth") => {
       setFileViewMode("editor");
-      if (target.type === "section") {
-        setSectionCollapsed(target.id, false);
+      if (target.locate.type === "section") {
+        setSectionCollapsed(target.locate.id, false);
       }
 
       if (revealFrameRef.current !== null) {
@@ -2267,26 +2295,16 @@ export function FileScreen({ active = true }: { active?: boolean }) {
       const tryReveal = () => {
         const container = editorScrollRef.current;
         const element = container
-          ? findFileRevealElement(container, target)
+          ? findFileRevealElement(container, target.locate)
           : null;
 
         if (container && element) {
           scrollFileElementIntoView(container, element, behavior);
-
-          const sectionId =
-            target.type === "section"
-              ? target.id
-              : element.closest<HTMLElement>("[data-section-id]")?.dataset
-                  .sectionId;
-
-          if (sectionId) {
-            scrollLockRef.current = {
-              sectionId,
-              until: Date.now() + 1200,
-            };
-            setActiveShellSection(sectionId);
-          }
-
+          scrollLockRef.current = {
+            highlightId: target.highlightId,
+            until: Date.now() + 1200,
+          };
+          setActiveShellSection(target.highlightId);
           revealFrameRef.current = null;
           return;
         }
@@ -2318,7 +2336,7 @@ export function FileScreen({ active = true }: { active?: boolean }) {
 
   const handleSectionSelect = useCallback(
     (sectionId: string) => {
-      revealEditorTarget({ type: "section", id: sectionId });
+      revealEditorTarget(sectionReveal(sectionId));
     },
     [revealEditorTarget],
   );
@@ -2337,15 +2355,19 @@ export function FileScreen({ active = true }: { active?: boolean }) {
       const proposal = normalizedPendingProposals.find(
         (item) => item.id === proposalId,
       );
-
-      if (proposal && proposal.draft.kind !== "new-section") {
-        revealEditorTarget({ type: "section", id: proposal.sectionId });
+      if (!proposal) {
+        revealEditorTarget({
+          highlightId: proposalId,
+          locate: { type: "proposal", id: proposalId },
+        });
         return;
       }
-
-      revealEditorTarget({ type: "proposal", id: proposalId });
+      if (proposal.draft.kind !== "new-section" && proposal.sectionId) {
+        setSectionCollapsed(proposal.sectionId, false);
+      }
+      revealEditorTarget(proposalReveal(proposal));
     },
-    [normalizedPendingProposals, revealEditorTarget],
+    [normalizedPendingProposals, revealEditorTarget, setSectionCollapsed],
   );
   const acceptAllReviewPillProposals = useCallback(() => {
     acceptProposals(stablePendingProposals.map((proposal) => proposal.id));
@@ -2378,18 +2400,15 @@ export function FileScreen({ active = true }: { active?: boolean }) {
         content: html,
       });
       withdrawProposal(proposal.id);
-      revealEditorTarget({ type: "section", id: proposal.sectionId });
+      revealEditorTarget(sectionReveal(proposal.sectionId));
     },
     [revealEditorTarget, withdrawProposal],
   );
   const jumpToReviewPillProposal = useCallback(
     (proposal: Proposal) => {
-      const targetId =
-        proposal.draft.kind === "new-section" ? null : proposal.sectionId;
-      if (!targetId) return;
-      revealEditorTarget({ type: "section", id: targetId });
+      revealProposalOrSection(proposal.id);
     },
-    [revealEditorTarget],
+    [revealProposalOrSection],
   );
 
   const handleProposalSelect = useCallback(
@@ -2466,13 +2485,17 @@ export function FileScreen({ active = true }: { active?: boolean }) {
     const container = editorScrollRef.current;
     if (!container) return;
 
-    // Track both real sections and pending new-section proposals so the
-    // sidebar's "active row" highlight follows the user's scroll into a
-    // proposal preview the same way it follows real section scrolls.
+    // Sidebar rows are either a section or a free-standing new-section
+    // preview. In-section proposal cards are reveal targets only, not
+    // scroll-follow targets, so they are left out of this query.
     const elements = Array.from(
       container.querySelectorAll<HTMLElement>(
         "[data-section-id], [data-proposal-id]",
       ),
+    ).filter(
+      (element) =>
+        Boolean(element.dataset.sectionId) ||
+        !element.parentElement?.closest("[data-section-id]"),
     );
     if (elements.length === 0) return;
 
@@ -2500,7 +2523,7 @@ export function FileScreen({ active = true }: { active?: boolean }) {
 
       const lock = scrollLockRef.current;
       if (lock) {
-        if (Date.now() > lock.until || bestId === lock.sectionId) {
+        if (Date.now() > lock.until || bestId === lock.highlightId) {
           scrollLockRef.current = null;
         } else {
           return;
@@ -2594,7 +2617,7 @@ export function FileScreen({ active = true }: { active?: boolean }) {
 
         if (intent.type === "section") {
           window.sessionStorage.removeItem(FILE_NAV_INTENT_KEY);
-          revealEditorTarget({ type: "section", id: intent.sectionId });
+          revealEditorTarget(sectionReveal(intent.sectionId));
           return;
         }
 
@@ -4254,14 +4277,12 @@ function SectionCard({
               <div className="mb-4 space-y-3">
                 {proposals.map((p) => {
                   const kind = p.draft.kind;
-                  if (
-                    kind === "delete-section" ||
+                  const isDelete = kind === "delete-section";
+                  const card =
+                    isDelete ||
                     kind === "rename-section" ||
-                    kind === "recolor-section"
-                  ) {
-                    return (
+                    kind === "recolor-section" ? (
                       <InlineMetaProposal
-                        key={p.id}
                         proposal={p}
                         existingName={section.name}
                         existingAccent={accentColorMap[section.accent]}
@@ -4271,21 +4292,25 @@ function SectionCard({
                         onAccept={() => onAcceptProposal(p.id)}
                         onReject={() => onRejectProposal(p.id)}
                       />
+                    ) : (
+                      <InlineProposalDiff
+                        proposal={p}
+                        existingContent={section.content}
+                        agentName={p.agentName}
+                        canReview={canReview}
+                        mine={Boolean(p.mine)}
+                        onAccept={() => onAcceptProposal(p.id)}
+                        onReject={() => onRejectProposal(p.id)}
+                        onEdit={() => editProposal(p)}
+                        onDelete={() => onWithdrawProposal(p.id)}
+                      />
                     );
-                  }
-                  return (
-                    <InlineProposalDiff
-                      key={p.id}
-                      proposal={p}
-                      existingContent={section.content}
-                      agentName={p.agentName}
-                      canReview={canReview}
-                      mine={Boolean(p.mine)}
-                      onAccept={() => onAcceptProposal(p.id)}
-                      onReject={() => onRejectProposal(p.id)}
-                      onEdit={() => editProposal(p)}
-                      onDelete={() => onWithdrawProposal(p.id)}
-                    />
+                  return isDelete ? (
+                    <div key={p.id} data-proposal-id={p.id}>
+                      {card}
+                    </div>
+                  ) : (
+                    <div key={p.id}>{card}</div>
                   );
                 })}
               </div>
@@ -5079,7 +5104,7 @@ const ActivityRow = memo(function ActivityRow({
               className="overflow-hidden"
             >
               <div className="-mx-3 border-t border-[var(--creed-border)]" />
-              <div className="creed-scrollbar creed-diff-block -mx-3 max-h-72 overflow-y-auto px-4 py-2.5 leading-[1.6]">
+              <div className="creed-scrollbar creed-diff-block -mx-3 max-h-72 overflow-y-auto py-2.5 leading-[1.6]">
                 {!diffReady ? (
                   <ActivityDiffSkeleton />
                 ) : hasLegacyDeletionSnapshot ? (

@@ -540,7 +540,7 @@ function DemoActivityRow({ entry }: { entry: DemoActivity }) {
             className="overflow-hidden"
           >
             <div className="-mx-3 border-t border-[var(--creed-border)]" />
-            <div className="creed-diff-block -mx-3 px-4 py-2.5 leading-[1.6]">
+            <div className="creed-diff-block -mx-3 py-2.5 leading-[1.6]">
               {entry.removed > 0 ? (
                 <span className="creed-diff-remove">{entry.beforeText} </span>
               ) : null}
