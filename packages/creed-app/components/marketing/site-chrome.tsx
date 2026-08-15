@@ -121,10 +121,8 @@ export function MarketingHeroBanner({
         {/* Bottom fade melts the art into the page background. Eased multi-stop
             gradient so the transition reads smooth, not banded. */}
         <SceneryFade direction="down" />
-        <div className="relative z-10 flex flex-col px-6 py-5 md:px-10 md:py-7">
-          <MarketingHeader configured={configured} scrolled={scrolled} />
-        </div>
       </div>
+      <MarketingHeader configured={configured} scrolled={scrolled} />
     </section>
   );
 }

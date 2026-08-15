@@ -94,7 +94,7 @@
   "packages/creed-app/components/marketing/roadmap-page-view.tsx": "5a3c735fd41e591f56cf0e3a3d74103513ab63b572fd1116f1d5e403ff1224c1",
   "packages/creed-app/components/marketing/roadmap-status.tsx": "49cde924fc924b96b8accd1d8c46b8567005817507d949e310cc2d806917cfef",
   "packages/creed-app/components/marketing/scenery-image.tsx": "00788febd21934cd2b6f9a3c1b9d29e560acd9161c6e0c651099c99b5637abba",
-  "packages/creed-app/components/marketing/site-chrome.tsx": "73f0b4e18a61e73191513f47c667e34eb47c084344bcb2bba3bfe2e51d178751",
+  "packages/creed-app/components/marketing/site-chrome.tsx": "5a555107f8345d11d86f089ddec8480823b617e42a1d6cd2e3529ba98a652b78",
   "packages/creed-app/components/marketing/sponsor-page-view.tsx": "821a308a1acb0f251b0b1be0af75c9c85a390c030e702e83072498846d682564",
   "packages/creed-app/components/marketing/stack-page-view.tsx": "41af2bb32b2a2396bf314507bb835c85f6c91ba93f57584f7772a0808d2647bb",
   "packages/creed-app/components/marketing/system-status.tsx": "48967e9a4cf5b639f20d719dc8a61cc74f5a4ade79947a88f26dde40d16c1414",
