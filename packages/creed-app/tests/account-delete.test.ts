@@ -9,13 +9,13 @@ function source(path: string) {
 test("account delete clears credit home before auth user delete", () => {
   const route = source("../../creed-cloud/app/api/app/account/route.ts");
   const homeMigration = source(
-    "../../persistence/supabase/migrations/20260808160000_credits_home_creed.sql",
-  );
+    "../../../apps/cloud/supabase/migrations/20260815155608_cloud_baseline.sql",
+  ).replaceAll('"', "").toLowerCase();
 
   // The restrict exists so Creed delete can reassign the pot deliberately.
   assert.match(
     homeMigration,
-    /creed_id uuid not null references public\.creeds\(id\) on delete restrict/,
+    /creed_credit_homes_creed_id_fkey foreign key \(creed_id\) references public\.creeds\(id\) on delete restrict/,
   );
 
   // Account delete must remove the home row first or owned-Creed cascade fails.

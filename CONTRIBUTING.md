@@ -87,7 +87,7 @@ and `packages/creed-cloud/`. The independent status application lives in
 - `packages/creed-ui/*` - reusable interface primitives.
 - `packages/creed-core/creed-data.ts` - shared types and section constants.
 - `packages/creed-app/lib/creed-backend.ts` - shared Supabase reads and writes.
-- `packages/persistence/supabase/migrations/*` - every schema change goes here.
+- `apps/open/supabase/migrations/*` and `apps/cloud/supabase/migrations/*` - edition-owned schema changes.
 
 For deeper notes, see the comment block at the top of each file or
 `AGENTS.md`.

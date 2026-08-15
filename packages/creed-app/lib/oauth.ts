@@ -7,7 +7,7 @@ import "server-only";
 // and short-lived. The admin (service-role) client is used throughout because
 // the oauth_* tables are service-role only.
 import { randomBytes } from "node:crypto";
-import { encryptSecret, hashSecret } from "@creed/integrations/secret-crypto";
+import { decryptSecret, encryptSecret, hashSecret } from "@creed/integrations/secret-crypto";
 import { getSupabaseAdminClient } from "@creed/persistence/supabase/admin";
 import { getSiteUrl } from "@creed/persistence/supabase/env";
 import { log } from "@/lib/observability";
@@ -33,6 +33,7 @@ type CodeRow = {
   expires_at: string;
   creed_grants: CreedGrant[] | null;
   resource: string | null;
+  used_at: string | null;
 };
 
 // A per-Creed MCP grant chosen on the consent screen: which Creed the agent may
@@ -50,10 +51,16 @@ type TokenRow = {
   refresh_expires_at: string;
   resource: string | null;
 };
+type PersistedTokenRow = TokenRow & {
+  encrypted_access_token: string;
+  encrypted_refresh_token: string;
+  ready_at: string | null;
+};
 
 const ACCESS_TTL_MS = 60 * 60 * 1000; // 1 hour
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const CODE_TTL_MS = 60 * 1000; // 60 seconds
+const REFRESH_REPLAY_GRACE_MS = 60 * 1000;
 
 export const DEFAULT_SCOPE = "read propose";
 export const DIRECT_EDIT_SCOPE = "direct_edit";
@@ -115,11 +122,14 @@ export async function registerOAuthClient(input: {
 
 export async function getOAuthClient(clientId: string): Promise<OAuthClient | null> {
   const admin = adminDb();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("oauth_clients")
     .select("client_id, client_name, redirect_uris")
     .eq("client_id", clientId)
     .maybeSingle();
+  if (error) {
+    throw new Error(error.message);
+  }
   const row = (data as ClientRow | null) ?? null;
   if (!row) {
     return null;
@@ -165,22 +175,18 @@ export async function issueAuthorizationCode(input: {
   return code;
 }
 
-// Single-use redemption: claim the row by flipping used_at in the same
-// statement that selects it, so a replayed code finds nothing to claim.
-export async function redeemAuthorizationCode(input: {
+export async function validateAuthorizationCode(input: {
   code: string;
   clientId: string;
   redirectUri: string;
   codeVerifier: string;
   resource: string;
-}): Promise<{ userId: string; scope: string; creedGrants: CreedGrant[]; resource: string } | { error: string }> {
+}): Promise<{ userId: string; scope: string; creedGrants: CreedGrant[]; resource: string; alreadyUsed: boolean } | { error: string }> {
   const admin = adminDb();
   const { data, error } = await admin
     .from("oauth_authorization_codes")
-    .update({ used_at: new Date().toISOString() })
+    .select("client_id, user_id, redirect_uri, code_challenge, scope, expires_at, creed_grants, resource, used_at")
     .eq("code_hash", hashSecret(input.code))
-    .is("used_at", null)
-    .select("client_id, user_id, redirect_uri, code_challenge, scope, expires_at, creed_grants, resource")
     .maybeSingle();
 
   if (error) {
@@ -206,7 +212,13 @@ export async function redeemAuthorizationCode(input: {
     return { error: "invalid_target" };
   }
 
-  return { userId: row.user_id, scope: row.scope, creedGrants: row.creed_grants ?? [], resource: input.resource };
+  return {
+    userId: row.user_id,
+    scope: row.scope,
+    creedGrants: row.creed_grants ?? [],
+    resource: input.resource,
+    alreadyUsed: row.used_at !== null,
+  };
 }
 
 export async function issueTokenPair(input: {
@@ -215,6 +227,8 @@ export async function issueTokenPair(input: {
   scope: string;
   creedGrants: CreedGrant[];
   resource: string;
+  authorizationCodeHash?: string;
+  parentTokenId?: string;
 }): Promise<IssuedTokens> {
   const admin = adminDb();
   const accessToken = generateOpaqueToken("creed_at");
@@ -232,18 +246,34 @@ export async function issueTokenPair(input: {
       user_id: input.userId,
       scope: input.scope,
       resource: input.resource,
+      authorization_code_hash: input.authorizationCodeHash ?? null,
+      parent_token_id: input.parentTokenId ?? null,
+      ready_at: null,
       access_expires_at: new Date(now + ACCESS_TTL_MS).toISOString(),
       refresh_expires_at: new Date(now + REFRESH_TTL_MS).toISOString(),
     })
     .select("id")
     .maybeSingle();
   if (error || !data) {
+    if (isMissingLifecycleSchema(error)) {
+      return issueLegacyTokenPair(input);
+    }
+    const existing = await findIssuedToken({
+      authorizationCodeHash: input.authorizationCodeHash,
+      parentTokenId: input.parentTokenId,
+    });
+    if (existing) return existing;
     throw new Error(error?.message ?? "Could not issue token.");
   }
 
   const tokenId = (data as { id: string }).id;
   try {
     await writeTokenCreedGrants(admin, tokenId, input.creedGrants);
+    const { error: readyError } = await admin
+      .from("oauth_tokens")
+      .update({ ready_at: new Date().toISOString() })
+      .eq("id", tokenId);
+    if (readyError) throw new Error(readyError.message);
   } catch (grantError) {
     await admin.from("oauth_tokens").delete().eq("id", tokenId);
     throw grantError instanceof Error
@@ -257,6 +287,117 @@ export async function issueTokenPair(input: {
     scope: input.scope,
     accessExpiresInSeconds: Math.floor(ACCESS_TTL_MS / 1000),
   };
+}
+
+function isMissingLifecycleSchema(error: { code?: string; message?: string } | null) {
+  return Boolean(
+    error &&
+      (error.code === "42703" ||
+        error.code === "PGRST204" ||
+        /authorization_code_hash|parent_token_id|ready_at/i.test(error.message ?? "")),
+  );
+}
+
+async function issueLegacyTokenPair(input: {
+  clientId: string;
+  userId: string;
+  scope: string;
+  creedGrants: CreedGrant[];
+  resource: string;
+}): Promise<IssuedTokens> {
+  const admin = adminDb();
+  const accessToken = generateOpaqueToken("creed_at");
+  const refreshToken = generateOpaqueToken("creed_rt");
+  const now = Date.now();
+  const { data, error } = await admin
+    .from("oauth_tokens")
+    .insert({
+      access_token_hash: hashSecret(accessToken),
+      refresh_token_hash: hashSecret(refreshToken),
+      encrypted_access_token: encryptSecret(accessToken),
+      encrypted_refresh_token: encryptSecret(refreshToken),
+      client_id: input.clientId,
+      user_id: input.userId,
+      scope: input.scope,
+      resource: input.resource,
+      access_expires_at: new Date(now + ACCESS_TTL_MS).toISOString(),
+      refresh_expires_at: new Date(now + REFRESH_TTL_MS).toISOString(),
+    })
+    .select("id")
+    .maybeSingle();
+  if (error || !data) throw new Error(error?.message ?? "Could not issue token.");
+  const tokenId = (data as { id: string }).id;
+  try {
+    await writeTokenCreedGrants(admin, tokenId, input.creedGrants);
+  } catch (grantError) {
+    await admin.from("oauth_tokens").delete().eq("id", tokenId);
+    throw grantError;
+  }
+  return {
+    accessToken,
+    refreshToken,
+    scope: input.scope,
+    accessExpiresInSeconds: Math.floor(ACCESS_TTL_MS / 1000),
+  };
+}
+
+async function findIssuedToken(input: {
+  authorizationCodeHash?: string;
+  parentTokenId?: string;
+}): Promise<IssuedTokens | null> {
+  if (!input.authorizationCodeHash && !input.parentTokenId) return null;
+  const admin = adminDb();
+  let query = admin
+    .from("oauth_tokens")
+    .select("id, client_id, user_id, scope, revoked_at, access_expires_at, refresh_expires_at, resource, encrypted_access_token, encrypted_refresh_token, ready_at");
+  query = input.authorizationCodeHash
+    ? query.eq("authorization_code_hash", input.authorizationCodeHash)
+    : query.eq("parent_token_id", input.parentTokenId as string);
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) return null;
+  const row = data as PersistedTokenRow;
+  if (row.revoked_at || !row.ready_at) return null;
+  return {
+    accessToken: decryptSecret(row.encrypted_access_token, "OAuth access token"),
+    refreshToken: decryptSecret(row.encrypted_refresh_token, "OAuth refresh token"),
+    scope: row.scope,
+    accessExpiresInSeconds: Math.max(
+      1,
+      Math.floor((new Date(row.access_expires_at).getTime() - Date.now()) / 1000),
+    ),
+  };
+}
+
+export async function completeAuthorizationCodeExchange(input: {
+  code: string;
+  clientId: string;
+  userId: string;
+  scope: string;
+  creedGrants: CreedGrant[];
+  resource: string;
+  alreadyUsed: boolean;
+}): Promise<IssuedTokens | null> {
+  const codeHash = hashSecret(input.code);
+  if (input.alreadyUsed) {
+    return findIssuedToken({ authorizationCodeHash: codeHash });
+  }
+  const tokens = await issueTokenPair({
+    clientId: input.clientId,
+    userId: input.userId,
+    scope: input.scope,
+    creedGrants: input.creedGrants,
+    resource: input.resource,
+    authorizationCodeHash: codeHash,
+  });
+  const { error } = await adminDb()
+    .from("oauth_authorization_codes")
+    .update({ used_at: new Date().toISOString() })
+    .eq("code_hash", codeHash)
+    .is("used_at", null);
+  if (error) {
+    log.warn("OAuth code exchanged but could not be marked used", { clientId: input.clientId });
+  }
+  return tokens;
 }
 
 // Persist the per-Creed grants for a freshly-issued token. Deduped by creed_id
@@ -288,9 +429,6 @@ async function writeTokenCreedGrants(
   }
 }
 
-// Refresh rotation: claim the presented refresh with a compare-and-swap revoke,
-// then issue a fresh pair. Concurrent refreshes cannot both mint; a failed
-// issue after claim returns server_error (re-auth) rather than racing.
 export async function rotateRefreshToken(
   refreshToken: string,
   clientId: string,
@@ -307,7 +445,7 @@ export async function rotateRefreshToken(
     return { error: "server_error" };
   }
   const row = (data as TokenRow | null) ?? null;
-  if (!row || row.revoked_at) {
+  if (!row) {
     return { error: "invalid_grant" };
   }
   if (
@@ -321,49 +459,58 @@ export async function rotateRefreshToken(
     return { error: "invalid_grant" };
   }
 
+  if (row.revoked_at) {
+    const withinReplayGrace =
+      Date.now() - new Date(row.revoked_at).getTime() <= REFRESH_REPLAY_GRACE_MS;
+    try {
+      const replacement = withinReplayGrace
+        ? await findIssuedToken({ parentTokenId: row.id })
+        : null;
+      return replacement ?? { error: "invalid_grant" };
+    } catch {
+      return { error: "server_error" };
+    }
+  }
+
   // Carry the old token's per-Creed grants onto the rotated token, otherwise a
   // connection would lose its Creed scoping on the first refresh (and MCP would
   // fall back to personal-only for a token that had been granted a shared).
-  const { data: grantRows } = await admin
+  const { data: grantRows, error: grantError } = await admin
     .from("oauth_token_creeds")
     .select("creed_id, mode")
     .eq("token_id", row.id);
+  if (grantError) {
+    return { error: "server_error" };
+  }
   const creedGrants: CreedGrant[] = ((grantRows as Array<{ creed_id: string; mode: CreedGrantMode }> | null) ?? []).map(
     (g) => ({ creedId: g.creed_id, mode: g.mode })
   );
 
-  const revokedAt = new Date().toISOString();
-  const { data: claimed, error: claimError } = await admin
-    .from("oauth_tokens")
-    .update({ revoked_at: revokedAt })
-    .eq("id", row.id)
-    .is("revoked_at", null)
-    .select("id")
-    .maybeSingle();
-  if (claimError) {
-    return { error: "server_error" };
-  }
-  if (!claimed) {
-    // Another refresh already claimed this token.
-    return { error: "invalid_grant" };
-  }
-
+  let replacement: IssuedTokens;
   try {
-    return await issueTokenPair({
+    replacement = await issueTokenPair({
       clientId: row.client_id,
       userId: row.user_id,
       scope: row.scope,
       creedGrants,
       resource,
+      parentTokenId: row.id,
     });
   } catch (issueError) {
-    log.error(
-      "OAuth refresh claimed but could not issue replacement",
-      { tokenId: row.id },
-      issueError,
-    );
+    log.error("Could not prepare OAuth refresh replacement", { tokenId: row.id }, issueError);
     return { error: "server_error" };
   }
+
+  const { error: claimError } = await admin
+    .from("oauth_tokens")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", row.id)
+    .is("revoked_at", null)
+    .select("id");
+  if (claimError) {
+    return { error: "server_error" };
+  }
+  return replacement;
 }
 
 export async function findOAuthAccessToken(
@@ -375,17 +522,22 @@ export async function findOAuthAccessToken(
 
 export type OAuthAccessLookup =
   | { status: "ok"; token: ResolvedAccessToken }
-  | { status: "invalid" };
+  | { status: "invalid" }
+  | { status: "unavailable" };
 
 export async function lookupOAuthAccessToken(
   token: string
 ): Promise<OAuthAccessLookup> {
   const admin = adminDb();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("oauth_tokens")
     .select("id, client_id, user_id, scope, resource, revoked_at, access_expires_at")
     .eq("access_token_hash", hashSecret(token))
     .maybeSingle();
+
+  if (error) {
+    return { status: "unavailable" };
+  }
 
   const row = (data as TokenRow | null) ?? null;
   if (!row || row.revoked_at) {
@@ -403,7 +555,12 @@ export async function lookupOAuthAccessToken(
     .eq("id", row.id)
     .then(undefined, () => {});
 
-  const client = await getOAuthClient(row.client_id);
+  let client: OAuthClient | null;
+  try {
+    client = await getOAuthClient(row.client_id);
+  } catch {
+    return { status: "unavailable" };
+  }
   return {
     status: "ok",
     token: {

@@ -2232,10 +2232,10 @@ function unauthorized() {
   );
 }
 
-// Bearer was presented but is expired, revoked, or unknown. Prefer refresh over
-// a full reconnect: omit resource_metadata so clients that treat discovery
-// challenges as "start OAuth" try their refresh token first.
+// Bearer was presented but is expired, revoked, or unknown. Advertising the
+// protected resource lets clients recover through refresh or full OAuth.
 function invalidToken() {
+  const site = getSiteUrl().replace(/\/$/, "");
   return NextResponse.json(
     {
       error: "invalid_token",
@@ -2245,7 +2245,7 @@ function invalidToken() {
       status: 401,
       headers: {
         ...MCP_CORS_HEADERS,
-        "WWW-Authenticate": 'Bearer error="invalid_token"',
+        "WWW-Authenticate": `Bearer error="invalid_token", resource_metadata="${site}/.well-known/oauth-protected-resource/mcp"`,
       },
     }
   );
@@ -2299,6 +2299,12 @@ export async function POST(request: Request) {
   }
 
   const lookup = await lookupOAuthAccessToken(bearer);
+  if (lookup.status === "unavailable") {
+    return NextResponse.json(
+      { error: "Creed authentication is temporarily unavailable." },
+      { status: 503, headers: { ...MCP_CORS_HEADERS, "Retry-After": "5" } },
+    );
+  }
   if (lookup.status !== "ok") {
     return invalidToken();
   }

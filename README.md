@@ -53,7 +53,7 @@ packages/
 ├── creed-cloud/      accounts, billing, Shared, credits, and Cloud routes
 ├── creed-core/       domain types and pure Creed logic
 ├── creed-ui/         reusable interface primitives
-├── persistence/      Supabase clients and canonical migrations
+├── persistence/      shared Supabase clients
 └── integrations/     protocol and third-party integration helpers
 ```
 

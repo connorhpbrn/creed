@@ -25,10 +25,12 @@ test("state polling uses a delta probe, bounded payloads, and slow idle cadence"
 });
 
 test("shared roster and sync tick are server-only RPCs", () => {
-  const baseline = source("../../persistence/supabase/migrations/20260808100000_creed_baseline.sql");
+  const baseline = source("../../../apps/cloud/supabase/migrations/20260815155608_cloud_baseline.sql")
+    .replaceAll('"', "")
+    .toLowerCase();
   assert.match(baseline, /private\.get_member_profiles/);
-  assert.match(baseline, /security invoker/i);
-  assert.match(baseline, /revoke all on function public\.get_member_profiles\(uuid\) from public, anon, authenticated/i);
+  assert.match(baseline, /create or replace function public\.get_member_profiles[\s\S]*select \* from private\.get_member_profiles/);
+  assert.match(baseline, /revoke all on function public\.get_member_profiles\(p_creed_id uuid\) from public/i);
   assert.match(baseline, /touch_creed_sync_tick/);
   assert.match(baseline, /touch_personal_creed_sync_tick/);
   assert.match(baseline, /creed_integrations/);

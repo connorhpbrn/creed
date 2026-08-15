@@ -37,22 +37,21 @@ test("creation validation rejects blank, long, and unknown input", () => {
 });
 
 test("creation migration permits unlimited Personal Creeds and owns the seed atomically", async () => {
-  const baseline = await source("../persistence/supabase/migrations/20260808100000_creed_baseline.sql");
-  const hygiene = await source(
-    "../persistence/supabase/migrations/20260809013000_advisor_hygiene.sql",
-  );
+  const baseline = (await source("../../apps/cloud/supabase/migrations/20260815155608_cloud_baseline.sql"))
+    .replaceAll('"', "")
+    .toLowerCase();
   assert.doesNotMatch(baseline, /creeds_one_personal_per_owner/);
-  assert.match(hygiene, /create or replace function public\.create_owned_creed\(/);
-  assert.match(hygiene, /p_user_id uuid/);
-  assert.match(hygiene, /if p_user_id is null/);
-  assert.match(hygiene, /insert into public\.creeds/);
-  assert.match(hygiene, /insert into public\.creed_members/);
-  assert.match(hygiene, /role\)\s+values \(v_creed_id, p_user_id, 'owner'\)/);
-  assert.match(hygiene, /insert into public\.creed_sections/);
-  assert.match(hygiene, /grant execute on function public\.create_owned_creed\(uuid, text, text\)\s+to service_role/);
+  assert.match(baseline, /create or replace function public\.create_owned_creed\(/i);
+  assert.match(baseline, /p_user_id uuid/i);
+  assert.match(baseline, /if p_user_id is null/i);
+  assert.match(baseline, /insert into public\.creeds/i);
+  assert.match(baseline, /insert into public\.creed_members/i);
+  assert.match(baseline, /role\)\s+values \(v_creed_id, p_user_id, 'owner'\)/i);
+  assert.match(baseline, /insert into public\.creed_sections/i);
+  assert.match(baseline, /grant all on function public\.create_owned_creed\(p_user_id uuid, p_name text, p_type text\) to service_role/i);
   assert.doesNotMatch(
-    hygiene,
-    /grant execute on function public\.create_owned_creed\(uuid, text, text\)\s+to authenticated/,
+    baseline,
+    /grant all on function public\.create_owned_creed[^\n]*to authenticated/,
   );
 });
 

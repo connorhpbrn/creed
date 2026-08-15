@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import {
+  completeAuthorizationCodeExchange,
   getOAuthClient,
   isAllowedRedirectUri,
-  issueTokenPair,
   oauthResource,
-  redeemAuthorizationCode,
   rotateRefreshToken,
+  validateAuthorizationCode,
   type IssuedTokens,
 } from "@/lib/oauth";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -137,7 +137,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const client = await getOAuthClient(clientId);
+  let client;
+  try {
+    client = await getOAuthClient(clientId);
+  } catch {
+    return oauthError("server_error", 503, "OAuth storage is temporarily unavailable.");
+  }
   if (!client) {
     return oauthError("invalid_client", 400, "Unknown client_id.");
   }
@@ -155,7 +160,7 @@ export async function POST(request: Request) {
       return oauthError("invalid_grant", 400, "redirect_uri mismatch.");
     }
 
-    const redeemed = await redeemAuthorizationCode({
+    const redeemed = await validateAuthorizationCode({
       code,
       clientId,
       redirectUri,
@@ -167,13 +172,18 @@ export async function POST(request: Request) {
     }
 
     try {
-      const tokens = await issueTokenPair({
+      const tokens = await completeAuthorizationCodeExchange({
+        code,
         clientId,
         userId: redeemed.userId,
         scope: redeemed.scope,
         creedGrants: redeemed.creedGrants,
         resource: redeemed.resource,
+        alreadyUsed: redeemed.alreadyUsed,
       });
+      if (!tokens) {
+        return oauthError("invalid_grant", 400, "Authorization code was already consumed.");
+      }
       return tokenResponse(tokens);
     } catch {
       return oauthError("server_error", 500, "Could not issue token.");

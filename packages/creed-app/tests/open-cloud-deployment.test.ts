@@ -154,17 +154,17 @@ test("Open setup uses a versioned readiness RPC and deterministic owner record",
   const setup = read("packages/creed-open/lib/open-setup.ts");
   const claim = read("packages/creed-open/app/api/open/claim/route.ts");
   const migration = read(
-    "packages/persistence/supabase/migrations/20260810120000_open_installation_readiness.sql",
-  );
+    "apps/open/supabase/migrations/20260815162526_open_baseline.sql",
+  ).replaceAll('"', "").toLowerCase();
   assert.match(setup, /creed_schema_version/);
   assert.match(claim, /creed_installation/);
   assert.doesNotMatch(claim, /listUsers/);
   assert.match(migration, /create table if not exists public\.creed_installation/);
   assert.match(migration, /revoke all on table public\.creed_installation/);
-  assert.match(migration, /grant select, insert, update on table public\.creed_installation to service_role/);
-  assert.match(migration, /where email = 'owner@creed\.open\.invalid'/);
-  assert.match(migration, /revoke all on function public\.creed_schema_version\(\) from public, anon, authenticated/);
-  assert.match(migration, /grant execute on function public\.creed_schema_version\(\) to service_role/);
+  assert.match(migration, /grant select,insert,[^\n]*update on table public\.creed_installation to service_role/);
+  assert.doesNotMatch(migration, /owner@creed\.open\.invalid/);
+  assert.match(migration, /revoke all on function public\.creed_schema_version\(\) from public/);
+  assert.match(migration, /grant all on function public\.creed_schema_version\(\) to service_role/);
 });
 
 test("Cloud retains managed billing and Shared without leaking them into Open", () => {

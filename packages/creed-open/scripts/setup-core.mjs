@@ -12,7 +12,7 @@ export const REQUIRED_ENVIRONMENT = [
   "CREED_ENCRYPTION_SECRET",
 ];
 
-export const REQUIRED_SCHEMA_VERSION = "20260810120000";
+export const REQUIRED_SCHEMA_VERSION = "20260815162526";
 
 export const openDirectory = resolve(import.meta.dirname, "../../../apps/open");
 export const environmentPath = resolve(openDirectory, ".env.local");

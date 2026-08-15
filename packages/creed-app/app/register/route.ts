@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { registerOAuthClient } from "@/lib/oauth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { isSupabaseAdminConfigured } from "@creed/persistence/supabase/env";
+import { isValidOAuthRedirectUri } from "@creed/integrations/oauth-redirect";
 
 // RFC 7591 Dynamic Client Registration. MCP clients self-register here with no
 // pre-shared id, which is what makes "paste the URL" connect work for any
@@ -19,26 +20,6 @@ const MAX_REDIRECT_URIS = 10;
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
-}
-
-// Block schemes that could execute or smuggle content if a redirect target is
-// ever mishandled. Everything else is allowed.
-const BLOCKED_REDIRECT_SCHEMES = new Set(["javascript", "data", "vbscript", "file"]);
-
-function isValidRedirectUri(value: unknown): value is string {
-  if (typeof value !== "string" || value.length === 0 || value.length > 2048) {
-    return false;
-  }
-  try {
-    const url = new URL(value);
-    // Accept http/https (web + loopback) and custom app schemes. Native MCP
-    // clients like Cursor register a custom-scheme redirect (e.g. cursor://),
-    // which is valid per RFC 8252, so we can't restrict to http/https.
-    const scheme = url.protocol.replace(/:$/, "").toLowerCase();
-    return scheme.length > 0 && !BLOCKED_REDIRECT_SCHEMES.has(scheme);
-  } catch {
-    return false;
-  }
 }
 
 export async function POST(request: Request) {
@@ -82,7 +63,7 @@ export async function POST(request: Request) {
     !Array.isArray(redirectUris) ||
     redirectUris.length === 0 ||
     redirectUris.length > MAX_REDIRECT_URIS ||
-    !redirectUris.every(isValidRedirectUri)
+    !redirectUris.every(isValidOAuthRedirectUri)
   ) {
     return NextResponse.json(
       {
@@ -96,10 +77,18 @@ export async function POST(request: Request) {
   const clientName =
     typeof body.client_name === "string" ? body.client_name : undefined;
 
-  const client = await registerOAuthClient({
-    clientName,
-    redirectUris: redirectUris as string[],
-  });
+  let client;
+  try {
+    client = await registerOAuthClient({
+      clientName,
+      redirectUris: redirectUris as string[],
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "server_error", error_description: "Could not register OAuth client." },
+      { status: 503, headers: CORS_HEADERS },
+    );
+  }
 
   return NextResponse.json(
     {

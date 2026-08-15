@@ -22,7 +22,7 @@ Durable decisions future agents should not reopen casually.
 - Shared packages and Open may not import Cloud.
 - Stripe, hosted accounts, managed credits, feedback, and Shared collaboration are Cloud-only.
 - Supabase remains the durable persistence layer for Open v1.
-- Canonical migrations live in `packages/persistence/supabase/migrations/` and are forward-only.
+- Open and Cloud own separate migration histories in their respective `apps/*/supabase/migrations/` directories. Cloud deploys through the Supabase GitHub integration only after local verification. Open installations apply the Open-only history through setup or manual `db push`. Applied migrations are forward-only.
 - `app/layout.tsx` stays static and does not load user state.
 - Every `/api/app/*` route requires the edition auth adapter. Every `/api/creed/*` route verifies hashed bearer tokens. `/mcp` uses OAuth access tokens.
 - Token columns store ciphertext only. Hash for lookup and decrypt only for authorised use.

@@ -67,6 +67,7 @@ yarn-error.log*
 
 # Supabase CLI temp state (contains the linked project ref + org)
 apps/*/supabase/.temp/
+apps/*/supabase/.branches/
 
 # OS / editor cruft
 *.log

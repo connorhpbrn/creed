@@ -21,7 +21,8 @@ test("welcome show rule treats missing dismissal as show and post-paid dismissal
 
 test("welcome is tracked once per Creed type", async () => {
   const [migration, stripe, layout, shell, dialog, seen] = await Promise.all([
-    source("../persistence/supabase/migrations/20260808150000_welcome_per_creed_type.sql"),
+    source("../../apps/cloud/supabase/migrations/20260815155608_cloud_baseline.sql")
+      .then((sql) => sql.replaceAll('"', "").toLowerCase()),
     source("../creed-cloud/lib/stripe.ts"),
     source("../creed-cloud/app/(creed-app)/layout.tsx"),
     source("components/creed/app-shell-layout.tsx"),

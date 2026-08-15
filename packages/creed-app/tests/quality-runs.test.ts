@@ -20,21 +20,21 @@ const quality = readFileSync(
 );
 const migration = readFileSync(
   new URL(
-    "../../persistence/supabase/migrations/20260811223215_durable_quality_analysis_runs.sql",
+    "../../../apps/cloud/supabase/migrations/20260815155608_cloud_baseline.sql",
     import.meta.url,
   ),
   "utf8",
-);
+).replaceAll('"', "").toLowerCase();
 
 test("quality runs persist a private deduplicated lifecycle", () => {
-  assert.match(migration, /status in \('queued', 'running', 'completed', 'failed'\)/);
+  assert.match(migration, /status = any \(array\['queued'::text, 'running'::text, 'completed'::text, 'failed'::text\]\)/);
   assert.match(migration, /creed_quality_runs_one_active_request_idx/);
-  assert.match(migration, /where status in \('queued', 'running'\)/);
+  assert.match(migration, /where \(status = any \(array\['queued'::text, 'running'::text\]\)\)/);
   assert.match(migration, /creed_quality_runs_one_running_per_creed_idx/);
-  assert.match(migration, /where status = 'running'/);
+  assert.match(migration, /where \(status = 'running'::text\)/);
   assert.match(migration, /alter table public\.creed_quality_runs enable row level security/);
-  assert.match(migration, /revoke all on table public\.creed_quality_runs from anon, authenticated/);
-  assert.match(migration, /status in \('completed', 'failed'\) and request_sections is null/);
+  assert.doesNotMatch(migration, /grant .* on table public\.creed_quality_runs to (?:anon|authenticated)/);
+  assert.match(migration, /status = any \(array\['completed'::text, 'failed'::text\]\)[\s\S]*request_sections is null/);
 });
 
 test("quality execution is detached from the initiating response and resumable", () => {

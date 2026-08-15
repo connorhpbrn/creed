@@ -40,7 +40,7 @@ thin self-hosted composition in `apps/open/`. The pieces most worth scrutinising
   produces silly output is not.
 - **CSP and headers**: `packages/creed-app/lib/csp-policy.ts`, each app's
   `proxy.ts`, and `next.config.ts` define the policy; gaps are in scope.
-- **Supabase RLS policies**: `packages/persistence/supabase/migrations/*.sql`. Any policy
+- **Supabase RLS policies**: `apps/*/supabase/migrations/*.sql`. Any policy
   that lets one signed-in user read or write another user's rows is in
   scope.
 

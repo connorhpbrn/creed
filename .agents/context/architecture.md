@@ -18,7 +18,7 @@ The application code is split by responsibility:
 - `packages/creed-cloud/` contains hosted accounts, Stripe, managed credits, Shared UI and routes, feedback, and Cloud adapters.
 - `packages/creed-core/` contains types and pure domain logic.
 - `packages/creed-ui/` contains reusable interface primitives.
-- `packages/persistence/` contains Supabase clients and canonical forward-only migrations.
+- `packages/persistence/` contains shared Supabase clients.
 - `packages/integrations/` contains protocol and third-party integration helpers.
 
 Open and Cloud are compile-time compositions. There is no runtime deployment flag. `apps/open/edition/*` and `apps/cloud/edition/*` satisfy the same typed adapter boundary with different implementations. Shared packages must never import `@creed/cloud`.
@@ -72,7 +72,7 @@ Open fails closed when configuration or migrations are incomplete. `public.creed
 - Open `requireApiAuth()` requires both the hidden Supabase session and the valid installation-owner cookie.
 - Cloud `requireApiAuth()` uses its hosted Supabase session.
 - `/api/creed/*` verifies hashed scoped bearer tokens.
-- `/mcp` uses OAuth access tokens, discovery metadata, PKCE, and browser consent.
+- `/mcp` uses OAuth access tokens, discovery metadata, PKCE, and browser consent. Authorization-code exchange and refresh rotation are idempotent for bounded retries, and token rows become usable only after their Creed grants are persisted.
 - Open and Cloud re-export one shared, stateless MCP `2026-07-28` endpoint from `packages/creed-app/app/mcp/route.ts`. It uses the official TypeScript v2 server, starts with `server/discover`, requires the per-request metadata envelope, and rejects the legacy initialize/session protocol.
 - Raw connection tokens are encrypted with `CREED_ENCRYPTION_SECRET`; hashes are used for lookup.
 
@@ -80,7 +80,7 @@ Open fails closed when configuration or migrations are incomplete. `public.creed
 
 `CreedState` lives in `packages/creed-core/creed-data.ts`. `CreedProvider` in `packages/creed-app/components/creed/creed-provider.tsx` owns client state and sync.
 
-Supabase is required for Open and Cloud. Canonical migrations live only in `packages/persistence/supabase/migrations/`; each app exposes that directory to the Supabase CLI. Migrations are forward-only. RLS remains the data boundary even though Open currently has one owner.
+Supabase is required for Open and Cloud. Each edition owns an independent forward-only migration history under `apps/<edition>/supabase/migrations/`. Cloud deploys its verified history through the Supabase GitHub integration. Open's installer previews and applies the Open-only history to each self-hosted project. RLS remains the data boundary even though Open currently has one owner.
 
 Quality analysis is a durable server-owned lifecycle. `/api/app/ai/quality` creates a private `creed_quality_runs` row, deduplicated by Creed and request fingerprint, and schedules execution with Next.js `after()` inside the route's five-minute duration. Runs for one Creed execute in creation order so an older snapshot cannot overwrite a newer report. Clients poll the authenticated status endpoint, reload only the committed `creed_quality_reports` baseline after completion, announce runs across tabs with `BroadcastChannel`, and retain focus, visibility, and bounded interval revalidation as recovery paths. Queued work resumes on observation, stale running work is requeued, failed report persistence fails the run, and terminal runs erase their stored section snapshot.
 
@@ -128,4 +128,4 @@ npm test
 npm run build
 ```
 
-When migrations change, also run `supabase db reset` from `apps/open/` against local Supabase. Verify both route manifests and confirm the Open server trace contains no `@creed/cloud` or Stripe modules.
+When Cloud migrations change, run `npm run db:reset --workspace creed-cloud` against local Supabase and confirm `npm run db:migrations --workspace creed-cloud` matches production before merging. When Open migrations change, run `supabase db reset` from `apps/open/`. Verify both route manifests and confirm the Open server trace contains no `@creed/cloud` or Stripe modules.

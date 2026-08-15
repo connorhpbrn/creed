@@ -43,7 +43,7 @@ packages/
 ├── creed-cloud/              accounts, billing, Shared, and Cloud routes
 ├── creed-core/               domain types and pure Creed logic
 ├── creed-ui/                 reusable interface primitives
-├── persistence/              Supabase clients and canonical migrations
+├── persistence/              shared Supabase clients
 └── integrations/             protocol and integration helpers
 .agents/
 ├── context/            versioned internal context pack (read this first)
@@ -202,9 +202,10 @@ npm test                # every workspace test suite passes
 npm run build           # production build must succeed
 ```
 
-If you touched a Supabase migration, run `supabase db reset` from
-`apps/open/` against a local Supabase before pushing. Schema-only PRs that
-haven't been applied will not be merged.
+If you touched a Cloud migration, run `npm run db:reset --workspace
+creed-cloud` and `npm run db:migrations --workspace creed-cloud`. If you
+touched an Open migration, run `supabase db reset` from `apps/open/`.
+Schema-only PRs that have not been applied locally will not be merged.
 
 If you touched the agent contract, paste the universal connection
 prompt into Claude Code or Codex and confirm the agent reads + proposes

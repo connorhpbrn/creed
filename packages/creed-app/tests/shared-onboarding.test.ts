@@ -86,14 +86,14 @@ test("additional Creeds open in the file without a setup divert", async () => {
     source("components/creed/creed-switcher.tsx"),
     source("../creed-cloud/app/api/app/creeds/route.ts"),
     source(
-      "../persistence/supabase/migrations/20260808140000_creed_create_ready.sql",
-    ),
+      "../../apps/cloud/supabase/migrations/20260815155608_cloud_baseline.sql",
+    ).then((sql) => sql.replaceAll('"', "").toLowerCase()),
   ]);
   assert.doesNotMatch(switcher, /\/onboarding\/shared\?creedId=/);
   assert.doesNotMatch(route, /\/onboarding\/shared\?creedId=/);
   assert.match(
     createReady,
-    /onboarding_stage\)\s+values \(p_type, p_name, v_user_id, null\)/,
+    /insert into public\.creeds \(type, name, owner_user_id, onboarding_stage\)[\s\S]*values \(p_type, p_name, p_user_id, null\)/,
   );
   await assert.rejects(source("app/onboarding/additional-creed/page.tsx"));
   await assert.rejects(

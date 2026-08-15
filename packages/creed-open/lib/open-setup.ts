@@ -10,7 +10,7 @@ type SchemaVersionClient = {
   }>;
 };
 
-export const REQUIRED_OPEN_SCHEMA_VERSION = "20260811224331";
+export const REQUIRED_OPEN_SCHEMA_VERSION = "20260815162526";
 const READINESS_CACHE_MS = 15_000;
 
 export type OpenDatabaseReadiness =

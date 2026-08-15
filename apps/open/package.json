@@ -8,6 +8,11 @@
     "dev": "NODE_OPTIONS=--max-http-header-size=65536 next dev -p 3001",
     "build": "next build",
     "start": "NODE_OPTIONS=--max-http-header-size=65536 next start -p 3001",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset --no-seed",
+    "db:migrations": "supabase migration list --local",
+    "db:advisors": "supabase db advisors --local --type all --fail-on error",
     "lint": "eslint",
     "typecheck": "tsc --noEmit -p ."
   },

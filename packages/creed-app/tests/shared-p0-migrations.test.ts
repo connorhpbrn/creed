@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const baseline = readFileSync(
-  new URL("../../persistence/supabase/migrations/20260808100000_creed_baseline.sql", import.meta.url),
+  new URL("../../../apps/cloud/supabase/migrations/20260815155608_cloud_baseline.sql", import.meta.url),
   "utf8",
-);
+).replaceAll('"', "").toLowerCase();
 const creedBackend = readFileSync(
   new URL("../lib/creed-backend.ts", import.meta.url),
   "utf8",
@@ -16,7 +16,7 @@ const mcpRoute = readFileSync(
 );
 
 function tableDefinition(name: string) {
-  const start = baseline.indexOf(`create table public.${name} (`);
+  const start = baseline.indexOf(`create table if not exists public.${name} (`);
   assert.notEqual(start, -1, `missing ${name}`);
   const bodyStart = baseline.indexOf("\n", start) + 1;
   const end = baseline.indexOf("\n);", bodyStart);
@@ -25,7 +25,7 @@ function tableDefinition(name: string) {
 }
 
 test("baseline defines only personal and shared Creed types", () => {
-  assert.match(baseline, /check \(type in \('personal', 'shared'\)\)/);
+  assert.match(baseline, /creeds_type_check[^\n]*type = any \(array\['personal'::text, 'shared'::text\]\)/);
   assert.match(baseline, /primary key \(creed_id, section_id\)/);
   assert.doesNotMatch(baseline, /company/i);
 });
@@ -58,18 +58,15 @@ test("onboarding writes are owner-checked atomic RPC actions", () => {
   }
   assert.match(
     baseline,
-    /revoke all on function public\.apply_creed_onboarding_action[\s\S]*from public, anon, authenticated/,
+    /revoke all on function public\.apply_creed_onboarding_action[\s\S]*from public/,
   );
-  assert.match(
-    baseline,
-    /grant execute on function public\.apply_creed_onboarding_action[\s\S]*to service_role/,
-  );
+  assert.match(baseline, /grant all on function public\.apply_creed_onboarding_action[\s\S]*to service_role/);
 });
 
 test("Creed token changes touch their exact Personal or Shared Creed", () => {
   assert.match(
     baseline,
-    /create trigger touch_creed_sync_tick\s+after insert or update or delete on public\.creed_tokens\s+for each row execute function private\.touch_creed_sync_tick\(\)/,
+    /create or replace trigger touch_creed_sync_tick\s+after insert or delete or update on public\.creed_tokens\s+for each row execute function private\.touch_creed_sync_tick\(\)/,
   );
   assert.doesNotMatch(
     baseline,
@@ -80,9 +77,9 @@ test("Creed token changes touch their exact Personal or Shared Creed", () => {
 test("credit spend aggregate is no longer callable by authenticated clients", () => {
   assert.match(
     baseline,
-    /revoke all on function public\.credit_spend_total\(uuid\) from public, anon, authenticated/,
+    /revoke all on function public\.credit_spend_total\(p_creed_id uuid\) from public/,
   );
-  assert.match(baseline, /grant execute on function public\.credit_spend_total\(uuid\) to service_role/);
+  assert.match(baseline, /grant all on function public\.credit_spend_total\(p_creed_id uuid\) to service_role/);
 });
 
 test("credits are exclusively Creed scoped", () => {
@@ -124,12 +121,12 @@ test("mcp read usage increments by Creed scope", () => {
   );
   assert.match(
     baseline,
-    /revoke all on function public\.increment_mcp_read_for_creed\(uuid, uuid, text, date\) from public, anon, authenticated/,
+    /revoke all on function public\.increment_mcp_read_for_creed\(p_creed_id uuid, p_reader_user_id uuid, p_client_id text, p_day date\) from public/,
   );
 });
 
 test("HTTP credentials are keyed and resolved by Creed", () => {
-  assert.match(tableDefinition("creed_tokens"), /\bcreed_id uuid primary key\b/);
+  assert.match(baseline, /creed_tokens_pkey primary key \(creed_id\)/);
   assert.match(creedBackend, /\.select\("user_id, creed_id"\)/);
   assert.match(creedBackend, /loadCreedState\(db, userData\.user, \{[\s\S]*creedId,/);
   assert.match(creedBackend, /ensureTokenRow\(db, user\.id, personalCreedId\)/);

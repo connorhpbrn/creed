@@ -12,6 +12,7 @@ const eslintConfig = defineConfig([
     ".next-*.nosync/**",
     "out/**",
     "build/**",
+    "supabase/.temp/**",
     "next-env.d.ts",
   ]),
   {

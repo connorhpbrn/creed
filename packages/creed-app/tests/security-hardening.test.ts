@@ -208,17 +208,17 @@ test("the consent screen degrades to a message instead of the error boundary", (
 
 test("OAuth baseline keeps resources portable and cleanup serialized", () => {
   const migration = readFileSync(
-    new URL("../../persistence/supabase/migrations/20260808100000_creed_baseline.sql", import.meta.url),
+    new URL("../../../apps/cloud/supabase/migrations/20260815155608_cloud_baseline.sql", import.meta.url),
     "utf8",
-  );
+  ).replaceAll('"', "").toLowerCase();
 
   assert.match(
     migration,
-    /create table public\.oauth_authorization_codes \([\s\S]*resource text[\s\S]*\);/i,
+    /create table if not exists public\.oauth_authorization_codes \([\s\S]*resource text[\s\S]*\);/i,
   );
   assert.match(
     migration,
-    /create table public\.oauth_tokens \([\s\S]*resource text[\s\S]*\);/i,
+    /create table if not exists public\.oauth_tokens \([\s\S]*resource text[\s\S]*\);/i,
   );
   assert.match(migration, /pg_advisory_xact_lock/i);
   assert.match(migration, /DELETE FROM public\.oauth_authorization_codes/i);
