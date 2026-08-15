@@ -122,10 +122,13 @@ test("nonce and inline policies stay mutually exclusive", () => {
   assert.deepEqual(directives(withNonce), directives(withoutNonce));
 });
 
-test("OAuth consent CSP allows https and cursor form redirects", () => {
+test("OAuth consent CSP allows https, loopback http, and cursor form redirects", () => {
   const consent = contentSecurityPolicy("abc123", { oauthConsent: true });
   const app = contentSecurityPolicy("abc123");
-  assert.match(consent, /form-action 'self' https: cursor:/);
+  assert.match(
+    consent,
+    /form-action 'self' https: http:\/\/localhost:\* http:\/\/127\.0\.0\.1:\* http:\/\/\[::1\]:\* cursor:/,
+  );
   assert.match(app, /form-action 'self'/);
   assert.doesNotMatch(app, /form-action 'self' https:/);
 });
