@@ -65,6 +65,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 // Cross-origin: MCP clients call this endpoint from their own HTTP stack and
 // may send a CORS preflight. Allow it; auth is per-request via the bearer token.
@@ -2351,14 +2352,39 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: MCP_CORS_HEADERS });
 }
 
-export async function GET(request: Request) {
-  // Cursor and other streamable-HTTP clients open GET as SSE (and as the
-  // unauthenticated probe that must return 401 + WWW-Authenticate). JSON-RPC
-  // stays on POST. A 405 here is treated as a dead server.
-  const auth = await authenticateMcpRequest(request);
-  if (!auth.ok) return auth.response;
-
-  return new NextResponse("retry: 15000\n\n: connected\n\n", {
+function mcpSseResponse(request: Request) {
+  // SSE transports need GET to stay a live event stream. A JSON 401 here is
+  // treated as a dead server, so this stream carries no Creed data and no
+  // session. OAuth and JSON-RPC stay on POST. The endpoint event names the
+  // same URL.
+  const encoder = new TextEncoder();
+  const endpoint = oauthResource();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(`event: endpoint\ndata: ${endpoint}\n\nretry: 15000\n\n: connected\n\n`),
+      );
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": keepalive\n\n"));
+        } catch {
+          clearInterval(heartbeat);
+        }
+      }, 15_000);
+      const stop = () => {
+        clearInterval(heartbeat);
+        clearTimeout(lifetime);
+        try {
+          controller.close();
+        } catch {
+          // The client already dropped the stream.
+        }
+      };
+      const lifetime = setTimeout(stop, 55_000);
+      request.signal.addEventListener("abort", stop, { once: true });
+    },
+  });
+  return new NextResponse(stream, {
     status: 200,
     headers: {
       ...MCP_CORS_HEADERS,
@@ -2368,6 +2394,26 @@ export async function GET(request: Request) {
       "Mcp-Protocol-Version": "2026-07-28",
     },
   });
+}
+
+export async function GET(request: Request) {
+  const callerIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const verdict = await checkRateLimit({
+    scope: "creed-mcp-sse",
+    identifier: callerIp,
+    limit: 60,
+    windowMs: 60_000,
+  });
+  if (!verdict.ok) {
+    return NextResponse.json(
+      { error: "Too many requests." },
+      {
+        status: 429,
+        headers: { ...MCP_CORS_HEADERS, "Retry-After": String(verdict.retryAfterSeconds) },
+      },
+    );
+  }
+  return mcpSseResponse(request);
 }
 
 export async function POST(request: Request) {
