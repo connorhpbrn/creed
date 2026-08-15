@@ -72,12 +72,14 @@ export function contentSecurityPolicy(
   // Consent Allow POSTs to /authorize/decision, then 303s to the MCP client's
   // redirect_uri. Chromium applies form-action across that entire redirect
   // chain, so 'self' alone blocks Allow even though the form action is
-  // same-origin. Desktop Cursor currently callbacks on loopback HTTP
-  // (localhost / 127.0.0.1 / ::1); https: covers web clients and cursor: the
-  // native deeplink fallback. Redirect targets are still validated
-  // server-side against the registered client.
+  // same-origin. Scheme sources are required: host forms like
+  // http://[::1]:* are invalid in Chromium and get dropped, which blocks
+  // Cursor's loopback callback. https: covers web clients, http: covers
+  // 127.0.0.1 / localhost / ::1, and cursor: the native deeplink fallback.
+  // Redirect targets are still validated server-side against the registered
+  // client.
   const formAction = options?.oauthConsent
-    ? "form-action 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:* cursor:"
+    ? "form-action 'self' https: http: cursor:"
     : "form-action 'self'";
 
   return [
