@@ -38,3 +38,22 @@ test("MCP mode keeps each agent's native connection actions", () => {
   assert.equal(presentation.primary?.label, "Copy prompt");
   assert.equal(presentation.secondary?.label, "Copy TOML");
 });
+
+test("Cursor MCP config selects streamable HTTP", () => {
+  const presentation = getConnectionPresentation("cursor", "https://creed.md/mcp");
+  const expected = {
+    mcpServers: { creed: { type: "http", url: "https://creed.md/mcp" } },
+  };
+
+  assert.equal(presentation.primary?.kind, "install");
+  assert.match(
+    presentation.primary?.href ?? "",
+    /config=/,
+  );
+  const href = new URL(presentation.primary?.href ?? "https://cursor.com/");
+  const config = JSON.parse(
+    Buffer.from(href.searchParams.get("config") ?? "", "base64").toString("utf8"),
+  ) as { type?: string; url?: string };
+  assert.deepEqual(config, { type: "http", url: "https://creed.md/mcp" });
+  assert.equal(presentation.secondary?.value, JSON.stringify(expected, null, 2));
+});

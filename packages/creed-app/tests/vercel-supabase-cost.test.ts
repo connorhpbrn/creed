@@ -42,6 +42,8 @@ test("MCP uses one modern stateless handler without self-fetches", () => {
   assert.match(mcp, /createMcpHandler/);
   assert.match(mcp, /legacy: "reject"/);
   assert.doesNotMatch(mcp, /Mcp-Session-Id/);
+  assert.doesNotMatch(mcp, /status: 405/);
+  assert.match(mcp, /text\/event-stream/);
   assert.match(mcp, /after\(async \(\) =>/);
 });
 

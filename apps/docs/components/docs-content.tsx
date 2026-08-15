@@ -248,7 +248,17 @@ npm run doctor`}</DocsCommand>
         <h3>OpenCode</h3>
         <DocsCommand>opencode mcp auth creed</DocsCommand>
         <p>Add Creed as a remote HTTP server in <InlineCode>opencode.json</InlineCode> before authorising.</p>
-        <h3>ChatGPT, Claude, Cursor, and other clients</h3>
+        <h3>Cursor</h3>
+        <p>Use Add MCP on Connections, or add this to Cursor MCP settings. Authorise in the browser window Cursor opens.</p>
+        <DocsCommand>{`{
+  "mcpServers": {
+    "creed": {
+      "type": "http",
+      "url": "https://your-creed.example/mcp"
+    }
+  }
+}`}</DocsCommand>
+        <h3>ChatGPT, Claude, and other clients</h3>
         <p>Add a custom remote MCP server using the URL shown on Connections. The application provides the exact connector action or configuration for supported clients.</p>
       </>
     ),

@@ -60,14 +60,13 @@ export function getConnectionPresentation(
 
   switch (connectionId) {
     case "cursor": {
-      // Cursor one-click install. The config is the minimal remote-server
-      // shape from Cursor's docs ({url} only - presence of `url` selects HTTP
-      // transport and Cursor runs the OAuth flow itself, so no token is
-      // embedded). The https://cursor.com/install-mcp link takes the same
-      // base64 config as the cursor:// deeplink but also works where the OS
-      // scheme handler doesn't (browsers, Cursor's web/agents views) and
-      // hands off to the app.
-      const config = btoa(JSON.stringify({ url: mcpUrl }));
+      // Cursor one-click install. `type: "http"` selects streamable HTTP;
+      // `{ url }` alone still opens SSE GET, which is not the RPC path.
+      // Cursor runs OAuth itself, so no token is embedded. The
+      // https://cursor.com/install-mcp link takes the same base64 config as
+      // the cursor:// deeplink but also works where the OS scheme handler
+      // doesn't (browsers, Cursor's web/agents views) and hands off to the app.
+      const config = btoa(JSON.stringify({ type: "http", url: mcpUrl }));
       return {
         primary: {
           kind: "install",
@@ -78,7 +77,7 @@ export function getConnectionPresentation(
           kind: "copy",
           label: "Copy JSON",
           value: JSON.stringify(
-            { mcpServers: { creed: { url: mcpUrl } } },
+            { mcpServers: { creed: { type: "http", url: mcpUrl } } },
             null,
             2,
           ),

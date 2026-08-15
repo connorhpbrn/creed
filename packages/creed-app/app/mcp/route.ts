@@ -35,7 +35,11 @@ import { minPermission, resolveSectionPermission } from "@creed/core/creed-permi
 import { listUserCreeds } from "@/lib/creed-membership";
 import { authorizeAuthenticatedUser } from "@creed/edition/auth";
 import { CREED_PROMPTS } from "@creed/core/creed-prompts";
-import { lookupOAuthAccessToken, oauthResource } from "@/lib/oauth";
+import {
+  lookupOAuthAccessToken,
+  oauthResource,
+  type ResolvedAccessToken,
+} from "@/lib/oauth";
 import {
   oauthPermissionCeiling,
   parseOAuthMcpScopes,
@@ -2251,30 +2255,30 @@ function invalidToken() {
   );
 }
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: MCP_CORS_HEADERS });
-}
+type McpAuthSuccess = {
+  ok: true;
+  bearer: string;
+  resolved: ResolvedAccessToken;
+  user: User;
+  admin: ReturnType<typeof getSupabaseAdminClient>;
+};
 
-export async function GET() {
-  // Modern Creed exchanges and subscriptions start with POST. There is no
-  // session endpoint or standalone server-to-client stream on GET.
-  return new NextResponse(null, {
-    status: 405,
-    headers: { ...MCP_CORS_HEADERS, Allow: "POST, OPTIONS" },
-  });
-}
-
-export async function POST(request: Request) {
+async function authenticateMcpRequest(
+  request: Request,
+): Promise<{ ok: false; response: NextResponse } | McpAuthSuccess> {
   if (!isSupabaseAdminConfigured()) {
-    return NextResponse.json(
-      { error: "Supabase admin configuration is missing." },
-      { status: 503, headers: MCP_CORS_HEADERS }
-    );
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Supabase admin configuration is missing." },
+        { status: 503, headers: MCP_CORS_HEADERS },
+      ),
+    };
   }
 
   const bearer = getBearerToken(request);
   if (!bearer) {
-    return unauthorized();
+    return { ok: false, response: unauthorized() };
   }
 
   // Limit unauthenticated token probes before any database or Auth Admin work.
@@ -2289,42 +2293,88 @@ export async function POST(request: Request) {
     windowMs: 60_000,
   });
   if (!authVerdict.ok) {
-    return NextResponse.json(
-      { error: "Too many requests." },
-      {
-        status: 429,
-        headers: { ...MCP_CORS_HEADERS, "Retry-After": String(authVerdict.retryAfterSeconds) },
-      },
-    );
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Too many requests." },
+        {
+          status: 429,
+          headers: { ...MCP_CORS_HEADERS, "Retry-After": String(authVerdict.retryAfterSeconds) },
+        },
+      ),
+    };
   }
 
   const lookup = await lookupOAuthAccessToken(bearer);
   if (lookup.status === "unavailable") {
-    return NextResponse.json(
-      { error: "Creed authentication is temporarily unavailable." },
-      { status: 503, headers: { ...MCP_CORS_HEADERS, "Retry-After": "5" } },
-    );
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Creed authentication is temporarily unavailable." },
+        { status: 503, headers: { ...MCP_CORS_HEADERS, "Retry-After": "5" } },
+      ),
+    };
   }
   if (lookup.status !== "ok") {
-    return invalidToken();
+    return { ok: false, response: invalidToken() };
   }
   const resolved = lookup.token;
   if (resolved.resource !== null && resolved.resource !== oauthResource()) {
-    return invalidToken();
+    return { ok: false, response: invalidToken() };
   }
-  const userId = resolved.userId;
 
   const admin = getSupabaseAdminClient();
-  const { data: userData, error: userError } = await admin.auth.admin.getUserById(userId);
+  const { data: userData, error: userError } = await admin.auth.admin.getUserById(resolved.userId);
   if (userError || !userData.user) {
-    return NextResponse.json(
-      { error: userError?.message ?? "Could not load Creed account." },
-      { status: 500, headers: MCP_CORS_HEADERS }
-    );
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: userError?.message ?? "Could not load Creed account." },
+        { status: 500, headers: MCP_CORS_HEADERS },
+      ),
+    };
   }
   if (!(await authorizeAuthenticatedUser(userData.user))) {
-    return invalidToken();
+    return { ok: false, response: invalidToken() };
   }
+
+  return {
+    ok: true,
+    bearer,
+    resolved,
+    user: userData.user as User,
+    admin,
+  };
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: MCP_CORS_HEADERS });
+}
+
+export async function GET(request: Request) {
+  // Cursor and other streamable-HTTP clients open GET as SSE (and as the
+  // unauthenticated probe that must return 401 + WWW-Authenticate). JSON-RPC
+  // stays on POST. A 405 here is treated as a dead server.
+  const auth = await authenticateMcpRequest(request);
+  if (!auth.ok) return auth.response;
+
+  return new NextResponse("retry: 15000\n\n: connected\n\n", {
+    status: 200,
+    headers: {
+      ...MCP_CORS_HEADERS,
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "Mcp-Protocol-Version": "2026-07-28",
+    },
+  });
+}
+
+export async function POST(request: Request) {
+  const auth = await authenticateMcpRequest(request);
+  if (!auth.ok) return auth.response;
+  const { bearer, resolved, user, admin } = auth;
+  const userId = resolved.userId;
 
   let body: JsonRpcRequest | JsonRpcRequest[];
   try {
@@ -2367,7 +2417,7 @@ export async function POST(request: Request) {
   // load read-only. MCP only needs recent activity + a tight proposal cap.
   const resolvedState = await resolveMcpState(
     admin as unknown as SupabaseLikeClient,
-    userData.user as unknown as { id: string } & Record<string, unknown>,
+    user as unknown as { id: string } & Record<string, unknown>,
     resolved.tokenId,
     requests
   );
@@ -2432,7 +2482,7 @@ export async function POST(request: Request) {
   const handler = createCreedMcpHandler({
     request,
     state,
-    user: userData.user as User,
+    user,
     clientName,
     scopes,
   });

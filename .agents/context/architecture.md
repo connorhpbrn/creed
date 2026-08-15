@@ -73,7 +73,7 @@ Open fails closed when configuration or migrations are incomplete. `public.creed
 - Cloud `requireApiAuth()` uses its hosted Supabase session.
 - `/api/creed/*` verifies hashed scoped bearer tokens.
 - `/mcp` uses OAuth access tokens, discovery metadata, PKCE, and browser consent. Authorization-code exchange and refresh rotation are idempotent for bounded retries, and token rows become usable only after their Creed grants are persisted.
-- Open and Cloud re-export one shared, stateless MCP `2026-07-28` endpoint from `packages/creed-app/app/mcp/route.ts`. It uses the official TypeScript v2 server, starts with `server/discover`, requires the per-request metadata envelope, and rejects the legacy initialize/session protocol.
+- Open and Cloud re-export one shared, stateless MCP `2026-07-28` endpoint from `packages/creed-app/app/mcp/route.ts`. It uses the official TypeScript v2 server, starts with `server/discover`, requires the per-request metadata envelope, and rejects the legacy initialize/session protocol. Unauthenticated `GET /mcp` returns 401 with `WWW-Authenticate` so clients can start OAuth. Authenticated `GET /mcp` serves a short streamable-HTTP SSE stream. JSON-RPC stays on `POST`.
 - Raw connection tokens are encrypted with `CREED_ENCRYPTION_SECRET`; hashes are used for lookup.
 
 ## Product state and persistence
