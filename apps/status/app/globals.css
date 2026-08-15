@@ -92,6 +92,10 @@ body {
   font-feature-settings: "kern" 1;
 }
 
+button:not(:disabled):not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
 .tabular {
   font-variant-numeric: tabular-nums;
 }

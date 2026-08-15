@@ -24,10 +24,10 @@ import { CreedWordmark, IntegrationGlyph } from "@/components/creed/brand";
 import { ComposePromptCard } from "@/components/creed/compose-prompt-card";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
 import {
+  CreedDiffView,
   DiffBadge,
-  computeDiffParts,
-  summarizeDiff,
 } from "@/components/creed/inline-proposal-diff";
+import { computeCreedDiff } from "@/lib/creed-diff";
 import { RichTextEditor } from "@/components/creed/rich-text-editor";
 import { useStripeCheckout } from "@creed/cloud/components/marketing/use-stripe-checkout";
 import {
@@ -1192,7 +1192,7 @@ function AttributionCard() {
 }
 
 // Explainer: proposals. Mirrors the real InlineProposalDiff chrome (agent
-// attribution row, word-level diff, +N/−N badges, blue Accept) so the teaching
+// attribution row, line diff, +N/−N badges, blue Accept) so the teaching
 // card matches what an owner actually approves in the editor. Same component
 // shape as the personal onboarding's ProposalCard.
 
@@ -1200,11 +1200,10 @@ const PROPOSAL_EXISTING = "Bad Engine, Creed.";
 const PROPOSAL_PROPOSED = "Bad Engine, Creed, the Q3 launch.";
 
 function ProposalCard() {
-  const parts = useMemo(
-    () => computeDiffParts(PROPOSAL_EXISTING, PROPOSAL_PROPOSED),
+  const diff = useMemo(
+    () => computeCreedDiff(PROPOSAL_EXISTING, PROPOSAL_PROPOSED),
     [],
   );
-  const stats = useMemo(() => summarizeDiff(parts), [parts]);
 
   return (
     <motion.div
@@ -1230,8 +1229,8 @@ function ProposalCard() {
           </span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
           <span className="inline-flex items-center gap-1">
-            <DiffBadge tone="added" count={stats.added} size="md" />
-            <DiffBadge tone="removed" count={stats.removed} size="md" />
+            <DiffBadge tone="added" count={diff.added} size="md" />
+            <DiffBadge tone="removed" count={diff.removed} size="md" />
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -1246,24 +1245,8 @@ function ProposalCard() {
         </div>
       </div>
       <div className="border-t border-[var(--creed-border)]" />
-      <div className="creed-diff-block px-4 py-3">
-        {parts.map((part, index) => {
-          if (part.added) {
-            return (
-              <span key={index} className="creed-diff-add">
-                {part.value}
-              </span>
-            );
-          }
-          if (part.removed) {
-            return (
-              <span key={index} className="creed-diff-remove">
-                {part.value}
-              </span>
-            );
-          }
-          return <span key={index}>{part.value}</span>;
-        })}
+      <div className="creed-diff-block py-3">
+        <CreedDiffView diff={diff} />
       </div>
     </motion.div>
   );
@@ -1442,11 +1425,10 @@ function ControlActivityRow({
   open: boolean;
   index: number;
 }) {
-  const parts = useMemo(
-    () => computeDiffParts(item.before, item.after),
+  const diff = useMemo(
+    () => computeCreedDiff(item.before, item.after),
     [item.after, item.before],
   );
-  const stats = useMemo(() => summarizeDiff(parts), [parts]);
 
   return (
     <motion.div
@@ -1502,8 +1484,8 @@ function ControlActivityRow({
             <span className="truncate">{item.actor}</span>
             <span className="inline-flex items-center gap-1">
               <span className="text-[var(--creed-text-tertiary)]">·</span>
-              <DiffBadge tone="added" count={stats.added} />
-              <DiffBadge tone="removed" count={stats.removed} />
+              <DiffBadge tone="added" count={diff.added} />
+              <DiffBadge tone="removed" count={diff.removed} />
             </span>
           </div>
         </div>
@@ -1515,24 +1497,8 @@ function ControlActivityRow({
       {open ? (
         <div className="mt-3 overflow-hidden">
           <div className="-mx-3 border-t border-[var(--creed-border)]" />
-          <div className="creed-diff-block -mx-3 max-h-32 overflow-y-auto px-4 py-3">
-            {parts.map((part, partIndex) => {
-              if (part.added) {
-                return (
-                  <span key={partIndex} className="creed-diff-add">
-                    {part.value}
-                  </span>
-                );
-              }
-              if (part.removed) {
-                return (
-                  <span key={partIndex} className="creed-diff-remove">
-                    {part.value}
-                  </span>
-                );
-              }
-              return <span key={partIndex}>{part.value}</span>;
-            })}
+          <div className="creed-diff-block -mx-3 max-h-32 overflow-y-auto py-3">
+            <CreedDiffView diff={diff} />
           </div>
         </div>
       ) : null}

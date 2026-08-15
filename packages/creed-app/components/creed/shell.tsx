@@ -27,6 +27,14 @@ import { CpuIcon } from "@creed/ui/cpu";
 import { FileTextIcon } from "@creed/ui/file-text";
 import { LayoutGridIcon } from "@creed/ui/layout-grid";
 import { LogoutIcon } from "@creed/ui/logout";
+import {
+  PanelLeftCloseIcon,
+  type PanelLeftCloseIconHandle,
+} from "@creed/ui/panel-left-close";
+import {
+  PanelLeftOpenIcon,
+  type PanelLeftOpenIconHandle,
+} from "@creed/ui/panel-left-open";
 import { SettingsIcon } from "@creed/ui/settings";
 import { UserIcon } from "@creed/ui/user";
 import { useAnimatedIconControls } from "@/components/creed/animated-icon-controls";
@@ -188,6 +196,8 @@ export function CreedShell({
     "status" | "feedback" | null
   >(null);
   const searchIconRef = useRef<SearchIconHandle | null>(null);
+  const closeSidebarIconRef = useRef<PanelLeftCloseIconHandle | null>(null);
+  const openSidebarIconRef = useRef<PanelLeftOpenIconHandle | null>(null);
   const agentRun = useSyncExternalStore(subscribeAgentRunner, getAgentRunnerSnapshot, getAgentRunnerServerSnapshot);
   const agentBusy = agentRun.status === "working" || agentRun.status === "applying";
   // The launcher badge doubles as the agent's background status light: blue
@@ -209,6 +219,16 @@ export function CreedShell({
     setCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
   }, []);
 
+  const toggleSidebar = useCallback(() => {
+    setCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.key !== "s" && event.key !== "S") || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
@@ -216,17 +236,11 @@ export function CreedShell({
       if (!target || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable) return;
       if (event.isComposing || event.repeat || event.defaultPrevented) return;
       event.preventDefault();
-      setCollapsed((current) => {
-        const next = !current;
-        try {
-          window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
-        } catch {}
-        return next;
-      });
+      toggleSidebar();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [toggleSidebar]);
   const fileActionsRef = useRef<ShellFileActions>({});
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const visibleSidebarSections = useMemo(
@@ -461,6 +475,7 @@ export function CreedShell({
         )}
       >
         <aside
+          id="creed-sidebar"
           className={cn(
             "h-dvh overflow-hidden border-r border-[var(--creed-border)] bg-[var(--creed-surface)] px-1.5 py-3",
             !collapsed && "lg:px-5 lg:py-5"
@@ -478,7 +493,7 @@ export function CreedShell({
               <CreedMark />
             </Link>
 
-            <div className={cn("hidden", !collapsed && "lg:flex lg:items-center lg:justify-between lg:gap-3 lg:pr-2")}>
+            <div className={cn("hidden", !collapsed && "lg:flex lg:items-center lg:justify-between lg:gap-3")}>
               <Link
                 href="/home"
                 aria-label="Creed home"
@@ -486,11 +501,50 @@ export function CreedShell({
               >
                 <CreedWordmark className="ml-0" />
               </Link>
-              <ShortcutKey className="hidden lg:inline-flex">S</ShortcutKey>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <ShortcutKey>S</ShortcutKey>
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  onMouseEnter={() => closeSidebarIconRef.current?.startAnimation()}
+                  onMouseLeave={() => closeSidebarIconRef.current?.stopAnimation()}
+                  aria-label="Collapse sidebar"
+                  aria-controls="creed-sidebar"
+                  aria-expanded="true"
+                  className={cn(
+                    "group flex h-7 w-7 items-center justify-center rounded-sm text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+                    SIDEBAR_PRESS_CLASS,
+                  )}
+                >
+                  <PanelLeftCloseIcon
+                    ref={closeSidebarIconRef}
+                    size={16}
+                    className="flex h-4 w-4 items-center justify-center"
+                  />
+                </button>
+              </div>
             </div>
 
             <div className={cn("hidden justify-center pt-4", collapsed && "lg:flex")}>
-              <ShortcutKey>S</ShortcutKey>
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                onMouseEnter={() => openSidebarIconRef.current?.startAnimation()}
+                onMouseLeave={() => openSidebarIconRef.current?.stopAnimation()}
+                aria-label="Expand sidebar"
+                aria-controls="creed-sidebar"
+                aria-expanded="false"
+                className={cn(
+                  "group flex h-8 w-8 items-center justify-center rounded-sm text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
+                  SIDEBAR_PRESS_CLASS,
+                )}
+              >
+                <PanelLeftOpenIcon
+                  ref={openSidebarIconRef}
+                  size={16}
+                  className="flex h-4 w-4 items-center justify-center"
+                />
+              </button>
             </div>
 
             <nav className={cn("mt-5 space-y-1", !collapsed && "lg:mt-8")}>

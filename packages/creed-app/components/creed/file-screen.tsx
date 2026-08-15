@@ -116,14 +116,17 @@ import { NexusView, type NexusViewState } from "@/components/creed/nexus-view";
 import { LockLabel } from "@/components/creed/lock-label";
 import { CreedFindReplace } from "@/components/creed/find-replace";
 import {
+  CreedDiffView,
   DiffBadge,
   InlineMetaProposal,
   InlineNewSectionProposal,
   InlineProposalDiff,
-  computeDiffParts,
-  htmlToText,
-  summarizeDiff,
 } from "@/components/creed/inline-proposal-diff";
+import {
+  computeCreedDiff,
+  hasDiffChanges,
+  type CreedDiff,
+} from "@/lib/creed-diff";
 import { ReviewPill } from "@/components/creed/review-pill";
 import {
   FileActivityRailFrame,
@@ -463,26 +466,19 @@ function SmoothExpand({
 const CHEVRON_CLASS =
   "h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]";
 
-// One row in a push / pull preview. Modified sections render the accent-tinted
-// diff dropdown; added / removed sections render the clean green / red
-// dashed-border dropdown (same language as the inline proposal cards) that
-// expands to show the content being added or deleted - no diff.
+// Added and removed sections use the same structural treatment as proposals,
+// while modified sections retain their section accent around the shared diff.
 function SectionChangeRow({ change }: { change: SectionChange }) {
   const [expanded, setExpanded] = useState(false);
   const { kind, name, accent } = change;
 
-  const parts = useMemo(
-    () =>
-      kind === "modified"
-        ? computeDiffParts(change.existingContent, change.nextContent)
-        : [],
-    [kind, change.existingContent, change.nextContent],
+  const diff = useMemo(
+    () => computeCreedDiff(change.existingContent, change.nextContent),
+    [change.existingContent, change.nextContent],
   );
-  const stats = useMemo(() => summarizeDiff(parts), [parts]);
 
   if (kind === "added" || kind === "removed") {
     const added = kind === "added";
-    const content = added ? change.nextContent : change.existingContent;
     const containerClass = added
       ? "border-[#10b981]/35 bg-[#ECFDF5]/40 dark:border-[#22c55e]/35 dark:bg-[#052e1a]/40"
       : "border-[#dc2626]/35 bg-[#FEF2F2]/40 dark:border-[#ef4444]/35 dark:bg-[#7f1d1d]/15";
@@ -515,9 +511,9 @@ function SectionChangeRow({ change }: { change: SectionChange }) {
               )}
             >
               <span className="font-mono leading-none">
-                {added ? "+" : "−"}
+                {added ? `+${diff.added}` : `−${diff.removed}`}
               </span>
-              {added ? "Added" : "Removed"}
+              lines
             </span>
             <ChevronDown
               className={cn(
@@ -530,15 +526,13 @@ function SectionChangeRow({ change }: { change: SectionChange }) {
         </button>
         <SmoothExpand open={expanded}>
           <div className={cn("border-t", dividerClass)} />
-          <div className="creed-diff-block px-4 py-3 text-[14px] leading-7 text-[var(--creed-text-primary)]">
-            {htmlToText(content) || "(empty)"}
+          <div className="creed-diff-block py-2 text-[14px] leading-7 text-[var(--creed-text-primary)]">
+            <CreedDiffView diff={diff} />
           </div>
         </SmoothExpand>
       </div>
     );
   }
-
-  const unchanged = stats.added === 0 && stats.removed === 0;
 
   return (
     // Modified: one accent-tinted block where the header and the expanded
@@ -563,8 +557,8 @@ function SectionChangeRow({ change }: { change: SectionChange }) {
           {/* The +/- numbers sit in their own surface-coloured mini card so
               they stay legible on top of the section's accent tint. */}
           <span className="inline-flex items-center gap-1.5 rounded-[7px] bg-[var(--creed-surface)] px-2 py-1">
-            <DiffBadge tone="added" count={stats.added} />
-            <DiffBadge tone="removed" count={stats.removed} />
+            <DiffBadge tone="added" count={diff.added} />
+            <DiffBadge tone="removed" count={diff.removed} />
           </span>
           <ChevronDown
             className={cn(CHEVRON_CLASS, expanded ? "rotate-0" : "-rotate-90")}
@@ -578,29 +572,7 @@ function SectionChangeRow({ change }: { change: SectionChange }) {
             section's accent tint. */}
         <div className="px-2 pb-2">
           <div className="creed-diff-block rounded-sm bg-[var(--creed-surface)] px-3.5 py-3">
-            {unchanged ? (
-              <span className="text-[var(--creed-text-tertiary)]">
-                No textual change
-              </span>
-            ) : (
-              parts.map((part, index) => {
-                if (part.added) {
-                  return (
-                    <span key={index} className="creed-diff-add">
-                      {part.value}
-                    </span>
-                  );
-                }
-                if (part.removed) {
-                  return (
-                    <span key={index} className="creed-diff-remove">
-                      {part.value}
-                    </span>
-                  );
-                }
-                return <span key={index}>{part.value}</span>;
-              })
-            )}
+            <CreedDiffView diff={diff} />
           </div>
         </div>
       </SmoothExpand>
@@ -4293,6 +4265,7 @@ function SectionCard({
                         proposal={p}
                         existingName={section.name}
                         existingAccent={accentColorMap[section.accent]}
+                        existingContent={section.content}
                         agentName={p.agentName}
                         canReview={canReview}
                         onAccept={() => onAcceptProposal(p.id)}
@@ -4790,11 +4763,15 @@ const ActivityRailContent = memo(function ActivityRailContent({
                         const liveSection = sectionsById.get(entry.sectionId);
                         const liveExistingContent =
                           entry.status === "pending"
-                            ? liveSection?.content
+                            ? liveProposal?.draft.kind === "new-section"
+                              ? ""
+                              : liveSection?.content
                             : undefined;
                         const liveProposedText =
                           entry.status === "pending" && liveProposal
-                            ? getProposalPreviewText(liveProposal.draft)
+                            ? liveProposal.draft.kind === "delete-section"
+                              ? ""
+                              : getProposalPreviewText(liveProposal.draft)
                             : undefined;
                         return (
                           <ActivityRow
@@ -4843,7 +4820,7 @@ const ActivityRailContent = memo(function ActivityRailContent({
 
 const activityDiffCache = new Map<
   string,
-  { before: string; after: string; parts: ReturnType<typeof computeDiffParts> }
+  { before: string; after: string; diff: CreedDiff }
 >();
 
 // A collapsed activity card shows its +N/−N summary, which needs the diff. Diffing
@@ -4951,8 +4928,7 @@ const ActivityRow = memo(function ActivityRow({
   const agentNames =
     entry.actorType === "agent" ? uniqueAgentNames([entry.actor]) : [];
 
-  // Reuse the in-app diff machinery so activity cards match the inline
-  // proposal diff exactly - same word-level highlighting, same +N/−N stats.
+  // Reuse the in-app diff machinery so activity cards match inline proposals.
   // For pending entries the parent feeds us the same live values the inline
   // card uses; for accepted/rejected/stale entries we fall back to the
   // snapshot stored on the entry.
@@ -4968,29 +4944,26 @@ const ActivityRow = memo(function ActivityRow({
   const afterForDiff = hasCompleteLiveDiff
     ? liveProposedText
     : (entry.afterText ?? "");
-  const diffParts = useMemo(
+  const hasLegacyDeletionSnapshot =
+    beforeForDiff.startsWith("Keep ") && afterForDiff.startsWith("Delete ");
+  const diff = useMemo(
     () => {
       if (!diffReady) return null;
       const cached = activityDiffCache.get(entry.id);
       if (cached?.before === beforeForDiff && cached.after === afterForDiff) {
-        return cached.parts;
+        return cached.diff;
       }
-      const parts = computeDiffParts(beforeForDiff, afterForDiff);
+      const nextDiff = computeCreedDiff(beforeForDiff, afterForDiff);
       activityDiffCache.set(entry.id, {
         before: beforeForDiff,
         after: afterForDiff,
-        parts,
+        diff: nextDiff,
       });
-      return parts;
+      return nextDiff;
     },
     [afterForDiff, beforeForDiff, diffReady, entry.id],
   );
-  const diffStats = useMemo(
-    () => (diffParts ? summarizeDiff(diffParts) : null),
-    [diffParts],
-  );
-  const hasTextualChange =
-    diffParts?.some((part) => part.added || part.removed) ?? false;
+  const hasTextualChange = diff ? hasDiffChanges(diff) : false;
   useEffect(
     () => () => {
       if (diffFrameRef.current !== null) {
@@ -5023,14 +4996,6 @@ const ActivityRow = memo(function ActivityRow({
       startTransition(() => setDiffReady(true));
     });
   }, [diffReady, open]);
-  // Activity entries from delete-section operations carry a "Keep X" →
-  // "Delete X" before/after pair. The outer card stays neutral (full-card
-  // red wash felt heavy); we tint only the expanded diff body red below
-  // so the deletion reads clearly when the user opens it.
-  const isDeletionActivity =
-    (entry.afterText?.startsWith("Delete ") ?? false) &&
-    (entry.beforeText?.startsWith("Keep ") ?? false);
-
   return (
     <div className="group rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-3 transition-colors duration-150 hover:bg-[var(--creed-background)]">
       <button type="button" className="w-full text-left" onClick={toggleOpen}>
@@ -5074,24 +5039,13 @@ const ActivityRow = memo(function ActivityRow({
             </div>
             <div className="mt-1 flex items-center gap-2 text-[12px] text-[var(--creed-text-secondary)]">
               <span className="truncate">{entry.actor}</span>
-              {isDeletionActivity ? (
-                // A delete-section event is conceptually all-removed (one
-                // entire section) - overriding the badge stats keeps the
-                // signal honest even though the underlying "Keep X" →
-                // "Delete X" diff would otherwise show a confusing
-                // +1/−1 split.
-                <span className="inline-flex items-center gap-1">
-                  <span className="text-[var(--creed-text-tertiary)]">·</span>
-                  <DiffBadge tone="added" count={0} />
-                  <DiffBadge tone="removed" count={1} />
-                </span>
-              ) : !diffReady ? (
+              {!diffReady ? (
                 <ActivityStatsSkeleton />
-              ) : hasTextualChange && diffStats ? (
+              ) : !hasLegacyDeletionSnapshot && hasTextualChange && diff ? (
                 <span className="inline-flex items-center gap-1">
                   <span className="text-[var(--creed-text-tertiary)]">·</span>
-                  <DiffBadge tone="added" count={diffStats.added} />
-                  <DiffBadge tone="removed" count={diffStats.removed} />
+                  <DiffBadge tone="added" count={diff.added} />
+                  <DiffBadge tone="removed" count={diff.removed} />
                 </span>
               ) : null}
             </div>
@@ -5126,34 +5080,14 @@ const ActivityRow = memo(function ActivityRow({
             >
               <div className="-mx-3 border-t border-[var(--creed-border)]" />
               <div className="creed-scrollbar creed-diff-block -mx-3 max-h-72 overflow-y-auto px-4 py-2.5 leading-[1.6]">
-                {isDeletionActivity ? (
-                  // Render the Delete line as a removal - same red
-                  // background + strikethrough as `creed-diff-remove` so
-                  // the operation reads consistently with how removed
-                  // content is shown in the diff body elsewhere.
-                  <span className="creed-diff-remove">
-                    Delete {entry.sectionName}
-                  </span>
-                ) : !diffReady ? (
+                {!diffReady ? (
                   <ActivityDiffSkeleton />
-                ) : hasTextualChange && diffParts ? (
-                  diffParts.map((part, index) => {
-                    if (part.added) {
-                      return (
-                        <span key={index} className="creed-diff-add">
-                          {part.value}
-                        </span>
-                      );
-                    }
-                    if (part.removed) {
-                      return (
-                        <span key={index} className="creed-diff-remove">
-                          {part.value}
-                        </span>
-                      );
-                    }
-                    return <span key={index}>{part.value}</span>;
-                  })
+                ) : hasLegacyDeletionSnapshot ? (
+                  <span className="text-[var(--creed-text-secondary)]">
+                    {entry.summary || `Deleted ${entry.sectionName}`}
+                  </span>
+                ) : hasTextualChange && diff ? (
+                  <CreedDiffView diff={diff} />
                 ) : (
                   // Fall back to the entry's summary so structural events
                   // (e.g. renames / recolors) still tell the user what

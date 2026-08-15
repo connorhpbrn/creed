@@ -31,10 +31,10 @@ import { useCreed } from "@/components/creed/creed-provider";
 import { ComposePromptCard } from "@/components/creed/compose-prompt-card";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
 import {
+  CreedDiffView,
   DiffBadge,
-  computeDiffParts,
-  summarizeDiff,
 } from "@/components/creed/inline-proposal-diff";
+import { computeCreedDiff } from "@/lib/creed-diff";
 import { RichTextEditor } from "@/components/creed/rich-text-editor";
 import { useEditionCheckout } from "@creed/edition/ui";
 import {
@@ -1174,18 +1174,17 @@ function SectionStripsCard() {
 
 // Explainer B: an agent proposal landing as a diff the user approves.
 // Mirrors the real InlineProposalDiff chrome (agent attribution row, the
-// blue Accept button, and the word-level diff body) so the teaching card
+// blue Accept button, and the line diff body) so the teaching card
 // matches what they will actually see in the editor.
 
 const PROPOSAL_EXISTING = "Run a half-marathon at some point.";
 const PROPOSAL_PROPOSED = "Run a half-marathon under 1h45 by spring.";
 
 function ProposalCard() {
-  const parts = useMemo(
-    () => computeDiffParts(PROPOSAL_EXISTING, PROPOSAL_PROPOSED),
+  const diff = useMemo(
+    () => computeCreedDiff(PROPOSAL_EXISTING, PROPOSAL_PROPOSED),
     [],
   );
-  const stats = useMemo(() => summarizeDiff(parts), [parts]);
 
   return (
     <motion.div
@@ -1211,8 +1210,8 @@ function ProposalCard() {
           </span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
           <span className="inline-flex items-center gap-1">
-            <DiffBadge tone="added" count={stats.added} size="md" />
-            <DiffBadge tone="removed" count={stats.removed} size="md" />
+            <DiffBadge tone="added" count={diff.added} size="md" />
+            <DiffBadge tone="removed" count={diff.removed} size="md" />
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -1227,24 +1226,8 @@ function ProposalCard() {
         </div>
       </div>
       <div className="border-t border-[var(--creed-border)]" />
-      <div className="creed-diff-block px-4 py-3">
-        {parts.map((part, index) => {
-          if (part.added) {
-            return (
-              <span key={index} className="creed-diff-add">
-                {part.value}
-              </span>
-            );
-          }
-          if (part.removed) {
-            return (
-              <span key={index} className="creed-diff-remove">
-                {part.value}
-              </span>
-            );
-          }
-          return <span key={index}>{part.value}</span>;
-        })}
+      <div className="creed-diff-block py-3">
+        <CreedDiffView diff={diff} />
       </div>
     </motion.div>
   );

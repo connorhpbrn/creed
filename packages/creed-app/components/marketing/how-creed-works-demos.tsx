@@ -26,10 +26,10 @@ import {
   getActivityStatusStyles,
 } from "@/components/creed/activity-ui";
 import {
+  CreedDiffView,
   DiffBadge,
-  computeDiffParts,
-  summarizeDiff,
 } from "@/components/creed/inline-proposal-diff";
+import { computeCreedDiff } from "@/lib/creed-diff";
 import {
   QualityRing,
   qualityScoreColor,
@@ -130,29 +130,6 @@ function DemoCard({
     >
       {children}
     </div>
-  );
-}
-
-// Renders a word-level diff's parts as add / remove / unchanged spans.
-function DiffParts({ parts }: { parts: ReturnType<typeof computeDiffParts> }) {
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (part.added)
-          return (
-            <span key={i} className="creed-diff-add">
-              {part.value}
-            </span>
-          );
-        if (part.removed)
-          return (
-            <span key={i} className="creed-diff-remove">
-              {part.value}
-            </span>
-          );
-        return <span key={i}>{part.value}</span>;
-      })}
-    </>
   );
 }
 
@@ -314,7 +291,7 @@ const ROUTINES_APPLIED_HTML = bulletList([...ROUTINES_BASE, ROUTINES_ADD]);
 const UPDATE_STEPS = [1400, 3000, 2600] as const;
 
 // Compact proposal card: the agent logo, desktop-only "proposed", and the diff
-// stats with Reject / Accept on one line. The word-level diff drops down below
+// stats with Reject / Accept on one line. The line diff drops down below
 // when `expanded`, with a smooth height animation.
 function MiniProposalDiff({
   base,
@@ -331,11 +308,10 @@ function MiniProposalDiff({
   onAccept: () => void;
   onReject: () => void;
 }) {
-  const parts = useMemo(
-    () => computeDiffParts(base, proposed),
+  const diff = useMemo(
+    () => computeCreedDiff(base, proposed),
     [base, proposed],
   );
-  const stats = useMemo(() => summarizeDiff(parts), [parts]);
   return (
     <div className="rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[0_8px_24px_rgba(28,28,26,0.04)]">
       <div className="flex items-center gap-2 py-2 pl-3 pr-2 text-sm text-[var(--creed-text-secondary)]">
@@ -357,8 +333,8 @@ function MiniProposalDiff({
         </span>
         <span className="text-[var(--creed-text-tertiary)]">&middot;</span>
         <span className="inline-flex items-center gap-1">
-          <DiffBadge tone="added" count={stats.added} size="md" />
-          <DiffBadge tone="removed" count={stats.removed} size="md" />
+          <DiffBadge tone="added" count={diff.added} size="md" />
+          <DiffBadge tone="removed" count={diff.removed} size="md" />
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <button
@@ -390,13 +366,13 @@ function MiniProposalDiff({
             className="overflow-hidden"
           >
             <div className="border-t border-[var(--creed-border)]" />
-            <div className="creed-diff-block px-4 py-3">
+            <div className="creed-diff-block py-3">
               <span className="sm:hidden">
                 <span className="creed-diff-add">{ROUTINES_ADD}</span>
               </span>
-              <span className="hidden sm:inline">
-                <DiffParts parts={parts} />
-              </span>
+              <div className="hidden sm:block">
+                <CreedDiffView diff={diff} />
+              </div>
             </div>
           </motion.div>
         ) : null}

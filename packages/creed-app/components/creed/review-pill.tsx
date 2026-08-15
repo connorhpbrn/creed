@@ -5,13 +5,16 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import { ChevronDownIcon as AnimatedChevronDown } from "@creed/ui/chevron-down";
 import type { Proposal } from "@creed/core/creed-data";
-import { getProposalPreviewText } from "@creed/core/creed-data";
 import {
+  getMetaProposalDiffText,
+  getProposalPreviewText,
+} from "@creed/core/creed-data";
+import {
+  CreedDiffView,
   DiffBadge,
-  computeDiffParts,
-  summarizeDiff,
   ProposalAuthor,
 } from "@/components/creed/inline-proposal-diff";
+import { computeCreedDiff, type CreedDiff } from "@/lib/creed-diff";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,9 +51,24 @@ const proposalDiffCache = new Map<
   {
     existingContent: string;
     proposedContent: string;
-    parts: ReturnType<typeof computeDiffParts>;
+    diff: CreedDiff;
   }
 >();
+
+function proposalDiffInputs(item: ReviewPillProposal) {
+  const draft = item.proposal.draft;
+  if (draft.kind === "delete-section") return [item.existingContent, ""] as const;
+  if (draft.kind === "new-section") {
+    return ["", getProposalPreviewText(draft)] as const;
+  }
+  const meta = getMetaProposalDiffText(draft, {
+    name: item.sectionName ?? item.proposal.sectionName,
+    accent: item.proposal.accent,
+  });
+  return meta
+    ? ([meta.before, meta.after] as const)
+    : ([item.existingContent, getProposalPreviewText(draft)] as const);
+}
 
 function ReviewAllActions({
   onAcceptAll,
@@ -108,34 +126,21 @@ export const ReviewPill = memo(function ReviewPill({
   );
   const perProposalStats = useMemo(() => {
     return proposals.map((item) => {
-      const proposed = getProposalPreviewText(item.proposal.draft);
+      const [existing, proposed] = proposalDiffInputs(item);
       const cached = proposalDiffCache.get(item.proposal.id);
-      const parts =
-        cached?.existingContent === item.existingContent &&
+      const diff =
+        cached?.existingContent === existing &&
         cached.proposedContent === proposed
-          ? cached.parts
-          : computeDiffParts(item.existingContent, proposed);
-      if (parts !== cached?.parts) {
+          ? cached.diff
+          : computeCreedDiff(existing, proposed);
+      if (diff !== cached?.diff) {
         proposalDiffCache.set(item.proposal.id, {
-          existingContent: item.existingContent,
+          existingContent: existing,
           proposedContent: proposed,
-          parts,
+          diff,
         });
       }
-      const summary = summarizeDiff(parts);
-      // Override the +N/−N counts for structural proposals. The raw diff
-      // between section content and the meta preview ("Delete section",
-      // "Rename to Foo") produces misleading numbers - for a delete the
-      // existing content gets counted as removed AND the literal "Delete
-      // section" string gets counted as added, which inverts the signal.
-      // Force the badges to read as: delete → +0 −1, new-section → +1 −0.
-      if (item.proposal.draft.kind === "delete-section") {
-        return { id: item.proposal.id, added: 0, removed: 1, parts };
-      }
-      if (item.proposal.draft.kind === "new-section") {
-        return { id: item.proposal.id, added: 1, removed: 0, parts };
-      }
-      return { id: item.proposal.id, ...summary, parts };
+      return { id: item.proposal.id, ...diff };
     });
   }, [proposals]);
 
@@ -344,38 +349,8 @@ export const ReviewPill = memo(function ReviewPill({
                         />
                       </span>
                     </div>
-                    <div className="creed-diff-block max-h-[200px] overflow-y-auto px-3 py-2 text-[12px] leading-5">
-                      {isDeleteProposal ? (
-                        // Style the Delete line as a removal - same red
-                        // background + strikethrough as the diff machinery's
-                        // `creed-diff-remove` so the affordance is consistent
-                        // with how removed text is already shown elsewhere.
-                        <span className="creed-diff-remove">
-                          Delete {item.sectionName ?? item.proposal.sectionName}
-                        </span>
-                      ) : stats.parts.length === 0 ? (
-                        <span className="text-[var(--creed-text-tertiary)]">
-                          No textual change
-                        </span>
-                      ) : (
-                        stats.parts.map((part, i) => {
-                          if (part.added) {
-                            return (
-                              <span key={i} className="creed-diff-add">
-                                {part.value}
-                              </span>
-                            );
-                          }
-                          if (part.removed) {
-                            return (
-                              <span key={i} className="creed-diff-remove">
-                                {part.value}
-                              </span>
-                            );
-                          }
-                          return <span key={i}>{part.value}</span>;
-                        })
-                      )}
+                    <div className="creed-diff-block max-h-[200px] overflow-y-auto py-2 text-[12px] leading-5">
+                      <CreedDiffView diff={stats} />
                     </div>
                     <div className="flex items-center justify-between gap-1 border-t border-[var(--creed-border)] px-2 py-1.5">
                       <button
@@ -484,7 +459,7 @@ function ReviewPillItem({
   stats: {
     added: number;
     removed: number;
-    parts: ReturnType<typeof computeDiffParts>;
+    lines: CreedDiff["lines"];
   };
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -541,34 +516,8 @@ function ReviewPillItem({
             className="overflow-hidden"
           >
             <div className="border-t border-[var(--creed-border)]" />
-            <div className="creed-scrollbar creed-diff-block max-h-[220px] overflow-y-auto px-3 py-2 text-[12px] leading-5">
-              {isDeleteProposal ? (
-                <span className="creed-diff-remove">
-                  Delete {item.sectionName ?? item.proposal.sectionName}
-                </span>
-              ) : stats.parts.length === 0 ? (
-                <span className="text-[var(--creed-text-tertiary)]">
-                  No textual change
-                </span>
-              ) : (
-                stats.parts.map((part, i) => {
-                  if (part.added) {
-                    return (
-                      <span key={i} className="creed-diff-add">
-                        {part.value}
-                      </span>
-                    );
-                  }
-                  if (part.removed) {
-                    return (
-                      <span key={i} className="creed-diff-remove">
-                        {part.value}
-                      </span>
-                    );
-                  }
-                  return <span key={i}>{part.value}</span>;
-                })
-              )}
+            <div className="creed-scrollbar creed-diff-block max-h-[220px] overflow-y-auto py-2 text-[12px] leading-5">
+              <CreedDiffView diff={stats} />
             </div>
             <div className="flex items-center justify-between gap-1 border-t border-[var(--creed-border)] px-2 py-1.5">
               <button

@@ -14,25 +14,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronDown } from "lucide-react";
-import { DiffBadge, computeDiffParts, summarizeDiff } from "@/components/creed/inline-proposal-diff";
+import { CreedDiffView, DiffBadge } from "@/components/creed/inline-proposal-diff";
+import { computeCreedDiff } from "@/lib/creed-diff";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
 import { type AccentKey, type Proposal, getProposalPreviewText } from "@creed/core/creed-data";
 import { cn } from "@creed/ui/utils";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
-
-// The added/removed/unchanged span fan-out, shared by both demo cards.
-function DiffParts({ parts }: { parts: ReturnType<typeof computeDiffParts> }) {
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (part.added) return <span key={i} className="creed-diff-add">{part.value}</span>;
-        if (part.removed) return <span key={i} className="creed-diff-remove">{part.value}</span>;
-        return <span key={i}>{part.value}</span>;
-      })}
-    </>
-  );
-}
 
 function makeProposal(
   id: string,
@@ -110,8 +98,7 @@ function DemoProposalDiff({
   expanded: boolean;
 }) {
   const proposed = useMemo(() => getProposalPreviewText(proposal.draft), [proposal.draft]);
-  const parts = useMemo(() => computeDiffParts(existingContent, proposed), [existingContent, proposed]);
-  const stats = useMemo(() => summarizeDiff(parts), [parts]);
+  const diff = useMemo(() => computeCreedDiff(existingContent, proposed), [existingContent, proposed]);
 
   // Display only: the section auto-plays the review cycle, so nothing here is
   // clickable. The chevron and the Reject / Accept controls are presentational.
@@ -131,8 +118,8 @@ function DemoProposalDiff({
           </span>
           <span className="text-[var(--creed-text-tertiary)]">&middot;</span>
           <span className="inline-flex items-center gap-1">
-            <DiffBadge tone="added" count={stats.added} size="md" />
-            <DiffBadge tone="removed" count={stats.removed} size="md" />
+            <DiffBadge tone="added" count={diff.added} size="md" />
+            <DiffBadge tone="removed" count={diff.removed} size="md" />
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1" aria-hidden="true">
@@ -155,8 +142,8 @@ function DemoProposalDiff({
             className="overflow-hidden"
           >
             <div className="border-t border-[var(--creed-border)]" />
-            <div className="creed-diff-block creed-scrollbar max-h-[228px] overflow-y-auto px-4 py-3">
-              <DiffParts parts={parts} />
+            <div className="creed-diff-block creed-scrollbar max-h-[228px] overflow-y-auto py-3">
+              <CreedDiffView diff={diff} />
             </div>
             {proposal.reason ? (
               <div className="border-t border-[var(--creed-border)] px-4 py-2.5 text-sm leading-5 text-[var(--creed-text-secondary)]">
@@ -268,8 +255,7 @@ const DIRECT_NEXT =
 
 export function DirectEditDemo() {
   const [approval, setApproval] = useState(false);
-  const parts = useMemo(() => computeDiffParts(DIRECT_BASE, DIRECT_NEXT), []);
-  const stats = useMemo(() => summarizeDiff(parts), [parts]);
+  const diff = useMemo(() => computeCreedDiff(DIRECT_BASE, DIRECT_NEXT), []);
   const pending = approval;
 
   // Auto-loop the approval toggle so the Direct / Pending swap plays on its
@@ -308,14 +294,14 @@ export function DirectEditDemo() {
             <AgentIconStack agents={["Codex"]} variant="inline" itemClassName="h-4 w-4 shrink-0" />
             <span>Codex</span>
             <span className="text-[var(--creed-text-tertiary)]">&middot;</span>
-            <DiffBadge tone="added" count={stats.added} />
-            <DiffBadge tone="removed" count={stats.removed} />
+            <DiffBadge tone="added" count={diff.added} />
+            <DiffBadge tone="removed" count={diff.removed} />
             <span className="ml-auto text-[var(--creed-text-tertiary)]">{pending ? "needs review" : "3w ago"}</span>
           </div>
         </div>
         <div className="border-t border-[var(--creed-border)]" />
-        <div className="creed-diff-block px-4 py-3 text-[14px]">
-          <DiffParts parts={parts} />
+        <div className="creed-diff-block py-3 text-[14px]">
+          <CreedDiffView diff={diff} />
         </div>
       </div>
     </div>

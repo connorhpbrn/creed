@@ -1191,14 +1191,20 @@ export const collaborationRules: HiddenInstructionContract = {
 //   <span data-tag="slug">label</span>          → #slug   (inline tag mark)
 //
 // Anything else falls back to plain text after tag stripping.
-export function sectionToMarkdown(section: CreedSection) {
-  let text = section.content;
+export function richTextToMarkdown(content: string) {
+  let text = content;
 
   // Inline tag marks first so we don't strip them in the generic tag
   // stripper below.
   text = text.replace(
     /<span\s+[^>]*data-tag="([^"]+)"[^>]*>[^<]*<\/span>/g,
     "#$1",
+  );
+
+  text = text.replace(
+    /<pre[^>]*>\s*<code(?:\s+class="(?:language-)?([a-zA-Z0-9_-]+)")?[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/g,
+    (_match, lang: string | undefined, body: string) =>
+      `\n\`\`\`${lang ?? ""}\n${decodeEntities(body).trimEnd().replace(/^\n+/, "")}\n\`\`\`\n`,
   );
 
   // Inline formatting - convert rich-text spans to their markdown
@@ -1235,14 +1241,6 @@ export function sectionToMarkdown(section: CreedSection) {
   );
   text = text.replace(/<mark\b[^>]*>([\s\S]*?)<\/mark>/g, "==$1==");
   text = text.replace(/<u\b[^>]*>([\s\S]*?)<\/u>/g, "__$1__");
-
-  // Fenced code blocks. Keep the contents verbatim; if the editor stored a
-  // language hint as a class, surface it on the opening fence.
-  text = text.replace(
-    /<pre[^>]*>\s*<code(?:\s+class="(?:language-)?([a-zA-Z0-9_-]+)")?[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/g,
-    (_match, lang: string | undefined, body: string) =>
-      `\n\`\`\`${lang ?? ""}\n${decodeEntities(body).trimEnd().replace(/^\n+/, "")}\n\`\`\`\n`,
-  );
 
   // Headings - shift down one level so they nest under the section's `## Name`.
   text = text.replace(
@@ -1304,9 +1302,12 @@ export function sectionToMarkdown(section: CreedSection) {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  return cleaned
-    ? `## ${section.name}\n\n${cleaned}\n`
-    : `## ${section.name}\n`;
+  return cleaned;
+}
+
+export function sectionToMarkdown(section: CreedSection) {
+  const body = richTextToMarkdown(section.content);
+  return body ? `## ${section.name}\n\n${body}\n` : `## ${section.name}\n`;
 }
 
 // Section body as markdown, without the leading "## Name" heading that

@@ -105,7 +105,7 @@ export function MarketingHeroBanner({
 }) {
   return (
     <section className="relative bg-[var(--creed-background)]">
-      <div className="relative h-[15rem] overflow-hidden md:h-[18rem]">
+      <div className="relative h-[22rem] overflow-hidden md:h-[24rem]">
         {/* The image covers a reference box matching the landing hero (same
             full-bleed height) so the artwork scales identically; the banner
             just windows the top slice of it. */}
@@ -118,9 +118,13 @@ export function MarketingHeroBanner({
           />
         </div>
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,31,60,0.16)_0%,rgba(15,31,60,0.08)_28%,rgba(15,31,60,0.05)_56%,rgba(255,255,255,0)_76%)] dark:bg-[linear-gradient(180deg,rgba(0,0,0,0.32)_0%,rgba(0,0,0,0.18)_28%,rgba(0,0,0,0.08)_56%,rgba(0,0,0,0)_76%)]" />
-        {/* Bottom fade melts the art into the page background. Eased multi-stop
-            gradient so the transition reads smooth, not banded. */}
+        {/* Repeat the landing hero's eased colour curve before the overflow
+            boundary so the clipped backdrop blur cannot form a hard seam. */}
         <SceneryFade direction="down" />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[55%] [background-image:var(--scenery-fade-down)]"
+        />
       </div>
       <MarketingHeader configured={configured} scrolled={scrolled} />
     </section>

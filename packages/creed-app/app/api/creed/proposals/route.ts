@@ -325,10 +325,11 @@ export async function POST(request: Request) {
     updated_at: now,
   };
 
-  // For meta proposals (delete / rename / recolor), the activity diff
-  // should compare like-for-like labels - not the section's entire content
-  // against a one-line summary, which renders as if everything was deleted.
+  // Rename, recolour, and reorder compare like-for-like labels. Deletion keeps
+  // the full content snapshot because every removed line is part of the change.
   const metaDiff = getMetaProposalDiffText(normalizedProposal.draft, targetSection);
+  const isDeleteSectionProposal =
+    normalizedProposal.draft.kind === "delete-section";
   const summaryByMetaKind: Record<string, string> = {
     "delete-section": `Suggested deleting ${body.sectionName.toLowerCase()}`,
     "rename-section": `Suggested renaming ${body.sectionName.toLowerCase()}`,
@@ -354,15 +355,18 @@ export async function POST(request: Request) {
     reason: body.reason,
     impact: body.impact,
     confidence: body.confidence,
-    // Snapshot the existing section content so the activity sidebar can
-    // render the same red/green diff the inline accept-all card shows. Meta
-    // drafts get short labels on both sides so the diff stays proportional.
-    before_text: metaDiff
+    before_text: isDeleteSectionProposal
+      ? targetSection?.content ?? null
+      : metaDiff
       ? metaDiff.before
       : !isNewSectionProposal
         ? targetSection?.content ?? null
         : null,
-    after_text: metaDiff ? metaDiff.after : getProposalPreviewText(normalizedProposal.draft),
+    after_text: isDeleteSectionProposal
+      ? ""
+      : metaDiff
+        ? metaDiff.after
+        : getProposalPreviewText(normalizedProposal.draft),
     created_at: now,
   };
 

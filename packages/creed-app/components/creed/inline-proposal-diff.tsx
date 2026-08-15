@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import { diffWords } from "diff";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import type { Proposal } from "@creed/core/creed-data";
@@ -10,6 +9,12 @@ import { accentColorMap, getProposalPreviewText } from "@creed/core/creed-data";
 import { AgentIconStack } from "@/components/creed/agent-icon-stack";
 import { ChevronDownIcon as AnimatedChevronDown } from "@creed/ui/chevron-down";
 import { cn } from "@creed/ui/utils";
+import {
+  computeCreedDiff,
+  hasDiffChanges,
+  type CreedDiff,
+  type DiffLine,
+} from "@/lib/creed-diff";
 
 const expandTransition = { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const };
 
@@ -84,22 +89,6 @@ function ExpandRegion({
   );
 }
 
-export function htmlToText(value: string) {
-  return value
-    .replace(/<\s*(br|hr)\s*\/?\s*>/gi, "\n")
-    .replace(/<\s*\/(p|h\d|li|ul|ol|blockquote|pre)\s*>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-export type DiffStats = { added: number; removed: number };
-
 // Plain `+N` / `−N` numbers in the bright success/danger tokens. Centralised
 // here so every diff-stat surface across the app uses the exact same colour.
 export function DiffBadge({
@@ -120,8 +109,11 @@ export function DiffBadge({
       : "!text-[var(--creed-danger)]";
   const sizeClass =
     size === "xs" ? "text-[10px]" : size === "md" ? "text-sm" : "text-[11px]";
+  const label = `${count} ${count === 1 ? "line" : "lines"} ${tone}`;
   return (
     <span
+      aria-label={label}
+      title={label}
       className={cn(
         "inline-flex items-center font-mono font-medium tabular-nums leading-[1.2]",
         sizeClass,
@@ -134,23 +126,47 @@ export function DiffBadge({
   );
 }
 
-export function computeDiffParts(existing: string, proposed: string) {
-  const existingText = htmlToText(existing);
-  const proposedText = htmlToText(proposed);
-  return diffWords(existingText, proposedText);
+function DiffLineContent({ line }: { line: DiffLine }) {
+  if (!line.inlineParts) return line.value || " ";
+
+  return line.inlineParts.map((part, index) => {
+    if (line.kind === "removed" && part.added) return null;
+    if (line.kind === "added" && part.removed) return null;
+    const changed = line.kind === "removed" ? part.removed : part.added;
+    return (
+      <span key={index} className={changed ? "creed-diff-word" : undefined}>
+        {part.value}
+      </span>
+    );
+  });
 }
 
-export function summarizeDiff(
-  parts: ReturnType<typeof computeDiffParts>,
-): DiffStats {
-  let added = 0;
-  let removed = 0;
-  for (const part of parts) {
-    const tokens = part.value.trim().split(/\s+/).filter(Boolean).length;
-    if (part.added) added += tokens;
-    else if (part.removed) removed += tokens;
+export function CreedDiffView({ diff }: { diff: CreedDiff }) {
+  if (!hasDiffChanges(diff)) {
+    return (
+      <span className="text-[var(--creed-text-tertiary)]">
+        No textual change
+      </span>
+    );
   }
-  return { added, removed };
+
+  return (
+    <div className="creed-diff-lines">
+      {diff.lines.map((line, index) => (
+        <div
+          key={`${line.kind}-${index}`}
+          className={cn("creed-diff-line", `creed-diff-line-${line.kind}`)}
+        >
+          <span className="creed-diff-gutter" aria-hidden="true">
+            {line.kind === "added" ? "+" : line.kind === "removed" ? "−" : " "}
+          </span>
+          <span className="creed-diff-code">
+            <DiffLineContent line={line} />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function InlineProposalDiff({
@@ -183,11 +199,10 @@ export function InlineProposalDiff({
     () => getProposalPreviewText(proposal.draft),
     [proposal.draft],
   );
-  const parts = useMemo(
-    () => computeDiffParts(existingContent, proposedText),
+  const diff = useMemo(
+    () => computeCreedDiff(existingContent, proposedText),
     [existingContent, proposedText],
   );
-  const stats = useMemo(() => summarizeDiff(parts), [parts]);
 
   return (
     <div className="rounded-xl border border-[var(--creed-border)] bg-[var(--creed-surface)]">
@@ -212,8 +227,8 @@ export function InlineProposalDiff({
           </span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
           <span className="inline-flex items-center gap-1">
-            <DiffBadge tone="added" count={stats.added} size="md" />
-            <DiffBadge tone="removed" count={stats.removed} size="md" />
+            <DiffBadge tone="added" count={diff.added} size="md" />
+            <DiffBadge tone="removed" count={diff.removed} size="md" />
           </span>
           <AnimatedChevronDown
             size={14}
@@ -278,29 +293,7 @@ export function InlineProposalDiff({
       <ExpandRegion open={expanded}>
         <div className="border-t border-[var(--creed-border)]" />
         <div className="creed-diff-block px-4 py-3">
-          {parts.length === 0 ? (
-            <span className="text-[var(--creed-text-tertiary)]">
-              No textual change
-            </span>
-          ) : (
-            parts.map((part, index) => {
-              if (part.added) {
-                return (
-                  <span key={index} className="creed-diff-add">
-                    {part.value}
-                  </span>
-                );
-              }
-              if (part.removed) {
-                return (
-                  <span key={index} className="creed-diff-remove">
-                    {part.value}
-                  </span>
-                );
-              }
-              return <span key={index}>{part.value}</span>;
-            })
-          )}
+          <CreedDiffView diff={diff} />
         </div>
         {proposal.reason ? (
           <div className="border-t border-[var(--creed-border)] px-4 py-2.5 text-sm leading-5 text-[var(--creed-text-secondary)]">
@@ -330,6 +323,7 @@ export function InlineNewSectionProposal({
     () => getProposalPreviewText(proposal.draft),
     [proposal.draft],
   );
+  const diff = useMemo(() => computeCreedDiff("", proposedText), [proposedText]);
   const sectionName =
     proposal.draft.kind === "new-section"
       ? proposal.draft.name
@@ -371,9 +365,7 @@ export function InlineNewSectionProposal({
           </span>
           <span className="text-[var(--creed-text-tertiary)]">·</span>
           <span className="inline-flex items-center gap-1 text-sm">
-            <span className="font-medium text-[#10b981] dark:text-[#4ade80]">
-              +
-            </span>
+            <DiffBadge tone="added" count={diff.added} size="md" />
             <span className="text-[var(--creed-text-primary)]">
               {sectionName}
             </span>
@@ -411,12 +403,8 @@ export function InlineNewSectionProposal({
       </div>
       <ExpandRegion open={expanded}>
         <div className="border-t border-[#10b981]/20" />
-        {/* Clean padded text block - no inner green highlight bar. The
-            card's outer green wash + colour signalling already conveys
-            "this is an addition", and matching the delete card's plain
-            content layout keeps the two cards visually consistent. */}
-        <div className="creed-diff-block px-4 py-3 text-[14px] leading-7 text-[var(--creed-text-primary)]">
-          {htmlToText(proposedText) || "(empty)"}
+        <div className="creed-diff-block py-2 text-[14px] leading-7 text-[var(--creed-text-primary)]">
+          <CreedDiffView diff={diff} />
         </div>
         {proposal.reason ? (
           // Reason text tinted green to match the rest of the card's
@@ -439,6 +427,7 @@ export function InlineMetaProposal({
   proposal,
   existingName,
   existingAccent,
+  existingContent,
   onAccept,
   onReject,
   agentName,
@@ -447,6 +436,7 @@ export function InlineMetaProposal({
   proposal: Proposal;
   existingName: string;
   existingAccent: string;
+  existingContent: string;
   onAccept: () => void;
   onReject: () => void;
   agentName: string;
@@ -459,6 +449,9 @@ export function InlineMetaProposal({
   const isRename = draft.kind === "rename-section";
   const isRecolor = draft.kind === "recolor-section";
   if (!isDelete && !isRename && !isRecolor) return null;
+  const deleteDiff = isDelete
+    ? computeCreedDiff(existingContent, "")
+    : null;
 
   const headline = isDelete
     ? "proposed to delete"
@@ -522,9 +515,7 @@ export function InlineMetaProposal({
               recolor) stay neutral. */}
           {isDelete ? (
             <span className="inline-flex items-center gap-1 text-sm">
-              <span className="font-medium text-[#dc2626] dark:text-[#f87171]">
-                −
-              </span>
+              <DiffBadge tone="removed" count={deleteDiff?.removed ?? 0} size="md" />
               <span className="truncate text-[var(--creed-text-primary)]">
                 {existingName}
               </span>
@@ -581,11 +572,9 @@ export function InlineMetaProposal({
             so the two card bodies read at the same visual weight. */}
         <div className="px-4 py-3 text-[14px] leading-7 text-[var(--creed-text-primary)]">
           {isDelete ? (
-            <span>
-              Removes the entire{" "}
-              <span className="font-medium">{existingName}</span> section and
-              any pending proposals targeting it.
-            </span>
+            <div className="-mx-4 -my-3 py-2">
+              <CreedDiffView diff={deleteDiff!} />
+            </div>
           ) : isRename ? (
             <span className="inline-flex items-center gap-2">
               <span className="text-[var(--creed-text-secondary)] line-through">
