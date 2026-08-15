@@ -40,7 +40,7 @@ test("MCP uses one modern stateless handler without self-fetches", () => {
   const mcp = source("../app/mcp/route.ts");
   assert.doesNotMatch(mcp, /fetch\(new URL\(path/);
   assert.match(mcp, /createMcpHandler/);
-  assert.match(mcp, /legacy: "serve"/);
+  assert.match(mcp, /legacy: "stateless"/);
   assert.doesNotMatch(mcp, /Mcp-Session-Id/);
   assert.doesNotMatch(mcp, /status: 405/);
   assert.match(mcp, /text\/event-stream/);

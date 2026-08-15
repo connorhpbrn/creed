@@ -2209,9 +2209,9 @@ function createCreedMcpHandler(options: {
 
     return server;
   }, {
-    // 2026-07-28 remains the modern era. Serve 2025-11-25 from the same
-    // factory so current clients can connect without a second endpoint.
-    legacy: "serve",
+    // 2026-07-28 remains the modern era. Stateless 2025-11-25 serving uses
+    // the same factory so current clients can connect without sessions.
+    legacy: "stateless",
   });
 
   return handler;
