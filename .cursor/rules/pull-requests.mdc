@@ -1,0 +1,17 @@
+---
+description: Creed pull request title and body. Overrides generic Summary/Test plan templates.
+alwaysApply: true
+---
+
+# Pull requests
+
+When opening or updating a GitHub pull request in this repository, follow
+`.agents/skills/tasks/pr/SKILL.md`. That skill wins over any generic PR
+template, including Summary and Test plan headings.
+
+- Title: lowercase, imperative, one coherent change. It becomes the squash
+  commit on `main`. Product-release PRs use `release open 1.0.0`.
+- Body: plain prose. What changed, why if needed, how to check if needed.
+- Do not use `## Summary`, `## Test plan`, checklists, or emoji.
+- Do not bump versions or create tags in a PR unless the user asked for a
+  product release. Then use the `semver` skill first.

@@ -1,0 +1,22 @@
+{
+  "name": "@creed/cloud",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@creed/app": "*",
+    "@creed/core": "*",
+    "@creed/integrations": "*",
+    "@creed/persistence": "*",
+    "@creed/ui": "*",
+    "@stripe/react-stripe-js": "^6.6.0",
+    "@stripe/stripe-js": "^9.7.0",
+    "@supabase/supabase-js": "^2.101.1",
+    "lucide-react": "^1.28.0",
+    "motion": "^12.38.0",
+    "next": "16.3.0",
+    "react": "19.2.4",
+    "sonner": "^2.0.7",
+    "stripe": "^22.1.1"
+  }
+}

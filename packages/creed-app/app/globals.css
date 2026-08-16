@@ -1,0 +1,1457 @@
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+
+@source "./**/*.{js,jsx,ts,tsx,mdx}";
+@source "../components/**/*.{js,jsx,ts,tsx,mdx}";
+/* Explicit UI sources must remain limited to authored modules because binary
+   assets can be misread as arbitrary utilities by Tailwind's scanner. */
+@source "../../creed-ui/**/*.{js,jsx,ts,tsx,mdx}";
+@source "../../creed-open/**/*.{js,jsx,ts,tsx,mdx}";
+@source "../../creed-cloud/**/*.{js,jsx,ts,tsx,mdx}";
+@source "../../../apps/open/**/*.{js,jsx,ts,tsx,mdx}";
+@source "../../../apps/cloud/**/*.{js,jsx,ts,tsx,mdx}";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: 0.625rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1rem;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+}
+
+:root {
+  --background: #f9f9f8;
+  --foreground: #1f1f1a;
+  --card: #ffffff;
+  --card-foreground: #1f1f1a;
+  --popover: #ffffff;
+  --popover-foreground: #1f1f1a;
+  --primary: #1f1f1a;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f1;
+  --secondary-foreground: #2d2c27;
+  --muted: #f3f3f1;
+  --muted-foreground: #636360;
+  --accent: #f3f3f1;
+  --accent-foreground: #1f1f1a;
+  --destructive: #b5483d;
+  --border: #e6e6e2;
+  --input: #e6e6e2;
+  --ring: rgba(31, 31, 26, 0.15);
+  --radius: 0.875rem;
+
+  --creed-background: #f9f9f8;
+  --creed-surface: #ffffff;
+  --creed-surface-raised: #f3f3f1;
+  /* Selected row in menus/selects. Sits ~6 off the hover tone (surface-raised
+     #f3f3f1): lighter in light mode, darker in dark mode, same magnitude. */
+  --creed-surface-selected: #f9f9f8;
+  --creed-border: #e6e6e2;
+  --creed-border-strong: #d6d6d0;
+  --creed-text-primary: #1f1f1a;
+  --creed-text-secondary: #636360;
+  --creed-text-tertiary: #9a9a96;
+  --creed-button-primary-fg: #ffffff;
+  --creed-button-primary-hover: #2b2b28;
+  --creed-ring-track: rgba(17, 17, 13, 0.12);
+  /* Brand action / accent - used by primary CTAs (dialog confirm buttons,
+     accept-all, push/pull, etc.). Constant across both themes so the brand
+     blue reads identically in light and dark mode. */
+  --creed-accent: #2563eb;
+  --creed-accent-hover: #1d4ed8;
+
+  /* Flat fills for the below-hero section panels (replacing the old image
+     plates). These light values are deepened in the .dark block below. */
+  --plate-proposal: #4f9eff;
+  --plate-direct: #ff9c5e;
+  --plate-create: #ff6fc1;
+  --plate-connect: #84d678;
+  --plate-improve: #7fbcff;
+  --plate-yellow: #f5c84c;
+  --plate-red: #f56b6b;
+
+  /* Numeric stat / status colours. Brightened so `+57 -304`-style stats stay
+     legible everywhere; the dark-mode block below picks even brighter shades. */
+  --creed-success: #16a34a;
+  --creed-danger: #dc2626;
+  --creed-score-good: #16a34a;
+  --creed-score-mid: #d97706;
+  --creed-score-bad: #dc2626;
+
+  --accent-tint-identity: #f3e8ff;
+  --accent-tint-stack: #dbeafe;
+  --accent-tint-operating-principles: #d1fae5;
+  --accent-tint-decisions: #fef3c7;
+  --accent-tint-preferences: #cffafe;
+  --accent-tint-workflows: #e0e7ff;
+  --accent-tint-tools: #e0f2fe;
+  --accent-tint-boundaries: #fee2e2;
+  --accent-tint-questions: #f3e8ff;
+  --accent-tint-skills: #fce7f3;
+  --accent-tint-mini-skills: #ecfccb;
+  --accent-tint-projects: #ffedd5;
+  --accent-tint-output: #ccfbf1;
+  --accent-tint-rose: #ffe4e6;
+  --accent-tint-yellow: #fef9c3;
+  /* Mono - theme-aware accent. Light mode: near-black foreground with a
+     soft warm grey tint. Dark mode definitions below flip these so the
+     same `accent: "mono"` value reads white on a dark grey tint. */
+  --accent-color-mono: #1c1c1a;
+  --accent-tint-mono: #ebebe6;
+  --accent-tint-custom: #ebebe6;
+
+  /* Scenery fades. The art (hero, auth panel, inner banner, closing band)
+     melts into the page background through these. Stops are densely sampled
+     along an ease curve so the ramp reads as a smooth blur, not banding.
+     Redefined per theme in .dark; surfaces reference them by name so the fade
+     is identical everywhere. `fade-down` melts art into the bg downward;
+     `fade-band` frames the closing band with two smootherstep fades sharing one
+     curve around a clear centre, so the top and bottom blurs read as a matched
+     pair; the bottom sits a touch higher than a pure mirror with a small solid
+     tail so the art clears the footer; it melts to full page colour at the top
+     edge so it joins the section above seamlessly;
+     `fade-in-x` melts the inner vertical edge of the auth panel. */
+  --scenery-fade-down: linear-gradient(180deg, rgba(249,249,248,0) 0%, rgba(249,249,248,0.012) 14%, rgba(249,249,248,0.05) 26%, rgba(249,249,248,0.11) 37%, rgba(249,249,248,0.2) 47%, rgba(249,249,248,0.32) 56%, rgba(249,249,248,0.45) 64%, rgba(249,249,248,0.59) 72%, rgba(249,249,248,0.73) 80%, rgba(249,249,248,0.85) 87%, rgba(249,249,248,0.94) 93%, rgba(249,249,248,1) 100%);
+  --scenery-fade-band: linear-gradient(180deg, rgba(249,249,248,1) 0%, rgba(249,249,248,0.99) 2%, rgba(249,249,248,0.98) 4%, rgba(249,249,248,0.95) 6%, rgba(249,249,248,0.9) 8%, rgba(249,249,248,0.82) 10%, rgba(249,249,248,0.74) 12%, rgba(249,249,248,0.62) 14%, rgba(249,249,248,0.5) 16%, rgba(249,249,248,0.38) 18%, rgba(249,249,248,0.26) 20%, rgba(249,249,248,0.18) 22%, rgba(249,249,248,0.1) 24%, rgba(249,249,248,0.05) 26%, rgba(249,249,248,0.016) 28%, rgba(249,249,248,0.002) 30%, rgba(249,249,248,0) 32%, rgba(249,249,248,0) 65%, rgba(249,249,248,0.002) 67%, rgba(249,249,248,0.016) 69%, rgba(249,249,248,0.05) 71%, rgba(249,249,248,0.1) 73%, rgba(249,249,248,0.18) 75%, rgba(249,249,248,0.26) 77%, rgba(249,249,248,0.38) 79%, rgba(249,249,248,0.5) 81%, rgba(249,249,248,0.62) 83%, rgba(249,249,248,0.74) 85%, rgba(249,249,248,0.82) 87%, rgba(249,249,248,0.9) 89%, rgba(249,249,248,0.95) 91%, rgba(249,249,248,0.98) 93%, rgba(249,249,248,0.99) 95%, rgba(249,249,248,1) 97%, rgba(249,249,248,1) 100%);
+  --scenery-fade-in-x: linear-gradient(90deg, rgba(249,249,248,1) 0%, rgba(249,249,248,0.97) 5%, rgba(249,249,248,0.9) 10%, rgba(249,249,248,0.78) 15%, rgba(249,249,248,0.62) 20%, rgba(249,249,248,0.46) 25%, rgba(249,249,248,0.3) 30%, rgba(249,249,248,0.17) 35%, rgba(249,249,248,0.07) 40%, rgba(249,249,248,0) 46%);
+
+  --font-heading: var(--font-geist-sans);
+}
+
+@layer components {
+  .scenery-fade,
+  .scenery-fade-blur,
+  .scenery-fade-colour {
+    position: absolute;
+    inset: 0;
+  }
+
+  .scenery-fade-blur {
+    -webkit-backdrop-filter: blur(var(--scenery-blur));
+    backdrop-filter: blur(var(--scenery-blur));
+  }
+
+  .scenery-fade-blur-soft {
+    --scenery-blur: 4px;
+  }
+
+  .scenery-fade-blur-medium {
+    --scenery-blur: 12px;
+  }
+
+  .scenery-fade-blur-deep {
+    --scenery-blur: 28px;
+  }
+
+  .scenery-fade-down .scenery-fade-blur-soft {
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.02) 12%, rgba(0, 0, 0, 0.08) 24%, rgba(0, 0, 0, 0.18) 36%, rgba(0, 0, 0, 0.34) 48%, rgba(0, 0, 0, 0.52) 60%, rgba(0, 0, 0, 0.7) 72%, rgba(0, 0, 0, 0.86) 84%, #000 100%);
+    mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.02) 12%, rgba(0, 0, 0, 0.08) 24%, rgba(0, 0, 0, 0.18) 36%, rgba(0, 0, 0, 0.34) 48%, rgba(0, 0, 0, 0.52) 60%, rgba(0, 0, 0, 0.7) 72%, rgba(0, 0, 0, 0.86) 84%, #000 100%);
+  }
+
+  .scenery-fade-down .scenery-fade-blur-medium {
+    -webkit-mask-image: linear-gradient(180deg, transparent 12%, rgba(0, 0, 0, 0.02) 24%, rgba(0, 0, 0, 0.08) 36%, rgba(0, 0, 0, 0.2) 48%, rgba(0, 0, 0, 0.38) 60%, rgba(0, 0, 0, 0.58) 72%, rgba(0, 0, 0, 0.78) 84%, #000 100%);
+    mask-image: linear-gradient(180deg, transparent 12%, rgba(0, 0, 0, 0.02) 24%, rgba(0, 0, 0, 0.08) 36%, rgba(0, 0, 0, 0.2) 48%, rgba(0, 0, 0, 0.38) 60%, rgba(0, 0, 0, 0.58) 72%, rgba(0, 0, 0, 0.78) 84%, #000 100%);
+  }
+
+  .scenery-fade-down .scenery-fade-blur-deep {
+    -webkit-mask-image: linear-gradient(180deg, transparent 34%, rgba(0, 0, 0, 0.02) 46%, rgba(0, 0, 0, 0.08) 56%, rgba(0, 0, 0, 0.2) 66%, rgba(0, 0, 0, 0.4) 76%, rgba(0, 0, 0, 0.66) 86%, rgba(0, 0, 0, 0.86) 94%, #000 100%);
+    mask-image: linear-gradient(180deg, transparent 34%, rgba(0, 0, 0, 0.02) 46%, rgba(0, 0, 0, 0.08) 56%, rgba(0, 0, 0, 0.2) 66%, rgba(0, 0, 0, 0.4) 76%, rgba(0, 0, 0, 0.66) 86%, rgba(0, 0, 0, 0.86) 94%, #000 100%);
+  }
+
+  .scenery-fade-in-x .scenery-fade-blur-soft {
+    -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.62) 30%, rgba(0, 0, 0, 0.14) 60%, transparent 86%);
+    mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.62) 30%, rgba(0, 0, 0, 0.14) 60%, transparent 86%);
+  }
+
+  .scenery-fade-in-x .scenery-fade-blur-medium {
+    -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.68) 22%, rgba(0, 0, 0, 0.12) 46%, transparent 70%);
+    mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.68) 22%, rgba(0, 0, 0, 0.12) 46%, transparent 70%);
+  }
+
+  .scenery-fade-in-x .scenery-fade-blur-deep {
+    -webkit-mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.72) 14%, rgba(0, 0, 0, 0.12) 32%, transparent 52%);
+    mask-image: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.72) 14%, rgba(0, 0, 0, 0.12) 32%, transparent 52%);
+  }
+
+  .scenery-fade-band .scenery-fade-blur-soft {
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.14) 28%, transparent 38%, transparent 61%, rgba(0, 0, 0, 0.14) 71%, #000 100%);
+    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.14) 28%, transparent 38%, transparent 61%, rgba(0, 0, 0, 0.14) 71%, #000 100%);
+  }
+
+  .scenery-fade-band .scenery-fade-blur-medium {
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.14) 20%, transparent 32%, transparent 67%, rgba(0, 0, 0, 0.14) 79%, #000 100%);
+    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.14) 20%, transparent 32%, transparent 67%, rgba(0, 0, 0, 0.14) 79%, #000 100%);
+  }
+
+  .scenery-fade-band .scenery-fade-blur-deep {
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.12) 12%, transparent 25%, transparent 74%, rgba(0, 0, 0, 0.12) 87%, #000 100%);
+    mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.12) 12%, transparent 25%, transparent 74%, rgba(0, 0, 0, 0.12) 87%, #000 100%);
+  }
+
+  .scenery-fade-down .scenery-fade-colour {
+    background-image: var(--scenery-fade-down);
+  }
+
+  .scenery-fade-in-x .scenery-fade-colour {
+    background-image: var(--scenery-fade-in-x);
+  }
+
+  .scenery-fade-band .scenery-fade-colour {
+    background-image: var(--scenery-fade-band);
+  }
+}
+
+/* Notion × Obsidian × Cursor inspired dark mode. Designed around a near-black
+   canvas with two slightly-raised surface tints, hairline borders, and reduced
+   text contrast so prose stays comfortable for long-form reading. */
+.dark {
+  --background: #0e0e0d;
+  --foreground: #e7e7e2;
+  --card: #161615;
+  --card-foreground: #e7e7e2;
+  --popover: #1a1a19;
+  --popover-foreground: #e7e7e2;
+  --primary: #e7e7e2;
+  --primary-foreground: #0e0e0d;
+  --secondary: #1f1f1d;
+  --secondary-foreground: #d3d3cd;
+  --muted: #1f1f1d;
+  --muted-foreground: #9c9c95;
+  --accent: #1f1f1d;
+  --accent-foreground: #e7e7e2;
+  --destructive: #f87171;
+  --border: #262624;
+  --input: #262624;
+  --ring: rgba(231, 231, 226, 0.18);
+
+  --creed-background: #0e0e0d;
+  --creed-surface: #161615;
+  --creed-surface-raised: #1f1f1d;
+  /* Darker than the hover tone (a recessed "selected" look) but kept off the
+     near-black page background so it doesn't read as a hole. */
+  --creed-surface-selected: #121211;
+  --creed-border: #262624;
+  --creed-border-strong: #34342f;
+  --creed-text-primary: #e7e7e2;
+  --creed-text-secondary: #9c9c95;
+  --creed-text-tertiary: #6b6b65;
+  --creed-button-primary-fg: #0e0e0d;
+  --creed-button-primary-hover: #cfcfc8;
+  --creed-ring-track: rgba(231, 231, 226, 0.16);
+
+  --plate-proposal: #2069d6;
+  --plate-direct: #d46d2d;
+  --plate-create: #d62b8f;
+  --plate-connect: #4bc03b;
+  --plate-improve: #3a86e8;
+  --plate-yellow: #e0a400;
+  --plate-red: #e54848;
+
+  --creed-success: #4ade80;
+  --creed-danger: #f87171;
+  --creed-score-good: #4ade80;
+  --creed-score-mid: #fbbf24;
+  --creed-score-bad: #f87171;
+
+  /* Same hue, dropped saturation + lifted off the canvas just enough to hint
+     the colour family without flashing pastel against the dark surface. */
+  --accent-tint-identity: rgba(192, 132, 252, 0.18);
+  --accent-tint-stack: rgba(96, 165, 250, 0.18);
+  --accent-tint-operating-principles: rgba(74, 222, 128, 0.16);
+  --accent-tint-decisions: rgba(251, 191, 36, 0.18);
+  --accent-tint-preferences: rgba(34, 211, 238, 0.16);
+  --accent-tint-workflows: rgba(129, 140, 248, 0.20);
+  --accent-tint-tools: rgba(56, 189, 248, 0.18);
+  --accent-tint-boundaries: rgba(248, 113, 113, 0.18);
+  --accent-tint-questions: rgba(192, 132, 252, 0.18);
+  --accent-tint-skills: rgba(244, 114, 182, 0.18);
+  --accent-tint-mini-skills: rgba(190, 242, 100, 0.20);
+  --accent-tint-projects: rgba(251, 146, 60, 0.20);
+  --accent-tint-output: rgba(94, 234, 212, 0.18);
+  --accent-tint-rose: rgba(251, 113, 133, 0.18);
+  --accent-tint-yellow: rgba(250, 204, 21, 0.20);
+  /* Mono in dark mode: white on a near-canvas grey tint so it still reads
+     as a distinct accent without flashing. */
+  --accent-color-mono: #e7e7e2;
+  --accent-tint-mono: rgba(231, 231, 226, 0.10);
+  --accent-tint-custom: rgba(231, 231, 226, 0.10);
+
+  /* Dark-canvas twins of the scenery fades (see :root for the shape notes). */
+  --scenery-fade-down: linear-gradient(180deg, rgba(14,14,13,0) 0%, rgba(14,14,13,0.012) 14%, rgba(14,14,13,0.05) 26%, rgba(14,14,13,0.11) 37%, rgba(14,14,13,0.2) 47%, rgba(14,14,13,0.32) 56%, rgba(14,14,13,0.45) 64%, rgba(14,14,13,0.59) 72%, rgba(14,14,13,0.73) 80%, rgba(14,14,13,0.85) 87%, rgba(14,14,13,0.94) 93%, rgba(14,14,13,1) 100%);
+  --scenery-fade-band: linear-gradient(180deg, rgba(14,14,13,1) 0%, rgba(14,14,13,0.99) 2%, rgba(14,14,13,0.98) 4%, rgba(14,14,13,0.95) 6%, rgba(14,14,13,0.9) 8%, rgba(14,14,13,0.82) 10%, rgba(14,14,13,0.74) 12%, rgba(14,14,13,0.62) 14%, rgba(14,14,13,0.5) 16%, rgba(14,14,13,0.38) 18%, rgba(14,14,13,0.26) 20%, rgba(14,14,13,0.18) 22%, rgba(14,14,13,0.1) 24%, rgba(14,14,13,0.05) 26%, rgba(14,14,13,0.016) 28%, rgba(14,14,13,0.002) 30%, rgba(14,14,13,0) 32%, rgba(14,14,13,0) 65%, rgba(14,14,13,0.002) 67%, rgba(14,14,13,0.016) 69%, rgba(14,14,13,0.05) 71%, rgba(14,14,13,0.1) 73%, rgba(14,14,13,0.18) 75%, rgba(14,14,13,0.26) 77%, rgba(14,14,13,0.38) 79%, rgba(14,14,13,0.5) 81%, rgba(14,14,13,0.62) 83%, rgba(14,14,13,0.74) 85%, rgba(14,14,13,0.82) 87%, rgba(14,14,13,0.9) 89%, rgba(14,14,13,0.95) 91%, rgba(14,14,13,0.98) 93%, rgba(14,14,13,0.99) 95%, rgba(14,14,13,1) 97%, rgba(14,14,13,1) 100%);
+  --scenery-fade-in-x: linear-gradient(90deg, rgba(14,14,13,1) 0%, rgba(14,14,13,0.97) 5%, rgba(14,14,13,0.9) 10%, rgba(14,14,13,0.78) 15%, rgba(14,14,13,0.62) 20%, rgba(14,14,13,0.46) 25%, rgba(14,14,13,0.3) 30%, rgba(14,14,13,0.17) 35%, rgba(14,14,13,0.07) 40%, rgba(14,14,13,0) 46%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    @apply font-sans;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    min-height: 100%;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  button:not(:disabled):not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+.github-star-icon {
+  fill: transparent;
+  transform-origin: center;
+  transform: rotate(0deg);
+  will-change: transform;
+  transition:
+    fill 160ms ease,
+    transform 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.github-star-button:hover .github-star-icon {
+  fill: currentColor;
+  transform: rotate(360deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .github-star-icon {
+    transition: fill 160ms ease;
+  }
+
+}
+
+.creed-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--creed-border-strong) transparent;
+}
+
+.creed-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.creed-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.creed-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--creed-border-strong);
+  background-clip: padding-box;
+}
+
+.editor-command-item:hover,
+.editor-command-item[data-active="true"] {
+  background: var(--creed-surface-raised);
+}
+
+.t-hero {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(2.2rem, 9vw, 3rem);
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  font-feature-settings: "kern" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (min-width: 768px) {
+  .t-hero {
+    font-size: clamp(2.75rem, 5.5vw, 3.75rem);
+  }
+}
+
+.t-section {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: clamp(1.75rem, 7.5vw, 3.4rem);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  font-feature-settings: "kern" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (min-width: 768px) {
+  .t-section {
+    font-size: clamp(2.25rem, 4.6vw, 3.4rem);
+  }
+}
+
+.t-step {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 1.35rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-feature-settings: "kern" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.t-lede {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.6;
+  letter-spacing: -0.005em;
+}
+
+@media (min-width: 768px) {
+  .t-lede {
+    font-size: 19px;
+    line-height: 1.55;
+  }
+}
+
+.t-body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.7;
+  letter-spacing: -0.005em;
+}
+
+.t-body-lg {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: -0.005em;
+}
+
+.t-meta {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: 0;
+}
+
+/* Onboarding "Copy prompt" button: smoothly cycles through the brand palette
+   (mono, blue, green, yellow, orange, red, purple). Fixed dark mono + white
+   text so the label stays legible across every colour and both themes. */
+.creed-copy-cycle {
+  animation: creed-copy-cycle 9s ease-in-out infinite alternate;
+}
+
+@keyframes creed-copy-cycle {
+  0% {
+    background-color: #2563eb;
+  }
+  20% {
+    background-color: #059669;
+  }
+  40% {
+    background-color: #eab308;
+  }
+  60% {
+    background-color: #ea580c;
+  }
+  80% {
+    background-color: #dc2626;
+  }
+  100% {
+    background-color: #7c3aed;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .creed-copy-cycle {
+    animation: none;
+    background-color: #2563eb;
+  }
+}
+
+.ProseMirror {
+  min-height: 56px;
+  font-family: var(--font-geist-sans), sans-serif;
+  color: var(--creed-text-primary);
+  font-size: 17px;
+  line-height: 1.75;
+  outline: none;
+  /* Absolute sizes so lists / callouts / tables / code never shrink when nested. */
+  --creed-prose-sm: calc(17px * 0.875);
+  --creed-prose-code: calc(17px * 0.92);
+}
+
+.ProseMirror.continuation-editor {
+  min-height: 56px;
+}
+
+.ProseMirror.continuation-editor > * + * {
+  margin-top: 0.85rem;
+}
+
+.ProseMirror > * + * {
+  margin-top: 1rem;
+}
+
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4 {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--creed-text-primary);
+}
+
+.ProseMirror h2 {
+  font-size: 1.7em;
+  line-height: 1.18;
+}
+
+.ProseMirror h3 {
+  font-size: 1.35em;
+  line-height: 1.22;
+}
+
+.ProseMirror h4 {
+  font-size: 1.15em;
+  line-height: 1.35;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: var(--creed-prose-sm);
+  line-height: 1.75;
+  padding-left: 1.45rem;
+  color: var(--creed-text-primary);
+}
+
+.ProseMirror li > ul,
+.ProseMirror li > ol,
+.ProseMirror li > div > ul,
+.ProseMirror li > div > ol {
+  font-size: inherit;
+}
+
+.creed-list .creed-list {
+  margin-top: 0.25rem;
+}
+
+.creed-list {
+  margin: 0;
+  /* Shared text column so bullets, checks, and numbers line up. */
+  --creed-list-gutter: 1.55em;
+  --creed-list-bullet: 0.58em;
+  --creed-list-check: 0.95em;
+}
+
+/* The generic editor list rule above carries padding for unclassed HTML.
+   Creed lists draw their own markers, so keep their edge aligned with prose. */
+.ProseMirror .creed-list {
+  padding-left: 0;
+}
+
+/* Squircle bullet markers (no round dots). Radius is ~33% of the marker so it
+   reads as a soft square at any size. */
+.creed-list-bullet {
+  list-style: none;
+  padding-left: 0;
+}
+
+.creed-list-bullet > li {
+  position: relative;
+  padding-left: var(--creed-list-gutter);
+}
+
+.creed-list-bullet > li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc((1.75em - var(--creed-list-bullet)) / 2);
+  width: var(--creed-list-bullet);
+  height: var(--creed-list-bullet);
+  border-radius: calc(var(--creed-list-bullet) * 0.33);
+  background: var(--section-accent-bar, var(--creed-text-secondary));
+  pointer-events: none;
+}
+
+.creed-list-ordered {
+  list-style: none;
+  counter-reset: creed-ordered-list;
+  padding-left: 0;
+}
+
+.creed-list-ordered > li {
+  position: relative;
+  padding-left: var(--creed-list-gutter);
+  counter-increment: creed-ordered-list;
+}
+
+.creed-list-ordered > li::before {
+  content: counter(creed-ordered-list) ".";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--section-accent-bar, var(--creed-text-secondary));
+  font-weight: 500;
+  text-align: left;
+  pointer-events: none;
+}
+
+/* Checklists reuse list type, spacing, and section accent. The box is a
+   slightly larger squircle than the bullet so it stays tappable. */
+.creed-list-task {
+  list-style: none;
+  padding-left: 0;
+}
+
+.creed-list-task > li {
+  position: relative;
+  padding-left: var(--creed-list-gutter);
+}
+
+.creed-list-task > li > label {
+  position: absolute;
+  left: 0;
+  top: calc((1.75em - var(--creed-list-check)) / 2);
+  width: var(--creed-list-check);
+  height: var(--creed-list-check);
+  user-select: none;
+}
+
+.creed-list-task input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.creed-list-task > li > label > span {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1.5px solid var(--section-accent-bar, var(--creed-text-secondary));
+  border-radius: 0.28em;
+  background: transparent;
+  transition:
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.creed-list-task > li > label > span::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 0.22em;
+  height: 0.4em;
+  border-right: 1.5px solid var(--creed-surface, #fff);
+  border-bottom: 1.5px solid var(--creed-surface, #fff);
+  opacity: 0;
+  transform: translate(-50%, -58%) rotate(45deg) scale(0.7);
+  transition:
+    opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.creed-list-task > li[data-checked="true"] > label > span {
+  border-color: transparent;
+  background: var(--section-accent-bar, var(--creed-text-secondary));
+}
+
+.creed-list-task > li[data-checked="true"] > label > span::after {
+  opacity: 1;
+  transform: translate(-50%, -58%) rotate(45deg) scale(1);
+}
+
+.creed-list-task > li[data-checked="true"] > div > p {
+  color: var(--creed-text-tertiary);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--creed-text-tertiary);
+}
+
+.creed-list-task label:has(input:focus-visible) > span {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-accent-bar, var(--creed-text-secondary)) 22%, transparent);
+}
+
+.ProseMirror[contenteditable="false"] .creed-list-task input[type="checkbox"] {
+  pointer-events: none;
+  cursor: default;
+}
+
+.creed-list-task > li > div {
+  min-width: 0;
+}
+
+/* Stored HTML keeps data-checked but sanitizer strips the checkbox
+   control. Paint the same squircle so previews still match the editor. */
+
+.creed-list-task > li:not(:has(> label))::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc((1.75em - var(--creed-list-check)) / 2);
+  width: var(--creed-list-check);
+  height: var(--creed-list-check);
+  border: 1.5px solid var(--section-accent-bar, var(--creed-text-secondary));
+  border-radius: 0.28em;
+  background: transparent;
+}
+
+.creed-list-task > li[data-checked="true"]:not(:has(> label)) > p {
+  color: var(--creed-text-tertiary);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--creed-text-tertiary);
+}
+
+.creed-list-task > li[data-checked="true"]:not(:has(> label))::before {
+  border-color: transparent;
+  background: var(--section-accent-bar, var(--creed-text-secondary));
+}
+
+.creed-list-task > li[data-checked="true"]:not(:has(> label))::after {
+  content: "";
+  position: absolute;
+  left: 0.475em;
+  top: 0.78em;
+  width: 0.22em;
+  height: 0.4em;
+  border-right: 1.5px solid var(--creed-surface, #fff);
+  border-bottom: 1.5px solid var(--creed-surface, #fff);
+  transform: translate(-50%, -58%) rotate(45deg);
+}
+
+/* Reusable squircle bullet list for plain JSX lists (docs, marketing, etc.).
+   Set --creed-bullet on the <ul> to colour the markers; defaults to the text
+   colour. Apply to the <ul>; <li> needs no marker classes. */
+.creed-bullets {
+  list-style: none;
+  padding-left: 0;
+}
+
+.creed-bullets > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7em;
+}
+
+.creed-bullets > li::before {
+  content: "";
+  flex: 0 0 auto;
+  /* Centres the square on the first text line. The lists run line-height ~2
+     (leading-8), so the first line's optical centre is ~1em down; offset by
+     half the marker height keeps it pinned to that first line even when the
+     item wraps. */
+  margin-top: 0.72em;
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 0.18em;
+  background: var(--creed-bullet, currentColor);
+}
+
+.creed-list-item > p,
+.creed-list-item > div > p {
+  margin: 0;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: inherit;
+  line-height: 1.75;
+}
+
+.ProseMirror .creed-list-item > p,
+.ProseMirror .creed-list-item > div {
+  min-height: 1.75em;
+}
+
+.ProseMirror > :not(.creed-list) + .creed-list {
+  margin-top: 1.4rem;
+}
+
+.ProseMirror > .creed-list + :not(.creed-list) {
+  margin-top: 1.2rem;
+}
+
+.ProseMirror li::marker {
+  color: var(--section-accent-bar, var(--creed-text-secondary));
+  font-weight: 500;
+}
+
+.ProseMirror li + li {
+  margin-top: 0.25rem;
+}
+
+.creed-callout {
+  position: relative;
+  border: none;
+  border-radius: 0 0.75rem 0.75rem 0;
+  background: var(--section-accent-tint, #faf9f6);
+  padding: 0.7rem 0.95rem 0.7rem 1.35rem;
+  font-family: var(--font-geist-sans), sans-serif;
+  color: var(--section-accent-bar, var(--creed-text-primary));
+}
+
+.creed-callout::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  border-radius: 0;
+  background: var(--section-accent-bar, #d2a35b);
+  content: "";
+}
+
+.creed-callout p {
+  margin: 0;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 0.875em;
+  line-height: 1.75;
+}
+
+.ProseMirror .creed-callout p {
+  font-size: var(--creed-prose-sm);
+}
+
+.ProseMirror code {
+  border-radius: 0.45rem;
+  background: var(--creed-surface-raised);
+  padding: 0.15rem 0.35rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.92em;
+}
+
+.creed-code-block {
+  overflow-x: auto;
+  border: none;
+  border-radius: 0.75rem;
+  background: var(--creed-surface-raised);
+  padding: 0.7rem 0.95rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.92em;
+  line-height: 1.5;
+  color: var(--creed-text-primary);
+  tab-size: 2;
+  font-variant-ligatures: none;
+  box-shadow: none;
+}
+
+.ProseMirror .creed-code-block {
+  font-size: var(--creed-prose-code);
+}
+
+.creed-code-block code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Editorial tables: hairline borders, equal column floor, wrap inside the
+   cell. Extra right padding keeps the caret off the grid. Wrapper exists so
+   wide tables scroll instead of stretching the file column. */
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 0;
+}
+
+.ProseMirror > :not(.tableWrapper):not(.creed-table) + .tableWrapper,
+.ProseMirror > :not(.tableWrapper):not(.creed-table) + .creed-table {
+  margin-top: 1.4rem;
+}
+
+.ProseMirror > .tableWrapper + :not(.tableWrapper):not(.creed-table),
+.ProseMirror > .creed-table + :not(.tableWrapper):not(.creed-table) {
+  margin-top: 1.2rem;
+}
+
+.creed-table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid var(--creed-border);
+  border-radius: 0.75rem;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 0.875em;
+  line-height: 1.75;
+  color: var(--creed-text-primary);
+}
+
+.ProseMirror .creed-table {
+  font-size: var(--creed-prose-sm);
+}
+
+.creed-table th,
+.creed-table td {
+  border-right: 1px solid var(--creed-border);
+  border-bottom: 1px solid var(--creed-border);
+  padding: 0.45rem 1rem 0.45rem 0.75rem;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  cursor: text;
+  user-select: text;
+}
+
+.creed-table th:last-child,
+.creed-table td:last-child {
+  border-right: none;
+}
+
+.creed-table tr:last-child th,
+.creed-table tr:last-child td {
+  border-bottom: none;
+}
+
+.creed-table th {
+  font-weight: inherit;
+  text-align: left;
+}
+
+.creed-table th p,
+.creed-table td p {
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.ProseMirror .creed-table .selectedCell {
+  background: var(--creed-surface-raised);
+  cursor: grab;
+  user-select: none;
+}
+
+.creed-table-drop-line {
+  position: fixed;
+  z-index: 80;
+  pointer-events: none;
+  display: none;
+  background: var(--creed-text-primary);
+  border-radius: 1px;
+}
+
+.ProseMirror .creed-table ::selection {
+  background: rgba(59, 130, 246, 0.42);
+  color: inherit;
+}
+
+.ProseMirror .creed-table .column-resize-handle {
+  display: none;
+}
+
+/* Syntax highlighting (lowlight / highlight.js classes). Same hues as the
+   GitHub-style palette, pushed more saturated so CLI snippets on /bench read
+   clearly on both light and dark canvases. */
+.creed-code-block .hljs-comment,
+.creed-code-block .hljs-quote {
+  color: #6a737d;
+  font-style: italic;
+}
+.creed-code-block .hljs-keyword,
+.creed-code-block .hljs-selector-tag,
+.creed-code-block .hljs-literal,
+.creed-code-block .hljs-section,
+.creed-code-block .hljs-link {
+  color: #e11d48;
+}
+.creed-code-block .hljs-string,
+.creed-code-block .hljs-attr,
+.creed-code-block .hljs-template-tag,
+.creed-code-block .hljs-template-variable,
+.creed-code-block .hljs-meta-string,
+.creed-code-block .hljs-regexp {
+  color: #1d4ed8;
+}
+.creed-code-block .hljs-number,
+.creed-code-block .hljs-symbol,
+.creed-code-block .hljs-bullet,
+.creed-code-block .hljs-meta {
+  color: #2563eb;
+}
+.creed-code-block .hljs-title,
+.creed-code-block .hljs-name,
+.creed-code-block .hljs-class .hljs-title,
+.creed-code-block .hljs-type {
+  color: #7c3aed;
+}
+.creed-code-block .hljs-built_in,
+.creed-code-block .hljs-builtin-name {
+  color: #2563eb;
+}
+.creed-code-block .hljs-variable,
+.creed-code-block .hljs-template-variable,
+.creed-code-block .hljs-attribute {
+  color: #ea580c;
+}
+.creed-code-block .hljs-tag {
+  color: #16a34a;
+}
+.creed-code-block .hljs-deletion {
+  color: #b31d28;
+  background: #ffeef0;
+}
+.creed-code-block .hljs-addition {
+  color: #16a34a;
+  background: #f0fff4;
+}
+.creed-code-block .hljs-emphasis { font-style: italic; }
+.creed-code-block .hljs-strong { font-weight: 600; }
+
+.dark .creed-code-block .hljs-comment,
+.dark .creed-code-block .hljs-quote {
+  color: #8b8b82;
+}
+.dark .creed-code-block .hljs-keyword,
+.dark .creed-code-block .hljs-selector-tag,
+.dark .creed-code-block .hljs-literal,
+.dark .creed-code-block .hljs-section,
+.dark .creed-code-block .hljs-link {
+  color: #fb7185;
+}
+.dark .creed-code-block .hljs-string,
+.dark .creed-code-block .hljs-attr,
+.dark .creed-code-block .hljs-template-tag,
+.dark .creed-code-block .hljs-template-variable,
+.dark .creed-code-block .hljs-meta-string,
+.dark .creed-code-block .hljs-regexp {
+  color: #38bdf8;
+}
+.dark .creed-code-block .hljs-number,
+.dark .creed-code-block .hljs-symbol,
+.dark .creed-code-block .hljs-bullet,
+.dark .creed-code-block .hljs-meta,
+.dark .creed-code-block .hljs-built_in,
+.dark .creed-code-block .hljs-builtin-name {
+  color: #60a5fa;
+}
+.dark .creed-code-block .hljs-title,
+.dark .creed-code-block .hljs-name,
+.dark .creed-code-block .hljs-class .hljs-title,
+.dark .creed-code-block .hljs-type {
+  color: #c084fc;
+}
+.dark .creed-code-block .hljs-variable,
+.dark .creed-code-block .hljs-attribute {
+  color: #fb923c;
+}
+.dark .creed-code-block .hljs-tag {
+  color: #4ade80;
+}
+.dark .creed-code-block .hljs-deletion {
+  color: #ffdcd7;
+  background: rgba(248, 81, 73, 0.15);
+}
+.dark .creed-code-block .hljs-addition {
+  color: #86efac;
+  background: rgba(46, 160, 67, 0.15);
+}
+
+.ProseMirror > :not(.creed-code-block) + .creed-code-block,
+.ProseMirror > :not(.creed-callout) + .creed-callout,
+.ProseMirror > :not(hr) + hr {
+  margin-top: 1.35rem;
+}
+
+.ProseMirror > .creed-code-block + *,
+.ProseMirror > .creed-callout + *,
+.ProseMirror > hr + * {
+  margin-top: 1.2rem;
+}
+
+.ProseMirror hr,
+.creed-hr {
+  border: none;
+  height: 0;
+  border-top: 1px solid var(--creed-border);
+  background: none;
+}
+
+.creed-hr {
+  margin: 1.35rem 0 1.2rem;
+}
+
+.ProseMirror hr {
+  margin: 0;
+}
+
+.ProseMirror a {
+  color: var(--section-accent, #2563eb);
+  cursor: text;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.ProseMirror a:hover {
+  opacity: 0.82;
+}
+
+.ProseMirror u {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.18em;
+  text-decoration-color: var(--section-accent-bar, var(--creed-text-secondary));
+}
+
+.ProseMirror mark {
+  background: var(--section-accent-tint, rgba(210, 163, 91, 0.28));
+  color: inherit;
+  border-radius: 3px;
+  padding: 0.05em 0.18em;
+}
+
+[data-modifier-link-mode="true"] .ProseMirror a {
+  cursor: pointer;
+}
+
+.ProseMirror p.is-editor-empty:first-child {
+  position: relative;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 0;
+  color: var(--creed-text-tertiary);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+/* Inline tag pill - Obsidian-style #tags. Renders inside any rich-text
+ * paragraph via the creedInlineTag mark. */
+.creed-inline-tag {
+  display: inline;
+  padding: 1px 6px;
+  margin: 0 1px;
+  border-radius: 6px;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 0.92em;
+  font-weight: 500;
+  background: var(--section-accent-tint, rgba(37, 99, 235, 0.08));
+  color: var(--section-accent-bar, #2563eb);
+  white-space: nowrap;
+  text-decoration: none;
+  vertical-align: baseline;
+}
+
+.creed-inline-tag::before {
+  content: "#";
+  opacity: 0.5;
+  margin-right: 1px;
+}
+
+.ProseMirror .creed-inline-tag {
+  cursor: text;
+}
+
+/* Tab autocomplete ghost text. Rendered as a ProseMirror widget decoration
+ * (never document content), tinted toward the section accent so it reads as
+ * proposed, not written. */
+.creed-tab-ghost-wrapper {
+  user-select: none;
+  pointer-events: none;
+}
+
+.creed-tab-ghost {
+  color: color-mix(
+    in srgb,
+    var(--section-accent, #6b7280) 34%,
+    var(--creed-text-tertiary)
+  );
+  white-space: pre-wrap;
+}
+
+/* While a ghost occupies the first empty paragraph, hide the editor
+ * placeholder so the two never overlap. */
+.ProseMirror p.is-editor-empty.has-tab-ghost::before {
+  content: none;
+}
+
+/* Keycap hint trailing the ghost: Tab accept, Esc dismiss. Matches the
+ * shared ShortcutKey styling (border, raised surface, 10px caps). */
+.creed-tab-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.creed-tab-hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid var(--creed-border);
+  border-radius: 4px;
+  background: var(--creed-surface-raised);
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--creed-text-secondary);
+}
+
+.creed-tab-hint span {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--creed-text-tertiary);
+}
+
+.creed-tab-hint span + kbd {
+  margin-left: 4px;
+}
+
+/* Small ring spinner while the suggestion is in flight. Kept subtle: the
+ * fast models land in well under a second, so it mostly never gets noticed. */
+.creed-tab-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 4px;
+  vertical-align: -1px;
+  border-radius: 9999px;
+  border: 1.5px solid
+    color-mix(in srgb, var(--creed-text-tertiary) 30%, transparent);
+  border-top-color: var(--creed-text-tertiary);
+  animation: creed-tab-spin 700ms linear infinite;
+}
+
+@keyframes creed-tab-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Shared inset so changed-text pills never sit flush on the container edge. */
+.creed-diff-block {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--creed-text-primary);
+  padding-inline: 1rem;
+  box-sizing: border-box;
+}
+
+.creed-diff-lines {
+  min-width: 0;
+}
+
+.creed-diff-line {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.creed-diff-add {
+  background: rgba(22, 163, 74, 0.12);
+  color: var(--creed-success);
+  padding: 1px 2px;
+  border-radius: 3px;
+}
+
+.creed-diff-remove {
+  background: rgba(220, 38, 38, 0.10);
+  color: var(--creed-danger);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--creed-danger) 50%, transparent);
+  padding: 1px 2px;
+  border-radius: 3px;
+}
+
+/* Dark-canvas diff tones: lower the surface opacity so the highlighted
+   words stay readable against the dark surface without flashing a fully
+   saturated red/green block behind every span. */
+.dark .creed-diff-add {
+  background: rgba(34, 197, 94, 0.10);
+  color: #4ade80;
+}
+
+.dark .creed-diff-remove {
+  background: rgba(248, 113, 113, 0.10);
+  color: #f87171;
+  text-decoration-color: rgba(248, 113, 113, 0.5);
+}
+
+/* View Transition API hooks for the circular theme reveal (see
+   components/creed/theme-provider.tsx). The default cross-fade is killed so
+   only the new layer animates; the JS animation drives the clip-path. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 0;
+}
+::view-transition-new(root) {
+  z-index: 1;
+}
+
+/* The root reveal owns the theme animation. Prevent every mounted component
+   from running its own colour transition during the same two paint frames. */
+.creed-theme-switching *,
+.creed-theme-switching *::before,
+.creed-theme-switching *::after {
+  transition: none !important;
+}
+
+/* Preserve the document's exact geometry while excluding offscreen TipTap
+   trees from the theme View Transition snapshot. The attribute exists only
+   until the new root snapshot is ready. */
+[data-theme-snapshot-hidden] > * {
+  display: none !important;
+}
+
+/* Flip pure-black-on-white SVGs (brandmark, logo, GitHub mark, etc.) in dark
+   mode so they read against the dark surface. Use sparingly - coloured brand
+   assets shouldn't get this class. */
+.dark .creed-invert-on-dark {
+  filter: invert(1);
+}
+
+/* Inline tag in dark mode: lift the tint a touch so it sits well on the
+   darker canvas. */
+.dark .creed-inline-tag {
+  background: var(--section-accent-tint, rgba(96, 165, 250, 0.18));
+  color: var(--section-accent-bar, #93c5fd);
+}
+
+.dark .creed-inline-tag::before {
+  opacity: 0.7;
+}
+
+/* Dark-canvas tweak for the code block surface only. Callouts intentionally
+   keep their `--section-accent-tint` background so the section's colour
+   identity reads in both modes - overriding it with the neutral surface
+   stripped the callout of its accent in dark mode. */
+.dark .creed-code-block {
+  background: var(--creed-surface-raised);
+  color: var(--creed-text-primary);
+  border-color: var(--creed-border);
+}
+
+/* Text selection: a saturated brand blue in both themes. Light mode keeps the
+   dark foreground so text stays legible under the tint; dark mode brightens the
+   selected text against the deeper wash. */
+::selection {
+  background: rgba(37, 99, 235, 0.24);
+}
+
+.dark ::selection {
+  background: rgba(59, 130, 246, 0.42);
+  color: #f5f5f0;
+}
+
+/* First-load Creed mark. One full revolution per cycle, eased from rest to rest,
+   then held still before the next - not a continuous spin (which reads as a
+   generic loader) and not split into part-turns. The rest is a linear segment so
+   the easing belongs entirely to the turn, and the curve is weighted at both
+   ends so the mark accelerates through the middle of the revolution rather than
+   travelling it at an even rate. */
+.creed-logo-spin {
+  animation: creed-logo-spin 1700ms infinite;
+  transform-origin: center;
+  will-change: transform;
+}
+
+@keyframes creed-logo-spin {
+  0% {
+    transform: rotate(0deg);
+    animation-timing-function: cubic-bezier(0.76, 0, 0.24, 1);
+  }
+  62% {
+    transform: rotate(360deg);
+    animation-timing-function: linear;
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Hold the loading screen back for a beat before showing it. A Creed that
+   resolves quickly should never flash a loader on the way past - with `both`
+   fill the screen sits at zero opacity through the delay, so a load that
+   finishes inside it is simply never seen. Anything slower fades the screen in
+   as it becomes worth showing. */
+.creed-loader-appear {
+  animation: creed-loader-appear 240ms cubic-bezier(0.22, 1, 0.36, 1) 320ms both;
+}
+
+@keyframes creed-loader-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Hold the mark still rather than swapping in a different motion: the point
+     of the screen is "we are working on it", which the logo alone still says. */
+  .creed-logo-spin {
+    animation: none;
+    opacity: 0.75;
+  }
+}
+
+/* The panel's height follows its content, and the panel is pinned where it
+   opened, so the whole change happens at the bottom edge. Easing it turns a
+   jump - the results list filtering, the composer taking another line - into
+   the panel breathing to its new size. Applied only after the first
+   measurement, or it would animate up from nothing as the panel opens. */
+.creed-panel-resize {
+  transition: height 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .creed-panel-resize {
+    transition: none;
+  }
+}

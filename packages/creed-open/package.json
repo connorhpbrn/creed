@@ -1,0 +1,19 @@
+{
+  "name": "@creed/open",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@creed/app": "*",
+    "@creed/core": "*",
+    "@creed/integrations": "*",
+    "@creed/persistence": "*",
+    "@creed/ui": "*",
+    "@supabase/supabase-js": "^2.101.1",
+    "next": "16.3.0",
+    "react": "19.2.4"
+  }
+}

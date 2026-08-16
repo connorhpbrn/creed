@@ -1,0 +1,4 @@
+interface:
+  display_name: "Roadmap"
+  short_description: "Add a public Median roadmap card"
+  default_prompt: "Use $roadmap. If I have not named an idea, ask what to add. If I have, create the public Median card."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Docs"
+  short_description: "Keep Creed documentation accurate and concise"
+  default_prompt: "Use $docs to update Creed documentation for this product change."
