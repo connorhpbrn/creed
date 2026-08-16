@@ -361,19 +361,21 @@ export function InlineNewSectionProposal({
           <span className="text-[#10b981] dark:text-[#4ade80]">
             proposed
           </span>
-          <span className="text-[var(--creed-text-tertiary)]">·</span>
           <span className="inline-flex items-center gap-1 text-sm">
             <DiffBadge tone="added" count={diff.added} size="md" />
-            <span className="hidden text-[var(--creed-text-primary)] sm:inline">
-              {sectionName}
-            </span>
+          </span>
+          <span className="hidden text-[var(--creed-text-tertiary)] sm:inline">
+            ·
+          </span>
+          <span className="hidden truncate text-[var(--creed-text-primary)] sm:inline">
+            {sectionName}
           </span>
           <span className="hidden sm:inline-flex">
             <AnimatedChevronDown
               size={14}
               className={cn(
-                "shrink-0 -rotate-90 text-[#10b981] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] dark:text-[#4ade80]",
-                expanded && "rotate-0",
+                "shrink-0 -rotate-90 text-[#10b981]/70 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/diff:text-[#10b981] dark:text-[#4ade80]/70 dark:group-hover/diff:text-[#4ade80]",
+                expanded && "rotate-0 text-[#10b981] dark:text-[#4ade80]",
               )}
             />
           </span>
@@ -501,18 +503,25 @@ export function InlineMetaProposal({
             <span className="sm:hidden">proposed</span>
             <span className="hidden sm:inline">{headline}</span>
           </span>
-          <span className="text-[var(--creed-text-tertiary)]">·</span>
           {isDelete ? (
-            <span className="inline-flex items-center gap-1 text-sm">
-              <DiffBadge tone="removed" count={deleteDiff?.removed ?? 0} size="md" />
+            <>
+              <span className="inline-flex items-center gap-1 text-sm">
+                <DiffBadge tone="removed" count={deleteDiff?.removed ?? 0} size="md" />
+              </span>
+              <span className="hidden text-[var(--creed-text-tertiary)] sm:inline">
+                ·
+              </span>
               <span className="hidden truncate text-[var(--creed-text-primary)] sm:inline">
                 {existingName}
               </span>
-            </span>
+            </>
           ) : (
-            <span className="truncate text-[var(--creed-text-primary)]">
-              {existingName}
-            </span>
+            <>
+              <span className="text-[var(--creed-text-tertiary)]">·</span>
+              <span className="truncate text-[var(--creed-text-primary)]">
+                {existingName}
+              </span>
+            </>
           )}
           <span className={cn(isDelete && "hidden sm:inline-flex")}>
             <AnimatedChevronDown
@@ -520,12 +529,13 @@ export function InlineMetaProposal({
               className={cn(
                 "shrink-0 -rotate-90 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
                 isDelete
-                  ? "text-[#dc2626] dark:text-[#f87171]"
+                  ? "text-[#dc2626]/70 group-hover/diff:text-[#dc2626] dark:text-[#f87171]/70 dark:group-hover/diff:text-[#f87171]"
                   : "text-[var(--creed-text-tertiary)] group-hover/diff:text-[var(--creed-text-primary)]",
                 expanded && "rotate-0",
                 expanded &&
-                  !isDelete &&
-                  "text-[var(--creed-text-primary)]",
+                  (isDelete
+                    ? "text-[#dc2626] dark:text-[#f87171]"
+                    : "text-[var(--creed-text-primary)]"),
               )}
             />
           </span>
