@@ -26,7 +26,7 @@ Create one intentional commit containing only the completed work in scope.
    identity, unstaged and staged diffs, and recent commit titles.
 3. Determine the exact files belonging to the completed task. Preserve every unrelated user change.
 4. Classify the commit before staging:
-   - **ordinary commit:** records completed work but does not release Open, Cloud, CLI, or Status; do not bump a product version or create a release tag;
+   - **ordinary commit:** records completed work but does not release Open, Cloud, CLI, or Bench; do not bump a product version or create a release tag;
    - **product release commit:** the user explicitly requested a release/version or explicitly designated this commit as a product release; apply the `semver` skill first.
    Do not treat `main`, user-facing work, shared-package changes, homepage work, documentation, or deployment capability as automatic evidence of a product release. Ask when the user's release intent is genuinely ambiguous.
 5. Confirm the relevant verification has passed. Run missing checks when repository instructions require them and their cost is proportionate to the change.
@@ -88,7 +88,7 @@ If a check fails for an unrelated pre-existing reason, identify that clearly and
 - Do not add a body that repeats the title.
 - Do not claim checks passed unless they were actually run.
 - Do not expose unrelated working-tree details in the final response.
-- Do not bump Open or Cloud merely because a commit lands on `main`.
+- Do not bump Open, Cloud, CLI, or Bench merely because a commit lands on `main`.
 - Do not create category tags such as `open`, `docs`, `home`, or `fix`; release tags are created only through explicit release work.
 
 ## Report

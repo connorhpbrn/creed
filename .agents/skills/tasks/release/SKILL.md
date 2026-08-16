@@ -54,7 +54,7 @@ Before consequential publication, identify the practical recovery path: rollback
 
 ## Stop Conditions
 
-Stop and request direction when the target or version is ambiguous, the tree contains inseparable unrelated changes, required checks fail, credentials or permissions are missing, migration ordering is unsafe, the destination differs from the requested environment, or recovery from the next step is not understood.
+Stop and request direction when the target or version is ambiguous, the CLI package is missing, the tree contains inseparable unrelated changes, required checks fail, credentials or permissions are missing, migration ordering is unsafe, the destination differs from the requested environment, or recovery from the next step is not understood.
 
 ## Report
 

@@ -1,3 +1,5 @@
+// Canonical Creed Bench product version. Bump only through the semver skill.
+// Results from other versions stay off the public chart.
 export const BENCHMARK_VERSION = "1.0.1";
 export const RESULT_SCHEMA_VERSION = 1;
 

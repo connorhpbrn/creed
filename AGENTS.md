@@ -87,13 +87,14 @@ not bypass its permission, confirmation, or safety gates.
   discover repository skills automatically.
 - Before opening or updating a GitHub pull request, always read and apply
   `.agents/skills/tasks/pr/SKILL.md`. The PR title is the squash commit that
-  will land on the base branch. The body is plain prose, not a template. The
-  skill does not grant merge, tag, version, or publish authority.
-- Before an intentional Open, Cloud, CLI, or Status product release, always
+  will land on the base branch. The body is plain prose, not a template.
+  Do not use Summary or Test plan headings. The skill does not grant merge,
+  tag, version, or publish authority.
+- Before an intentional Open, Cloud, CLI, or Bench product release, always
   read and apply `.agents/skills/tasks/semver/SKILL.md`. A commit targeting
   `main` is not automatically a product release. The skill owns SemVer,
   release metadata, and release copy; it does not grant commit, tag, push, or
-  publication authority.
+  publication authority. The status site is not a versioned product.
 - Read and apply `.agents/skills/tasks/comment/SKILL.md` whenever adding,
   rewriting, or auditing source-code comments. Comments must explain durable,
   non-obvious intent rather than narrate syntax or preserve implementation

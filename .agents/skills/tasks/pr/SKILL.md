@@ -35,7 +35,7 @@ If this PR *is* the product release the user already asked for, and `semver` has
 release cloud 0.4.0
 ```
 
-Do not invent that version. Read it from the package `semver` already updated.
+Do not invent that version. Read it from the canonical version `semver` already updated.
 
 ## Body
 
