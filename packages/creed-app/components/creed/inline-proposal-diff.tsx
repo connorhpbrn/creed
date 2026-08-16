@@ -18,6 +18,9 @@ import {
 
 const expandTransition = { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const };
 
+const DIFF_BODY_CLASS =
+  "creed-scrollbar creed-diff-block max-h-[min(40vh,20rem)] overflow-y-auto py-3";
+
 // The 20px attribution glyph on a proposal card: a member's real profile
 // picture (squircle, same footprint as the agent glyph) when they typed the
 // edit by hand, or the connected agent's glyph when an agent proposed it.
@@ -301,7 +304,7 @@ export function InlineProposalDiff({
 
       <ExpandRegion open={expanded}>
         <div className="border-t border-[var(--creed-border)]" />
-        <div className="creed-diff-block py-3">
+        <div className={DIFF_BODY_CLASS}>
           <CreedDiffView diff={diff} />
         </div>
         {proposal.reason ? (
@@ -412,7 +415,7 @@ export function InlineNewSectionProposal({
       </div>
       <ExpandRegion open={expanded}>
         <div className="border-t border-[#10b981]/20" />
-        <div className="creed-diff-block py-3 text-[14px] leading-7 text-[var(--creed-text-primary)]">
+        <div className={cn(DIFF_BODY_CLASS, "text-[14px] leading-7 text-[var(--creed-text-primary)]")}>
           <CreedDiffView diff={diff} />
         </div>
         {proposal.reason ? (
@@ -585,7 +588,7 @@ export function InlineMetaProposal({
         {/* Typography matched to the new-section card: 14px / leading-7
             so the two card bodies read at the same visual weight. */}
         {isDelete ? (
-          <div className="creed-diff-block py-3 text-[14px] leading-7 text-[var(--creed-text-primary)]">
+          <div className={cn(DIFF_BODY_CLASS, "text-[14px] leading-7 text-[var(--creed-text-primary)]")}>
             <CreedDiffView diff={deleteDiff!} />
           </div>
         ) : (

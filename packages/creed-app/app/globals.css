@@ -561,6 +561,10 @@
   font-size: inherit;
 }
 
+.creed-list .creed-list {
+  margin-top: 0.25rem;
+}
+
 .creed-list {
   margin: 0;
   /* Shared text column so bullets, checks, and numbers line up. */
@@ -1098,6 +1102,20 @@
 
 .ProseMirror a:hover {
   opacity: 0.82;
+}
+
+.ProseMirror u {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.18em;
+  text-decoration-color: var(--section-accent-bar, var(--creed-text-secondary));
+}
+
+.ProseMirror mark {
+  background: var(--section-accent-tint, rgba(210, 163, 91, 0.28));
+  color: inherit;
+  border-radius: 3px;
+  padding: 0.05em 0.18em;
 }
 
 [data-modifier-link-mode="true"] .ProseMirror a {

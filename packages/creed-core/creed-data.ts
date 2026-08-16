@@ -1186,6 +1186,7 @@ export const collaborationRules: HiddenInstructionContract = {
 //   <h3>...</h3>                                → #### ...
 //   <h4>...</h4>                                → ##### ...
 //   <ul><li>...</li></ul>                       → - ...
+//   nested <ul>/<ol> inside <li>                → two-space indented list
 //   <ul data-type="taskList">...                → - [ ] / - [x]
 //   <ol><li>...</li></ol>                       → 1. ...
 //   <table>...</table>                          → GFM pipe table
@@ -1276,27 +1277,8 @@ export function richTextToMarkdown(content: string) {
     },
   );
 
-  // Checklists before generic `<ul>` so `- [x]` does not flatten to `-`.
-  text = text.replace(/<ul\b([^>]*)>([\s\S]*?)<\/ul>/g, (match, attrs: string, body: string) => {
-    const isTask =
-      /data-type\s*=\s*(["'])taskList\1/i.test(attrs) ||
-      /\bcreed-list-task\b/.test(attrs);
-    if (!isTask) return match;
-
-    const items = Array.from(body.matchAll(/<li\b([^>]*)>([\s\S]*?)<\/li>/g))
-      .map((itemMatch) => {
-        const liAttrs = itemMatch[1];
-        const checkedMatch = liAttrs.match(
-          /data-checked\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i,
-        );
-        const raw = (checkedMatch?.[1] ?? checkedMatch?.[2] ?? checkedMatch?.[3] ?? "").toLowerCase();
-        const checked = raw === "true" || raw === "checked";
-        const label = stripTags(itemMatch[2]).trim();
-        return `- [${checked ? "x" : " "}] ${label}`.trimEnd();
-      })
-      .filter((line) => /^-\s+\[[ x]\]/.test(line));
-    return items.length ? `\n${items.join("\n")}\n` : "";
-  });
+  // Lists, including nested bullets, numbers, and checklists.
+  text = convertHtmlLists(text);
 
   // GFM tables. Run before remaining tag stripping so cell markup can still
   // use the inline conversions above. First-row `th` becomes a GFM header.
@@ -1330,22 +1312,6 @@ export function richTextToMarkdown(content: string) {
     return `\n${HEADERLESS_TABLE_MARK}\n${[emptyHeader, separator, ...parsed.map(format)].join("\n")}\n`;
   });
 
-  // Numbered lists.
-  text = text.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/g, (_match, body: string) => {
-    const items = Array.from(body.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g))
-      .map((match, index) => `${index + 1}. ${stripTags(match[1]).trim()}`)
-      .filter((line) => line.replace(/^\d+\.\s*/, "").length > 0);
-    return items.length ? `\n${items.join("\n")}\n` : "";
-  });
-
-  // Bullet lists.
-  text = text.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/g, (_match, body: string) => {
-    const items = Array.from(body.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g))
-      .map((match) => `- ${stripTags(match[1]).trim()}`)
-      .filter((line) => line.length > 2);
-    return items.length ? `\n${items.join("\n")}\n` : "";
-  });
-
   // Paragraphs - drop empty paragraphs entirely so we don't emit blank lines
   // for `<p></p>` placeholders that the editor sometimes leaves behind.
   text = text.replace(/<p[^>]*>([\s\S]*?)<\/p>/g, (_match, body: string) => {
@@ -1376,6 +1342,154 @@ export function sectionBodyMarkdown(section: CreedSection): string {
   return sectionToMarkdown(section)
     .replace(/^##\s.*(?:\n+|$)/, "")
     .trim();
+}
+
+function findHtmlOpenTag(
+  html: string,
+  from: number,
+  tag: string,
+): { index: number; attrs: string; contentStart: number } | null {
+  const pattern = new RegExp(`<${tag}\\b([^>]*)>`, "gi");
+  pattern.lastIndex = from;
+  const match = pattern.exec(html);
+  if (!match) return null;
+  return {
+    index: match.index,
+    attrs: match[1] ?? "",
+    contentStart: match.index + match[0].length,
+  };
+}
+
+function findMatchingCloseTag(html: string, tag: string, contentStart: number) {
+  const openPattern = new RegExp(`<${tag}\\b[^>]*>`, "gi");
+  const closePattern = new RegExp(`</${tag}\\s*>`, "gi");
+  let depth = 1;
+  let cursor = contentStart;
+  while (cursor < html.length && depth > 0) {
+    openPattern.lastIndex = cursor;
+    closePattern.lastIndex = cursor;
+    const open = openPattern.exec(html);
+    const close = closePattern.exec(html);
+    if (!close) return html.length;
+    if (open && open.index < close.index) {
+      depth += 1;
+      cursor = open.index + open[0].length;
+      continue;
+    }
+    depth -= 1;
+    if (depth === 0) return close.index;
+    cursor = close.index + close[0].length;
+  }
+  return html.length;
+}
+
+function findNextHtmlList(
+  html: string,
+  from: number,
+): { tag: "ul" | "ol"; index: number; attrs: string; contentStart: number } | null {
+  const ul = findHtmlOpenTag(html, from, "ul");
+  const ol = findHtmlOpenTag(html, from, "ol");
+  if (ul && (!ol || ul.index <= ol.index)) {
+    return { tag: "ul", ...ul };
+  }
+  if (ol) return { tag: "ol", ...ol };
+  return null;
+}
+
+function splitTopLevelListItems(body: string) {
+  const items: Array<{ attrs: string; inner: string }> = [];
+  let cursor = 0;
+  while (cursor < body.length) {
+    const open = findHtmlOpenTag(body, cursor, "li");
+    if (!open) break;
+    const close = findMatchingCloseTag(body, "li", open.contentStart);
+    items.push({
+      attrs: open.attrs,
+      inner: body.slice(open.contentStart, close),
+    });
+    const closeTag = body.slice(close).match(/^<\/li\s*>/i);
+    cursor = close + (closeTag ? closeTag[0].length : 0);
+    if (cursor <= open.index) break;
+  }
+  return items;
+}
+
+function isTaskListAttrs(attrs: string) {
+  return (
+    /data-type\s*=\s*(["'])taskList\1/i.test(attrs) ||
+    /\bcreed-list-task\b/.test(attrs)
+  );
+}
+
+function serializeHtmlList(
+  html: string,
+  open: { tag: "ul" | "ol"; index: number; attrs: string; contentStart: number },
+  indent: string,
+): { markdown: string; end: number } {
+  const close = findMatchingCloseTag(html, open.tag, open.contentStart);
+  const closeTag = html.slice(close).match(new RegExp(`^</${open.tag}\\s*>`, "i"));
+  const end = close + (closeTag ? closeTag[0].length : 0);
+  const isTask = open.tag === "ul" && isTaskListAttrs(open.attrs);
+  const items = splitTopLevelListItems(html.slice(open.contentStart, close));
+  const lines: string[] = [];
+  items.forEach((item, index) => {
+    const checkedMatch = item.attrs.match(
+      /data-checked\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i,
+    );
+    const raw = (
+      checkedMatch?.[1] ??
+      checkedMatch?.[2] ??
+      checkedMatch?.[3] ??
+      ""
+    ).toLowerCase();
+    const checked = raw === "true" || raw === "checked";
+    const marker = isTask
+      ? `- [${checked ? "x" : " "}] `
+      : open.tag === "ol"
+        ? `${index + 1}. `
+        : `- `;
+    lines.push(...serializeHtmlListItem(item.inner, indent, marker));
+  });
+  const markdown = lines.length ? `${lines.join("\n")}` : "";
+  return { markdown, end };
+}
+
+function serializeHtmlListItem(inner: string, indent: string, marker: string) {
+  const nested: string[] = [];
+  let rest = "";
+  let cursor = 0;
+  while (cursor < inner.length) {
+    const nestedList = findNextHtmlList(inner, cursor);
+    if (!nestedList) {
+      rest += inner.slice(cursor);
+      break;
+    }
+    rest += inner.slice(cursor, nestedList.index);
+    const serialized = serializeHtmlList(inner, nestedList, `${indent}  `);
+    if (serialized.markdown) nested.push(serialized.markdown);
+    cursor = serialized.end;
+  }
+  const text = stripTags(rest).trim().replace(/\n+/g, " ");
+  if (!text && nested.length === 0 && !marker.includes("[")) return [];
+  const head = `${indent}${marker}${text}`.trimEnd();
+  return nested.length > 0 ? [head, ...nested] : [head];
+}
+
+function convertHtmlLists(html: string) {
+  let result = "";
+  let cursor = 0;
+  while (cursor < html.length) {
+    const open = findNextHtmlList(html, cursor);
+    if (!open) {
+      result += html.slice(cursor);
+      break;
+    }
+    result += html.slice(cursor, open.index);
+    const serialized = serializeHtmlList(html, open, "");
+    result += serialized.markdown ? `\n${serialized.markdown}\n` : "";
+    cursor = serialized.end;
+  }
+  return result;
 }
 
 function stripTags(value: string) {
@@ -1756,15 +1870,15 @@ export function buildHiddenAgentGuidanceMarkdown(options?: {
       "  When: any section over a few short lines. Always group related rules under a heading instead of leaving them as a flat list.",
       "",
       "**Bullet lists** - unordered.",
-      "  Syntax: `- item` (or `* item`) on its own line, multiple items consecutive.",
+      "  Syntax: `- item` (or `* item`) on its own line, multiple items consecutive. Nest with two spaces before the marker.",
       "  When: short lists where order doesn't matter. Three items minimum or it should be a paragraph.",
       "",
       "**Numbered lists** - ordered or sequential.",
-      "  Syntax: `1. step` `2. step` `3. step` - Creed re-numbers automatically so you can use `1.` for every item if you prefer.",
+      "  Syntax: `1. step` `2. step` `3. step` - Creed re-numbers automatically so you can use `1.` for every item if you prefer. Nest with two spaces before the number.",
       "  When: order matters. Steps in a routine. Priorities ranked. Days of the week. Anything where 'first then second' is part of the meaning.",
       "",
       "**Checklists** - binary or completable items.",
-      "  Syntax: `- [ ] item` (open) or `- [x] item` (done) on its own line, multiple items consecutive.",
+      "  Syntax: `- [ ] item` (open) or `- [x] item` (done) on its own line, multiple items consecutive. Nest with two spaces, same as other lists.",
       "  When: a durable yes/no or done/not-done fact that belongs in the file. Standing commitments, recurring checks, or a small set of outcomes.",
       "  Don't: turn the Creed into a daily todo list. If it would go stale in a week, it does not belong here.",
       "",

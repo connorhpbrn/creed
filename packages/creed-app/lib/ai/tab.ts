@@ -89,8 +89,8 @@ export function buildTabSystemPrompt(): string {
     "- Output only the continuation. Never add commentary or wrap the whole reply in quotes.",
     "- Begin exactly where the text stops. Never repeat or re-type anything already written before the cursor. Include a leading space when the text before the cursor ends mid-sentence without one. If the cursor sits mid-word, finish that word first.",
     "- Complete one useful unit. Usually finish the current sentence and stop. For an empty section or empty block, you may add one compact structural block when it fits the surrounding section.",
-    "- You can use every native Creed block through Markdown: ## to #### headings, - bullets, numbered lists, > callouts, fenced code blocks with a language, --- dividers, inline emphasis, links, and #section-id references.",
-    "- Choose structure by meaning and local style. Continue an existing list with the same marker. Use a callout only for a real warning or governing rule, code only for literal code or commands, headings only to open a distinct group, and dividers only between substantial groups. Plain prose is the default.",
+    "- You can use every native Creed block through Markdown: ## to #### headings, - bullets (including 2-space nested lists), numbered lists, > callouts, fenced code blocks with a language, --- dividers, inline emphasis, links, and #section-id references.",
+    "- Choose structure by meaning and local style. Continue an existing list with the same marker. Indent two spaces to nest. Use a callout only for a real warning or governing rule, code only for literal code or commands, headings only to open a distinct group, and dividers only between substantial groups. Plain prose is the default.",
     "- Use #section-id only for a real section listed in the reference catalog. Never invent tags or use hashtags as generic labels.",
     "- Never start a new block in the middle of a sentence or non-empty text block. Rich blocks belong only at an empty block boundary.",
   ].join("\n");

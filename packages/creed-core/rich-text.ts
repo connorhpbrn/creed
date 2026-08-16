@@ -81,6 +81,40 @@ function withInlineCode(rawText: string, render: (rest: string) => string) {
   return out;
 }
 
+function stashAutolink(placeholders: string[], href: string, label: string) {
+  const token = `%%CREEDAUTOLINK${placeholders.length}%%`;
+  placeholders.push(
+    `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`,
+  );
+  return token;
+}
+
+// Angle-bracket and bare http(s) URLs. Stashed before escaping so
+// `<https://...>` is not turned into `&lt;https://...&gt;`, and so
+// `[label](https://...)` keeps its markdown link form (the URL sits
+// after `(` rather than whitespace).
+function withAutolinks(rawText: string, render: (rest: string) => string) {
+  const placeholders: string[] = [];
+  const withoutAngle = rawText.replace(
+    /<(https?:\/\/[^>\s]+)>/gi,
+    (_match, href: string) => stashAutolink(placeholders, href, href),
+  );
+  const stashed = withoutAngle.replace(
+    /(^|\s)(https?:\/\/[^\s<]+)/gi,
+    (_match, lead: string, url: string) => {
+      const trimmed = url.replace(/[.,;:!?)]+$/g, "");
+      const trail = url.slice(trimmed.length);
+      if (!/^https?:\/\//i.test(trimmed)) return `${lead}${url}`;
+      return `${lead}${stashAutolink(placeholders, trimmed, trimmed)}${trail}`;
+    },
+  );
+  let out = render(stashed);
+  placeholders.forEach((html, index) => {
+    out = out.replace(`%%CREEDAUTOLINK${index}%%`, html);
+  });
+  return out;
+}
+
 // Markdown links (`[text](url)`) - converted to anchor tags with the URL
 // HTML-escaped to keep this safe from injection through user-controlled
 // markdown. We deliberately restrict URLs to http(s) / mailto schemes and
@@ -106,17 +140,96 @@ function applyInlineExtras(escapedText: string) {
 }
 
 function inline(text: string) {
-  return withInlineCode(text, (stashed) => {
-    const escaped = escapeHtml(stashed);
-    return applyInlineExtras(
-      applyInlineEmphasis(applyInlineLinks(applyInlineTagMarks(escaped)))
-    );
-  });
+  return withInlineCode(text, (noCode) =>
+    withAutolinks(noCode, (stashed) => {
+      const escaped = escapeHtml(stashed);
+      return applyInlineExtras(
+        applyInlineEmphasis(applyInlineLinks(applyInlineTagMarks(escaped))),
+      );
+    }),
+  );
 }
 
 function paragraphize(lines: string[]) {
   const text = lines.join(" ").trim();
   return text ? `<p>${inline(text)}</p>` : "";
+}
+
+type MarkdownListKind = "ul" | "ol" | "task";
+type MarkdownListItem = {
+  indent: number;
+  kind: MarkdownListKind;
+  checked: boolean;
+  text: string;
+};
+
+function parseMarkdownListLine(line: string): MarkdownListItem | null {
+  const match = line.match(/^([ \t]*)([-*]|\d+\.)[ \t]+(.*)$/);
+  if (!match) return null;
+  const indent = match[1].replace(/\t/g, "  ").length;
+  const marker = match[2];
+  const rest = match[3];
+  if (marker === "-" || marker === "*") {
+    const task = rest.match(/^\[([ xX])\](?:[ \t]+(.*))?$/);
+    if (task) {
+      return {
+        indent,
+        kind: "task",
+        checked: task[1].toLowerCase() === "x",
+        text: task[2] ?? "",
+      };
+    }
+    return { indent, kind: "ul", checked: false, text: rest };
+  }
+  return { indent, kind: "ol", checked: false, text: rest };
+}
+
+function wrapMarkdownList(kind: MarkdownListKind, itemsHtml: string) {
+  if (kind === "task") {
+    return `<ul class="creed-list creed-list-task" data-type="taskList">${itemsHtml}</ul>`;
+  }
+  const tag = kind === "ol" ? "ol" : "ul";
+  const listClass =
+    kind === "ol" ? "creed-list creed-list-ordered" : "creed-list creed-list-bullet";
+  return `<${tag} class="${listClass}">${itemsHtml}</${tag}>`;
+}
+
+function wrapMarkdownListItem(item: MarkdownListItem, nestedHtml: string) {
+  if (item.kind === "task") {
+    return `<li class="creed-list-item" data-type="taskItem" data-checked="${item.checked}"><p>${inline(item.text)}</p>${nestedHtml}</li>`;
+  }
+  return `<li class="creed-list-item">${inline(item.text)}${nestedHtml}</li>`;
+}
+
+function renderMarkdownListForest(items: MarkdownListItem[]): string {
+  if (items.length === 0) return "";
+  const base = items[0].indent;
+  let html = "";
+  let index = 0;
+  while (index < items.length) {
+    const kind = items[index].kind;
+    const groupHtml: string[] = [];
+    while (
+      index < items.length &&
+      items[index].indent === base &&
+      items[index].kind === kind
+    ) {
+      const item = items[index];
+      index += 1;
+      const childStart = index;
+      while (index < items.length && items[index].indent > base) {
+        index += 1;
+      }
+      groupHtml.push(
+        wrapMarkdownListItem(
+          item,
+          renderMarkdownListForest(items.slice(childStart, index)),
+        ),
+      );
+    }
+    html += wrapMarkdownList(kind, groupHtml.join(""));
+  }
+  return html;
 }
 
 function isPipeRow(line: string) {
@@ -168,8 +281,7 @@ export function markdownToRichHtml(markdown: string) {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const blocks: string[] = [];
   let paragraphBuffer: string[] = [];
-  let listMode: "ul" | "ol" | "task" | null = null;
-  let listItems: Array<{ text: string; checked: boolean }> = [];
+  let listItems: MarkdownListItem[] = [];
   let quoteLines: string[] = [];
   let codeLines: string[] = [];
   let tableRows: string[] | null = null;
@@ -184,27 +296,9 @@ export function markdownToRichHtml(markdown: string) {
   }
 
   function flushList() {
-    if (listMode && listItems.length > 0) {
-      if (listMode === "task") {
-        blocks.push(
-          `<ul class="creed-list creed-list-task" data-type="taskList">${listItems
-            .map(
-              (item) =>
-                `<li class="creed-list-item" data-type="taskItem" data-checked="${item.checked}"><p>${inline(item.text)}</p></li>`,
-            )
-            .join("")}</ul>`,
-        );
-      } else {
-        const listClass =
-          listMode === "ul" ? "creed-list creed-list-bullet" : "creed-list creed-list-ordered";
-        blocks.push(
-          `<${listMode} class="${listClass}">${listItems
-            .map((item) => `<li class="creed-list-item">${inline(item.text)}</li>`)
-            .join("")}</${listMode}>`,
-        );
-      }
+    if (listItems.length > 0) {
+      blocks.push(renderMarkdownListForest(listItems));
     }
-    listMode = null;
     listItems = [];
   }
 
@@ -358,44 +452,12 @@ export function markdownToRichHtml(markdown: string) {
       continue;
     }
 
-    // GFM checklists must win over bullets. `- [ ] item` is otherwise a
-    // normal list item whose text starts with `[ ]`.
-    const task = trimmed.match(/^[-*]\s+\[([ xX])\](?:\s+(.*))?$/);
-    if (task) {
+    // Keep leading whitespace so nested markers can indent under a parent.
+    const listLine = parseMarkdownListLine(line);
+    if (listLine) {
       flushParagraph();
       flushQuote();
-      if (listMode && listMode !== "task") {
-        flushList();
-      }
-      listMode = "task";
-      listItems.push({
-        text: task[2] ?? "",
-        checked: task[1].toLowerCase() === "x",
-      });
-      continue;
-    }
-
-    const bullet = trimmed.match(/^[-*]\s+(.*)$/);
-    if (bullet) {
-      flushParagraph();
-      flushQuote();
-      if (listMode && listMode !== "ul") {
-        flushList();
-      }
-      listMode = "ul";
-      listItems.push({ text: bullet[1], checked: false });
-      continue;
-    }
-
-    const numbered = trimmed.match(/^\d+\.\s+(.*)$/);
-    if (numbered) {
-      flushParagraph();
-      flushQuote();
-      if (listMode && listMode !== "ol") {
-        flushList();
-      }
-      listMode = "ol";
-      listItems.push({ text: numbered[1], checked: false });
+      listItems.push(listLine);
       continue;
     }
 
@@ -535,4 +597,39 @@ export function normalizeRichTextInput(input: { contentHtml?: string; contentMar
   }
 
   return "";
+}
+
+const MARKDOWN_BLOCK_LINE =
+  /^(?:#{2,4}\s+\S|```|>\s?\S|[-*]\s+\S|\d+\.\s+\S|\|.+\||([-*_])\1{2,})$/;
+
+export function looksLikeMarkdown(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (/^https?:\/\/\S+$/i.test(trimmed)) return false;
+
+  for (const raw of trimmed.split("\n")) {
+    const line = raw.trimEnd();
+    const t = line.trim();
+    if (MARKDOWN_BLOCK_LINE.test(t)) return true;
+    if (/^[ \t]+(?:[-*]\s+\S|\d+\.\s+\S)/.test(line)) return true;
+  }
+
+  if (/\[[^\]]+\]\((?:https?:|mailto:|\/|#)[^)\s]+\)/.test(trimmed)) return true;
+  return /(\*\*[^*\n]+?\*\*|==[^=\n]+?==|~~[^~\n]+?~~|__[^_\n]+?__)/.test(
+    trimmed,
+  );
+}
+
+// Prefer Tiptap's HTML paste when the clipboard already carries lists,
+// headings, or other blocks. Convert plain text only when it looks like
+// markdown the user copied from an agent or a .md file.
+export function clipboardPlainTextAsMarkdown(
+  plain: string,
+  html?: string | null,
+) {
+  if (!looksLikeMarkdown(plain)) return false;
+  if (html && /<(ul|ol|table|blockquote|pre|h[1-6])\b/i.test(html)) {
+    return false;
+  }
+  return true;
 }

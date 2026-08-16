@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { sectionToMarkdown } from "@creed/core/creed-data";
 import { parseCreedMarkdown } from "@creed/core/creed-markdown";
-import { markdownToRichHtml } from "@creed/core/rich-text";
+import { markdownToRichHtml, clipboardPlainTextAsMarkdown } from "@creed/core/rich-text";
 import type { CreedSection } from "@creed/core/creed-data";
 
 // Round-trip the push → pull pipeline. Each test pushes a section through
@@ -163,6 +163,31 @@ test("inline bold and italic round-trip", () => {
   assert.ok(result.includes("<em>italic</em>"), `missing italic: ${result}`);
 });
 
+test("underline and highlight round-trip", () => {
+  const result = roundtripContent(
+    "<p>This is <u>underlined</u> and <mark>highlighted</mark>.</p>",
+  );
+  assert.match(result, /<u>underlined<\/u>/);
+  assert.match(result, /<mark>highlighted<\/mark>/);
+});
+
+test("bare and angle URLs become links", () => {
+  const bare = markdownToRichHtml("See https://creed.md for this.");
+  assert.match(bare, /<a href="https:\/\/creed.md"/);
+  assert.match(bare, />https:\/\/creed.md</);
+  const angled = markdownToRichHtml("See <https://creed.md> for this.");
+  assert.match(angled, /<a href="https:\/\/creed.md"/);
+  const labeled = markdownToRichHtml("See [Creed](https://creed.md).");
+  assert.match(labeled, /<a href="https:\/\/creed.md"/);
+  assert.match(labeled, />Creed</);
+  assert.doesNotMatch(labeled, />https:\/\/creed.md</);
+});
+
+test("javascript URLs are not autolinked", () => {
+  const result = markdownToRichHtml("Run javascript:alert(1) please.");
+  assert.doesNotMatch(result, /<a /);
+});
+
 test("multi-paragraph round-trip yields multiple paragraphs", () => {
   const result = roundtripContent("<p>First.</p><p>Second.</p><p>Third.</p>");
   const paragraphs = result.match(/<p>/g);
@@ -175,4 +200,60 @@ test("does not collapse paragraphs into bullet list", () => {
   );
   assert.ok(!result.includes("<ul"), `unexpected list in: ${result}`);
   assert.ok(!result.includes("<li>"), `unexpected list item in: ${result}`);
+});
+
+test("nested bullet markdown becomes nested lists", () => {
+  const result = markdownToRichHtml("- Work\n  - Linear\n  - Figma");
+  assert.match(result, /Work<ul class="creed-list creed-list-bullet">/);
+  assert.match(result, /Linear/);
+  assert.match(result, /Figma/);
+  const lists = result.match(/<ul class="creed-list creed-list-bullet">/g);
+  assert.equal(lists?.length, 2, `expected two bullet lists, got: ${result}`);
+});
+
+test("nested list round-trip keeps child items", () => {
+  const editor =
+    `<ul class="creed-list creed-list-bullet">` +
+    `<li class="creed-list-item">Work` +
+    `<ul class="creed-list creed-list-bullet">` +
+    `<li class="creed-list-item">Linear</li>` +
+    `<li class="creed-list-item">Figma</li>` +
+    `</ul>` +
+    `</li>` +
+    `</ul>`;
+  const result = roundtripContent(editor);
+  assert.match(result, /Work/);
+  assert.match(result, /Linear/);
+  assert.match(result, /Figma/);
+  const lists = result.match(/<ul class="creed-list creed-list-bullet">/g);
+  assert.equal(lists?.length, 2, `expected nested ul to survive, got: ${result}`);
+});
+
+test("nested numbered list under a bullet survives markdown", () => {
+  const result = markdownToRichHtml("- Steps\n  1. First\n  2. Second");
+  assert.match(result, /<ol class="creed-list creed-list-ordered">/);
+  assert.match(result, /First/);
+  assert.match(result, /Second/);
+});
+
+test("nested checklist markdown stays a task list", () => {
+  const result = markdownToRichHtml("- [ ] Parent\n  - [x] Child");
+  assert.match(result, /data-type="taskList"/);
+  assert.match(result, /data-checked="false"/);
+  assert.match(result, /data-checked="true"/);
+  assert.match(result, /Parent/);
+  assert.match(result, /Child/);
+  const lists = result.match(/data-type="taskList"/g);
+  assert.equal(lists?.length, 2, `expected nested task lists, got: ${result}`);
+});
+
+test("clipboard markdown is detected without eating plain prose or URLs", () => {
+  assert.equal(clipboardPlainTextAsMarkdown("- Work\n  - Linear"), true);
+  assert.equal(clipboardPlainTextAsMarkdown("**Connor**"), true);
+  assert.equal(clipboardPlainTextAsMarkdown("https://creed.md"), false);
+  assert.equal(clipboardPlainTextAsMarkdown("Just a sentence."), false);
+  assert.equal(
+    clipboardPlainTextAsMarkdown("- Work", "<ul><li>Work</li></ul>"),
+    false,
+  );
 });

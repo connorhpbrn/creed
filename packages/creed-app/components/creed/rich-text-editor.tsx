@@ -12,6 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { Extension, type Editor, type Range } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import Highlight from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
@@ -33,6 +34,7 @@ import {
   Heading2,
   Heading3,
   Heading4,
+  Highlighter,
   Italic,
   Link2,
   List,
@@ -46,14 +48,20 @@ import {
   Pilcrow,
   PlusSquare,
   Strikethrough,
+  Underline,
 } from "lucide-react";
 import {
   InlineTagMark,
   type SectionTagTarget,
 } from "@/components/creed/extensions/inline-tag";
 import { CreedTable } from "@/components/creed/extensions/creed-table";
+import { CreedUnderline } from "@/components/creed/extensions/underline";
 import { TabComplete } from "@/components/creed/extensions/tab-complete";
-import { markdownToRichHtml } from "@creed/core/rich-text";
+import {
+  clipboardPlainTextAsMarkdown,
+  markdownToRichHtml,
+  sanitizeRichTextHtml,
+} from "@creed/core/rich-text";
 import {
   SECTION_REFERENCE_PICKER_GAP,
   SECTION_REFERENCE_PICKER_MAX_ROWS,
@@ -1033,15 +1041,22 @@ function RichTextEditorImpl({
         codeBlock: false,
         link: {
           openOnClick: false,
+          autolink: true,
+          linkOnPaste: true,
+          protocols: ["http", "https", "mailto"],
         },
       }),
+      Highlight.configure({
+        multicolor: false,
+      }),
+      CreedUnderline,
       TaskList.configure({
         HTMLAttributes: {
           class: "creed-list creed-list-task",
         },
       }),
       TaskItem.configure({
-        nested: false,
+        nested: true,
         HTMLAttributes: {
           class: "creed-list-item",
         },
@@ -1107,6 +1122,21 @@ function RichTextEditorImpl({
 
         event.preventDefault();
         window.open(link.href, "_blank", "noopener,noreferrer");
+        return true;
+      },
+      handlePaste: (view, event) => {
+        if (!view.editable) return false;
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const clipboard = event.clipboardData;
+        if (!clipboard) return false;
+        const plain = clipboard.getData("text/plain");
+        const html = clipboard.getData("text/html");
+        if (!clipboardPlainTextAsMarkdown(plain, html)) return false;
+        const converted = sanitizeRichTextHtml(markdownToRichHtml(plain));
+        if (!converted) return false;
+        event.preventDefault();
+        editor.chain().focus().insertContent(converted).run();
         return true;
       },
       handleKeyDown: (view, event) => {
@@ -1678,6 +1708,19 @@ function RichTextEditorImpl({
                     <Italic className="h-3.5 w-3.5" />
                   </ToolbarButton>
                   <ToolbarButton
+                    active={editor.isActive("underline")}
+                    disabled={
+                      editor.isActive("code") ||
+                      !editor.can().chain().focus().toggleUnderline().run()
+                    }
+                    onClick={() =>
+                      editor.chain().focus().toggleUnderline().run()
+                    }
+                    label="Underline"
+                  >
+                    <Underline className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton
                     active={editor.isActive("strike")}
                     disabled={
                       editor.isActive("code") ||
@@ -1687,6 +1730,19 @@ function RichTextEditorImpl({
                     label="Strikethrough"
                   >
                     <Strikethrough className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton
+                    active={editor.isActive("highlight")}
+                    disabled={
+                      editor.isActive("code") ||
+                      !editor.can().chain().focus().toggleHighlight().run()
+                    }
+                    onClick={() =>
+                      editor.chain().focus().toggleHighlight().run()
+                    }
+                    label="Highlight"
+                  >
+                    <Highlighter className="h-3.5 w-3.5" />
                   </ToolbarButton>
                   <ToolbarButton
                     active={editor.isActive("code")}

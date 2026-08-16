@@ -431,7 +431,8 @@ export const TabComplete = Extension.create<TabCompleteOptions>({
             // outdents everywhere as usual.
             if (
               view.state.selection.$from.parentOffset === 0 &&
-              editor.can().sinkListItem("listItem")
+              (editor.can().sinkListItem("listItem") ||
+                editor.can().sinkListItem("taskItem"))
             ) {
               return false;
             }
