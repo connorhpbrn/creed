@@ -138,8 +138,8 @@ These are non-negotiable. Don't cross them without asking.
 
 1. **`requireApiAuth()` on every `/api/app/*` route.**
 2. **Hashed-token verification on every `/api/creed/*` and `/mcp` route.**
-3. **No personal info in source.** Email / handles / names go through
-   `lib/branding.ts` env vars.
+3. **No personal info in source.** Email and legal operator name go through
+   `lib/branding.ts` env vars. Public product links are constants in that file.
 4. **Marketing routes never read user state.** The root layout skips
    `loadCreedState` based on the `x-pathname` header set by `proxy.ts`.
    Don't reintroduce a fan-out without that gate.

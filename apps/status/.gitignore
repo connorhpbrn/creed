@@ -28,3 +28,4 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 .env*
+!.env.example
