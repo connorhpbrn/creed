@@ -152,7 +152,7 @@ export function buildTabUserPrompt({
 export function isBlockTabCompletion(text: string): boolean {
   return (
     text.includes("\n") ||
-    /^(?:#{2,4}\s|[-*]\s|\d+\.\s|>\s?|```|(?:---|\*\*\*|___)$)/.test(
+    /^(?:#{2,4}\s|[-*]\s|\d+\.\s|>\s?|```|\||(?:---|\*\*\*|___)$)/.test(
       text.trimStart(),
     )
   );

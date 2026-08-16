@@ -4,6 +4,7 @@ import sanitizeHtml from "sanitize-html";
 const RICH_TEXT_TAGS = [
   "p", "strong", "em", "u", "s", "mark", "code", "pre", "blockquote",
   "ul", "ol", "li", "a", "h2", "h3", "h4", "br", "span", "hr",
+  "table", "thead", "tbody", "tr", "th", "td",
 ];
 export function sanitizeRichTextHtml(html: string): string {
   return sanitizeHtml(html, {
@@ -12,6 +13,17 @@ export function sanitizeRichTextHtml(html: string): string {
       a: ["href"],
       span: ["class", "data-tag"],
       blockquote: ["class"],
+      ul: ["class", "data-type"],
+      ol: ["class"],
+      // data-type / data-checked are the only way a checklist survives
+      // sanitizer → editor parse. Strip them and `- [x]` becomes a bullet.
+      li: ["class", "data-type", "data-checked"],
+      table: ["class"],
+      thead: [],
+      tbody: [],
+      tr: [],
+      th: ["class"],
+      td: ["class"],
     },
     allowedSchemes: ["http", "https", "mailto"],
     allowedSchemesAppliedToAttributes: ["href"],
@@ -107,14 +119,61 @@ function paragraphize(lines: string[]) {
   return text ? `<p>${inline(text)}</p>` : "";
 }
 
+function isPipeRow(line: string) {
+  return /^\|.+\|$/.test(line);
+}
+
+function splitTableCells(line: string) {
+  const inner = line.replace(/^\|/, "").replace(/\|$/, "");
+  const cells: string[] = [];
+  let current = "";
+  for (let i = 0; i < inner.length; i += 1) {
+    if (inner[i] === "\\" && inner[i + 1] === "|") {
+      current += "|";
+      i += 1;
+      continue;
+    }
+    if (inner[i] === "|") {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += inner[i];
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function isSeparatorRow(line: string) {
+  if (!isPipeRow(line)) return false;
+  const cells = splitTableCells(line);
+  return (
+    cells.length > 0 &&
+    cells.every((cell) => /^:?-+:?$/.test(cell.replace(/\s+/g, "")))
+  );
+}
+
+function padTableRow(cells: string[], width: number) {
+  const next = cells.slice(0, width);
+  while (next.length < width) next.push("");
+  return next;
+}
+
+// GFM has no headerless table form. This markdown comment, then an empty
+// header row, keeps a td-only table from coming back as th on pull.
+// It must not be an HTML comment: richTextToMarkdown strips those.
+export const HEADERLESS_TABLE_MARK = "[//]: # (creed-table-headerless)";
+
 export function markdownToRichHtml(markdown: string) {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const blocks: string[] = [];
   let paragraphBuffer: string[] = [];
-  let listMode: "ul" | "ol" | null = null;
-  let listItems: string[] = [];
+  let listMode: "ul" | "ol" | "task" | null = null;
+  let listItems: Array<{ text: string; checked: boolean }> = [];
   let quoteLines: string[] = [];
   let codeLines: string[] = [];
+  let tableRows: string[] | null = null;
+  let tableHeaderless = false;
   let inCodeBlock = false;
 
   function flushParagraph() {
@@ -126,13 +185,24 @@ export function markdownToRichHtml(markdown: string) {
 
   function flushList() {
     if (listMode && listItems.length > 0) {
-      const listClass =
-        listMode === "ul" ? "creed-list creed-list-bullet" : "creed-list creed-list-ordered";
-      blocks.push(
-        `<${listMode} class="${listClass}">${listItems
-          .map((item) => `<li class="creed-list-item">${inline(item)}</li>`)
-          .join("")}</${listMode}>`
-      );
+      if (listMode === "task") {
+        blocks.push(
+          `<ul class="creed-list creed-list-task" data-type="taskList">${listItems
+            .map(
+              (item) =>
+                `<li class="creed-list-item" data-type="taskItem" data-checked="${item.checked}"><p>${inline(item.text)}</p></li>`,
+            )
+            .join("")}</ul>`,
+        );
+      } else {
+        const listClass =
+          listMode === "ul" ? "creed-list creed-list-bullet" : "creed-list creed-list-ordered";
+        blocks.push(
+          `<${listMode} class="${listClass}">${listItems
+            .map((item) => `<li class="creed-list-item">${inline(item.text)}</li>`)
+            .join("")}</${listMode}>`,
+        );
+      }
     }
     listMode = null;
     listItems = [];
@@ -156,6 +226,48 @@ export function markdownToRichHtml(markdown: string) {
     }
   }
 
+  function flushTable() {
+    const headerless = tableHeaderless;
+    tableHeaderless = false;
+    if (!tableRows || tableRows.length === 0) {
+      tableRows = null;
+      return;
+    }
+    const rows = tableRows;
+    tableRows = null;
+    if (rows.length >= 2 && isSeparatorRow(rows[1])) {
+      const headers = splitTableCells(rows[0]);
+      const width = headers.length;
+      if (width > 0) {
+        const bodyRows = rows
+          .slice(2)
+          .map((row) => {
+            const cells = padTableRow(splitTableCells(row), width)
+              .map((cell) => `<td><p>${inline(cell)}</p></td>`)
+              .join("");
+            return `<tr>${cells}</tr>`;
+          })
+          .join("");
+        if (headerless) {
+          blocks.push(
+            `<table class="creed-table"><tbody>${bodyRows}</tbody></table>`,
+          );
+          return;
+        }
+        const headerCells = padTableRow(headers, width)
+          .map((cell) => `<th><p>${inline(cell)}</p></th>`)
+          .join("");
+        blocks.push(
+          `<table class="creed-table"><tbody><tr>${headerCells}</tr>${bodyRows}</tbody></table>`,
+        );
+        return;
+      }
+    }
+    for (const row of rows) {
+      paragraphBuffer.push(row);
+    }
+  }
+
   for (const rawLine of lines) {
     const line = rawLine.trimEnd();
     const trimmed = line.trim();
@@ -164,6 +276,7 @@ export function markdownToRichHtml(markdown: string) {
       flushParagraph();
       flushList();
       flushQuote();
+      flushTable();
       if (inCodeBlock) {
         flushCode();
         inCodeBlock = false;
@@ -178,10 +291,33 @@ export function markdownToRichHtml(markdown: string) {
       continue;
     }
 
+    if (tableRows && !isPipeRow(trimmed)) {
+      flushTable();
+    }
+
     if (!trimmed) {
       flushParagraph();
       flushList();
       flushQuote();
+      flushTable();
+      continue;
+    }
+
+    if (trimmed === HEADERLESS_TABLE_MARK) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      flushTable();
+      tableHeaderless = true;
+      continue;
+    }
+
+    if (isPipeRow(trimmed)) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      if (!tableRows) tableRows = [];
+      tableRows.push(trimmed);
       continue;
     }
 
@@ -190,6 +326,7 @@ export function markdownToRichHtml(markdown: string) {
       flushParagraph();
       flushList();
       flushQuote();
+      flushTable();
       blocks.push(`<hr />`);
       continue;
     }
@@ -221,6 +358,23 @@ export function markdownToRichHtml(markdown: string) {
       continue;
     }
 
+    // GFM checklists must win over bullets. `- [ ] item` is otherwise a
+    // normal list item whose text starts with `[ ]`.
+    const task = trimmed.match(/^[-*]\s+\[([ xX])\](?:\s+(.*))?$/);
+    if (task) {
+      flushParagraph();
+      flushQuote();
+      if (listMode && listMode !== "task") {
+        flushList();
+      }
+      listMode = "task";
+      listItems.push({
+        text: task[2] ?? "",
+        checked: task[1].toLowerCase() === "x",
+      });
+      continue;
+    }
+
     const bullet = trimmed.match(/^[-*]\s+(.*)$/);
     if (bullet) {
       flushParagraph();
@@ -229,7 +383,7 @@ export function markdownToRichHtml(markdown: string) {
         flushList();
       }
       listMode = "ul";
-      listItems.push(bullet[1]);
+      listItems.push({ text: bullet[1], checked: false });
       continue;
     }
 
@@ -241,7 +395,7 @@ export function markdownToRichHtml(markdown: string) {
         flushList();
       }
       listMode = "ol";
-      listItems.push(numbered[1]);
+      listItems.push({ text: numbered[1], checked: false });
       continue;
     }
 
@@ -261,6 +415,7 @@ export function markdownToRichHtml(markdown: string) {
   flushParagraph();
   flushList();
   flushQuote();
+  flushTable();
   flushCode();
 
   return blocks.join("");

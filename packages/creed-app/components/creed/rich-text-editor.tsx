@@ -13,6 +13,9 @@ import { createPortal } from "react-dom";
 import { Extension, type Editor, type Range } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Placeholder from "@tiptap/extension-placeholder";
+import TaskItem from "@tiptap/extension-task-item";
+import TaskList from "@tiptap/extension-task-list";
+import { TableKit } from "@tiptap/extension-table";
 import StarterKit from "@tiptap/starter-kit";
 import Suggestion, {
   exitSuggestion,
@@ -22,6 +25,7 @@ import Suggestion, {
 } from "@tiptap/suggestion";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { NodeSelection, PluginKey } from "@tiptap/pm/state";
+import { CellSelection } from "@tiptap/pm/tables";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bold,
@@ -33,6 +37,10 @@ import {
   Link2,
   List,
   ListOrdered,
+  ListTodo,
+  Columns3,
+  Rows3,
+  Table,
   MessageSquareQuote,
   Minus,
   Pilcrow,
@@ -43,6 +51,7 @@ import {
   InlineTagMark,
   type SectionTagTarget,
 } from "@/components/creed/extensions/inline-tag";
+import { CreedTable } from "@/components/creed/extensions/creed-table";
 import { TabComplete } from "@/components/creed/extensions/tab-complete";
 import { markdownToRichHtml } from "@creed/core/rich-text";
 import {
@@ -109,6 +118,8 @@ type SelectionToolbarState = {
   y: number;
   /** When true, the toolbar sits below the selection (selection hugs viewport top). */
   placeBelow: boolean;
+  /** Text is selected inside a table: append add-column / add-row. */
+  showTableActions?: boolean;
 };
 
 type RichTextEditorProps = {
@@ -476,6 +487,27 @@ function RichTextEditorImpl({
         keywords: ["ordered", "list", "numbers", "numbered"],
         run: (editor, range) =>
           editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
+      },
+      {
+        title: "Checklist",
+        description: "Checkbox list",
+        icon: ListTodo,
+        keywords: ["todo", "task", "checkbox", "check", "done"],
+        run: (editor, range) =>
+          editor.chain().focus().deleteRange(range).toggleTaskList().run(),
+      },
+      {
+        title: "Table",
+        description: "Rows and columns",
+        icon: Table,
+        keywords: ["grid", "spreadsheet", "cells", "columns"],
+        run: (editor, range) =>
+          editor
+            .chain()
+            .focus()
+            .deleteRange(range)
+            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            .run(),
       },
       {
         title: "Code block",
@@ -1003,6 +1035,29 @@ function RichTextEditorImpl({
           openOnClick: false,
         },
       }),
+      TaskList.configure({
+        HTMLAttributes: {
+          class: "creed-list creed-list-task",
+        },
+      }),
+      TaskItem.configure({
+        nested: false,
+        HTMLAttributes: {
+          class: "creed-list-item",
+        },
+      }),
+      TableKit.configure({
+        table: {
+          resizable: false,
+          renderWrapper: true,
+          // Skip TableView colgroup so CreedTable can keep equal column widths.
+          View: null,
+          HTMLAttributes: {
+            class: "creed-table",
+          },
+        },
+      }),
+      CreedTable,
       CodeBlockLowlight.configure({
         lowlight: creedLowlight,
         // `null` here defers to lowlight.highlightAuto when the node has no
@@ -1094,8 +1149,11 @@ function RichTextEditorImpl({
 
         const parentNode = $from.node(parentDepth);
         const previousNode = parentNode.child(siblingIndex - 1);
+        const previousName = previousNode.type.name;
 
-        if (previousNode.type.name !== "horizontalRule") {
+        // Dividers and tables sit between blocks. Backspace at the start of
+        // the following paragraph deletes them, matching a selected divider.
+        if (previousName !== "horizontalRule" && previousName !== "table") {
           return false;
         }
 
@@ -1324,10 +1382,11 @@ function RichTextEditorImpl({
     const { state } = currentEditor;
     const { selection } = state;
 
-    // Bail for empty selections, NodeSelections (drag handles), and any
-    // selection where the editor isn't focused - Notion only shows the
-    // bubble menu while a *user* selection is live.
-    if (selection.empty || !currentEditor.isFocused) {
+    const inTable = currentEditor.isActive("table");
+    const cellGrid = selection instanceof CellSelection;
+    const showTableActions = inTable && !selection.empty && !cellGrid;
+
+    if (selection.empty || !currentEditor.isFocused || cellGrid) {
       setSelectionToolbar(null);
       return;
     }
@@ -1378,7 +1437,7 @@ function RichTextEditorImpl({
     // Clamp X so the toolbar stays fully on-screen even when the selection
     // hugs the left/right edge of the viewport. We assume a 320px max width;
     // the actual element is shorter but this gives a safe margin.
-    const HALF_WIDTH = 160;
+    const HALF_WIDTH = 200;
     const x = Math.max(
       VIEWPORT_PADDING + HALF_WIDTH,
       Math.min(centreX, VIEWPORT_WIDTH - VIEWPORT_PADDING - HALF_WIDTH),
@@ -1389,11 +1448,12 @@ function RichTextEditorImpl({
         prev &&
         prev.x === x &&
         prev.y === y &&
-        prev.placeBelow === placeBelow
+        prev.placeBelow === placeBelow &&
+        prev.showTableActions === showTableActions
       ) {
         return prev;
       }
-      return { x, y, placeBelow };
+      return { x, y, placeBelow, showTableActions };
     });
   }
 
@@ -1647,6 +1707,27 @@ function RichTextEditorImpl({
                   >
                     <Link2 className="h-3.5 w-3.5" />
                   </ToolbarButton>
+                  {selectionToolbar.showTableActions ? (
+                    <>
+                      <ToolbarDivider />
+                      <ToolbarButton
+                        onClick={() =>
+                          editor.chain().focus().addColumnAfter().run()
+                        }
+                        label="Add column"
+                      >
+                        <Columns3 className="h-3.5 w-3.5" />
+                      </ToolbarButton>
+                      <ToolbarButton
+                        onClick={() =>
+                          editor.chain().focus().addRowAfter().run()
+                        }
+                        label="Add row"
+                      >
+                        <Rows3 className="h-3.5 w-3.5" />
+                      </ToolbarButton>
+                    </>
+                  ) : null}
                 </motion.div>
               ) : null}
             </AnimatePresence>,

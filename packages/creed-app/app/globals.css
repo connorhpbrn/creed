@@ -563,6 +563,10 @@
 
 .creed-list {
   margin: 0;
+  /* Shared text column so bullets, checks, and numbers line up. */
+  --creed-list-gutter: 1.55em;
+  --creed-list-bullet: 0.58em;
+  --creed-list-check: 0.95em;
 }
 
 /* The generic editor list rule above carries padding for unclassed HTML.
@@ -580,18 +584,19 @@
 
 .creed-list-bullet > li {
   position: relative;
-  padding-left: 1.3em;
+  padding-left: var(--creed-list-gutter);
 }
 
 .creed-list-bullet > li::before {
   content: "";
   position: absolute;
-  left: 0.1em;
-  top: 0.6em;
-  width: 0.42em;
-  height: 0.42em;
-  border-radius: 0.14em;
+  left: 0;
+  top: calc((1.75em - var(--creed-list-bullet)) / 2);
+  width: var(--creed-list-bullet);
+  height: var(--creed-list-bullet);
+  border-radius: calc(var(--creed-list-bullet) * 0.33);
   background: var(--section-accent-bar, var(--creed-text-secondary));
+  pointer-events: none;
 }
 
 .creed-list-ordered {
@@ -602,7 +607,7 @@
 
 .creed-list-ordered > li {
   display: grid;
-  grid-template-columns: 1.55em minmax(0, 1fr);
+  grid-template-columns: var(--creed-list-gutter) minmax(0, 1fr);
   padding-left: 0;
   counter-increment: creed-ordered-list;
 }
@@ -613,10 +618,147 @@
   color: var(--section-accent-bar, var(--creed-text-secondary));
   font-weight: 500;
   text-align: left;
+  pointer-events: none;
 }
 
 .creed-list-ordered > li > * {
   grid-column: 2;
+  min-width: 0;
+}
+
+/* Checklists reuse list type, spacing, and section accent. The box is a
+   slightly larger squircle than the bullet so it stays tappable. */
+.creed-list-task {
+  list-style: none;
+  padding-left: 0;
+}
+
+.creed-list-task > li {
+  display: grid;
+  grid-template-columns: var(--creed-list-gutter) minmax(0, 1fr);
+  align-items: start;
+}
+
+.creed-list-task > li > label {
+  position: relative;
+  grid-column: 1;
+  width: var(--creed-list-check);
+  height: var(--creed-list-check);
+  margin-top: calc((1.75em - var(--creed-list-check)) / 2);
+  user-select: none;
+}
+
+.creed-list-task input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.creed-list-task > li > label > span {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1.5px solid var(--section-accent-bar, var(--creed-text-secondary));
+  border-radius: 0.28em;
+  background: transparent;
+  transition:
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.creed-list-task > li > label > span::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 0.22em;
+  height: 0.4em;
+  border-right: 1.5px solid var(--creed-surface, #fff);
+  border-bottom: 1.5px solid var(--creed-surface, #fff);
+  opacity: 0;
+  transform: translate(-50%, -58%) rotate(45deg) scale(0.7);
+  transition:
+    opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.creed-list-task > li[data-checked="true"] > label > span {
+  border-color: transparent;
+  background: var(--section-accent-bar, var(--creed-text-secondary));
+}
+
+.creed-list-task > li[data-checked="true"] > label > span::after {
+  opacity: 1;
+  transform: translate(-50%, -58%) rotate(45deg) scale(1);
+}
+
+.creed-list-task > li[data-checked="true"] > div {
+  color: var(--creed-text-tertiary);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--creed-text-tertiary);
+}
+
+.creed-list-task label:has(input:focus-visible) > span {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-accent-bar, var(--creed-text-secondary)) 22%, transparent);
+}
+
+.ProseMirror[contenteditable="false"] .creed-list-task input[type="checkbox"] {
+  pointer-events: none;
+  cursor: default;
+}
+
+.creed-list-task > li > div {
+  grid-column: 2;
+  min-width: 0;
+}
+
+/* Stored HTML keeps data-checked but sanitizer strips the checkbox
+   control. Paint the same squircle so previews still match the editor. */
+.creed-list-task > li:not(:has(> label)) {
+  display: block;
+  position: relative;
+  padding-left: var(--creed-list-gutter);
+}
+
+.creed-list-task > li:not(:has(> label))::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc((1.75em - var(--creed-list-check)) / 2);
+  width: var(--creed-list-check);
+  height: var(--creed-list-check);
+  border: 1.5px solid var(--section-accent-bar, var(--creed-text-secondary));
+  border-radius: 0.28em;
+  background: transparent;
+}
+
+.creed-list-task > li[data-checked="true"]:not(:has(> label)) > * {
+  color: var(--creed-text-tertiary);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--creed-text-tertiary);
+}
+
+.creed-list-task > li[data-checked="true"]:not(:has(> label))::before {
+  border-color: transparent;
+  background: var(--section-accent-bar, var(--creed-text-secondary));
+}
+
+.creed-list-task > li[data-checked="true"]:not(:has(> label))::after {
+  content: "";
+  position: absolute;
+  left: 0.475em;
+  top: 0.78em;
+  width: 0.22em;
+  height: 0.4em;
+  border-right: 1.5px solid var(--creed-surface, #fff);
+  border-bottom: 1.5px solid var(--creed-surface, #fff);
+  transform: translate(-50%, -58%) rotate(45deg);
 }
 
 /* Reusable squircle bullet list for plain JSX lists (docs, marketing, etc.).
@@ -640,18 +782,24 @@
      (leading-8), so the first line's optical centre is ~1em down; offset by
      half the marker height keeps it pinned to that first line even when the
      item wraps. */
-  margin-top: 0.8em;
-  width: 0.4em;
-  height: 0.4em;
-  border-radius: 0.13em;
+  margin-top: 0.72em;
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 0.18em;
   background: var(--creed-bullet, currentColor);
 }
 
-.creed-list-item > p {
+.creed-list-item > p,
+.creed-list-item > div > p {
   margin: 0;
   font-family: var(--font-geist-sans), sans-serif;
   font-size: inherit;
   line-height: 1.75;
+}
+
+.ProseMirror .creed-list-item > p,
+.ProseMirror .creed-list-item > div {
+  min-height: 1.75em;
 }
 
 .ProseMirror > :not(.creed-list) + .creed-list {
@@ -728,6 +876,97 @@
   color: inherit;
   font-family: inherit;
   font-size: inherit;
+}
+
+/* Editorial tables: hairline borders, equal column floor, wrap inside the
+   cell. Extra right padding keeps the caret off the grid. Wrapper exists so
+   wide tables scroll instead of stretching the file column. */
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 0;
+}
+
+.ProseMirror > :not(.tableWrapper):not(.creed-table) + .tableWrapper,
+.ProseMirror > :not(.tableWrapper):not(.creed-table) + .creed-table {
+  margin-top: 1.4rem;
+}
+
+.ProseMirror > .tableWrapper + :not(.tableWrapper):not(.creed-table),
+.ProseMirror > .creed-table + :not(.tableWrapper):not(.creed-table) {
+  margin-top: 1.2rem;
+}
+
+.creed-table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid var(--creed-border);
+  border-radius: 0.75rem;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 0.875em;
+  line-height: 1.75;
+  color: var(--creed-text-primary);
+}
+
+.creed-table th,
+.creed-table td {
+  border-right: 1px solid var(--creed-border);
+  border-bottom: 1px solid var(--creed-border);
+  padding: 0.45rem 1rem 0.45rem 0.75rem;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  cursor: text;
+  user-select: text;
+}
+
+.creed-table th:last-child,
+.creed-table td:last-child {
+  border-right: none;
+}
+
+.creed-table tr:last-child th,
+.creed-table tr:last-child td {
+  border-bottom: none;
+}
+
+.creed-table th {
+  font-weight: inherit;
+  text-align: left;
+}
+
+.creed-table th p,
+.creed-table td p {
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.ProseMirror .creed-table .selectedCell {
+  background: var(--creed-surface-raised);
+  cursor: grab;
+  user-select: none;
+}
+
+.creed-table-drop-line {
+  position: fixed;
+  z-index: 80;
+  pointer-events: none;
+  display: none;
+  background: var(--creed-text-primary);
+  border-radius: 1px;
+}
+
+.ProseMirror .creed-table ::selection {
+  background: rgba(59, 130, 246, 0.42);
+  color: inherit;
+}
+
+.ProseMirror .creed-table .column-resize-handle {
+  display: none;
 }
 
 /* Syntax highlighting (lowlight / highlight.js classes). Same hues as the

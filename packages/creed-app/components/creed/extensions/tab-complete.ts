@@ -406,8 +406,10 @@ export const TabComplete = Extension.create<TabCompleteOptions>({
 
             if (event.key !== "Tab" || event.shiftKey) return false;
             if (!view.editable) return false;
-            // The slash menu and # picker own Tab while open.
+            // The slash menu and # picker own Tab while open. Tables own Tab
+            // so the caret can move between cells instead of completing.
             if (shouldDeferKey(view.state)) return false;
+            if (editor.isActive("table")) return false;
 
             if (ghost.status === "showing") {
               event.preventDefault();

@@ -1,3 +1,5 @@
+import { HEADERLESS_TABLE_MARK } from "./rich-text.ts";
+
 // Single source of truth for the accent vocabulary. The literal union below
 // is derived from this array so the runtime list (used by validators and by
 // the agent contract docs) can never drift from the compile-time type.
@@ -1184,7 +1186,9 @@ export const collaborationRules: HiddenInstructionContract = {
 //   <h3>...</h3>                                → #### ...
 //   <h4>...</h4>                                → ##### ...
 //   <ul><li>...</li></ul>                       → - ...
+//   <ul data-type="taskList">...                → - [ ] / - [x]
 //   <ol><li>...</li></ol>                       → 1. ...
+//   <table>...</table>                          → GFM pipe table
 //   <blockquote class="creed-callout">...</...> → > ...   (rendered as callout)
 //   <pre><code>...</code></pre>                 → ```...```
 //   <hr />                                      → ---
@@ -1271,6 +1275,60 @@ export function richTextToMarkdown(content: string) {
         .join("\n")}\n`;
     },
   );
+
+  // Checklists before generic `<ul>` so `- [x]` does not flatten to `-`.
+  text = text.replace(/<ul\b([^>]*)>([\s\S]*?)<\/ul>/g, (match, attrs: string, body: string) => {
+    const isTask =
+      /data-type\s*=\s*(["'])taskList\1/i.test(attrs) ||
+      /\bcreed-list-task\b/.test(attrs);
+    if (!isTask) return match;
+
+    const items = Array.from(body.matchAll(/<li\b([^>]*)>([\s\S]*?)<\/li>/g))
+      .map((itemMatch) => {
+        const liAttrs = itemMatch[1];
+        const checkedMatch = liAttrs.match(
+          /data-checked\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i,
+        );
+        const raw = (checkedMatch?.[1] ?? checkedMatch?.[2] ?? checkedMatch?.[3] ?? "").toLowerCase();
+        const checked = raw === "true" || raw === "checked";
+        const label = stripTags(itemMatch[2]).trim();
+        return `- [${checked ? "x" : " "}] ${label}`.trimEnd();
+      })
+      .filter((line) => /^-\s+\[[ x]\]/.test(line));
+    return items.length ? `\n${items.join("\n")}\n` : "";
+  });
+
+  // GFM tables. Run before remaining tag stripping so cell markup can still
+  // use the inline conversions above. First-row `th` becomes a GFM header.
+  // First-row `td` stays body cells via HEADERLESS_TABLE_MARK, because GFM
+  // has no headerless table syntax.
+  text = text.replace(/<table\b[^>]*>([\s\S]*?)<\/table>/gi, (_match, body: string) => {
+    const rows = Array.from(body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi));
+    if (rows.length === 0) return "";
+    const parsed = rows.map((row) =>
+      Array.from(row[1].matchAll(/<(th|td)\b[^>]*>([\s\S]*?)<\/\1>/gi)).map((cell) => ({
+        tag: cell[1].toLowerCase(),
+        text: stripTags(cell[2]).trim().replace(/\|/g, "\\|").replace(/\n+/g, " "),
+      })),
+    );
+    const width = Math.max(0, ...parsed.map((row) => row.length));
+    if (width === 0) return "";
+    const pad = (row: (typeof parsed)[number]) => {
+      const next = row.slice(0, width);
+      while (next.length < width) next.push({ tag: "td", text: "" });
+      return next;
+    };
+    const format = (row: (typeof parsed)[number]) =>
+      `| ${pad(row).map((cell) => cell.text).join(" | ")} |`;
+    const separator = `| ${Array.from({ length: width }, () => "---").join(" | ")} |`;
+    const headerRow =
+      parsed[0].length > 0 && parsed[0].every((cell) => cell.tag === "th");
+    if (headerRow) {
+      return `\n${[format(parsed[0]), separator, ...parsed.slice(1).map(format)].join("\n")}\n`;
+    }
+    const emptyHeader = `| ${Array.from({ length: width }, () => "").join(" | ")} |`;
+    return `\n${HEADERLESS_TABLE_MARK}\n${[emptyHeader, separator, ...parsed.map(format)].join("\n")}\n`;
+  });
 
   // Numbered lists.
   text = text.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/g, (_match, body: string) => {
@@ -1705,6 +1763,19 @@ export function buildHiddenAgentGuidanceMarkdown(options?: {
       "  Syntax: `1. step` `2. step` `3. step` - Creed re-numbers automatically so you can use `1.` for every item if you prefer.",
       "  When: order matters. Steps in a routine. Priorities ranked. Days of the week. Anything where 'first then second' is part of the meaning.",
       "",
+      "**Checklists** - binary or completable items.",
+      "  Syntax: `- [ ] item` (open) or `- [x] item` (done) on its own line, multiple items consecutive.",
+      "  When: a durable yes/no or done/not-done fact that belongs in the file. Standing commitments, recurring checks, or a small set of outcomes.",
+      "  Don't: turn the Creed into a daily todo list. If it would go stale in a week, it does not belong here.",
+      "",
+      "**Tables** - compact compared facts.",
+      "  Syntax: a GFM pipe table. Header row, separator, then body rows:",
+      "  `| Person | Role |`",
+      "  `| --- | --- |`",
+      "  `| Maya | co-founder |`",
+      "  When: a small set of aligned fields that would be clumsier as repeating bullets. People, constraints with the same shape, ranked options.",
+      "  Don't: dump a spreadsheet. Two or three columns, short cells.",
+      "",
       "**Callouts** - warnings, hard rules, do/don't notes.",
       "  Syntax: `> text on the line` (markdown blockquote). Multi-line callouts use `> ` on each line.",
       "  When: a single rule that the AI should treat as a hard constraint. Things like 'Don't suggest meetings before 11.' or 'Vegetarian - no dairy in recipes.' Renders with an accent strip so it stands out.",
@@ -1797,7 +1868,7 @@ export function buildHiddenAgentGuidanceMarkdown(options?: {
         "- Use direct edits for clear section updates when no review step is required.",
         "- You may update any editable section listed above by its real section id and kind.",
         "- You may also create a new rich-text section when it helps the file.",
-        "- For rich-text content, send contentHtml directly or contentMarkdown and Creed will convert headings, bullet lists, numbered lists, callouts, and code blocks into supported editor content.",
+        "- For rich-text content, send contentHtml directly or contentMarkdown and Creed will convert headings, bullet lists, numbered lists, checklists, tables, callouts, and code blocks into supported editor content.",
         "",
         "Example JSON body for updating an existing section (note the rich `contentMarkdown` - submit something that genuinely uses the components, not a single paragraph or a flat bullet list):",
         "{",
