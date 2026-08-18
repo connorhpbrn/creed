@@ -10,7 +10,7 @@ export type ChangelogEntry = {
 
 export const changelog: ChangelogEntry[] = [
   {
-    date: "2026-08-10",
+    date: "2026-08-16",
     title: "Creed Open v1.0.0",
     body: "The first stable Creed Open release: a private, single-owner Personal Creed that is straightforward to self-host and connect to your agents.",
     highlights: [

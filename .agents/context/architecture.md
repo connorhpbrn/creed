@@ -64,7 +64,7 @@ Creed Open is a single-owner application with no public login or signup screen.
 - Another device can be authorised by entering the current secret.
 - API and MCP access continue through their own scoped credentials.
 
-Open fails closed when configuration or migrations are incomplete. `public.creed_schema_version()` gives the service role one bounded readiness check.
+Open fails closed when configuration or migrations are incomplete. `public.creed_schema_version()` gives the service role one bounded readiness check. A valid owner cookie does not skip that check: the app and onboarding layouts send the owner back to `/claim` until the schema meets `REQUIRED_OPEN_SCHEMA_VERSION`.
 
 ## Authentication boundaries
 
@@ -78,7 +78,7 @@ Open fails closed when configuration or migrations are incomplete. `public.creed
 
 ## Product state and persistence
 
-`CreedState` lives in `packages/creed-core/creed-data.ts`. `CreedProvider` in `packages/creed-app/components/creed/creed-provider.tsx` owns client state and sync.
+`CreedState` lives in `packages/creed-core/creed-data.ts`. `CreedProvider` in `packages/creed-app/components/creed/creed-provider.tsx` owns client state and sync. Personal onboarding persists the seed with `POST /api/app/claim` from `packages/creed-app`; Open and Cloud re-export that route. The handler calls `apply_creed_onboarding_action` with `replace-placeholder`. Open installation-owner claim remains `POST /api/open/claim` and is a different step.
 
 Supabase is required for Open and Cloud. Each edition owns an independent forward-only migration history under `apps/<edition>/supabase/migrations/`. Cloud deploys its verified history through the Supabase GitHub integration. Open's installer previews and applies the Open-only history to each self-hosted project. RLS remains the data boundary even though Open currently has one owner.
 

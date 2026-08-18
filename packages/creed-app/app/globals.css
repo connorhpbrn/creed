@@ -509,6 +509,9 @@
   font-size: 17px;
   line-height: 1.75;
   outline: none;
+  /* Absolute sizes so lists / callouts / tables / code never shrink when nested. */
+  --creed-prose-sm: calc(17px * 0.875);
+  --creed-prose-code: calc(17px * 0.92);
 }
 
 .ProseMirror.continuation-editor {
@@ -550,19 +553,29 @@
 .ProseMirror ul,
 .ProseMirror ol {
   font-family: var(--font-geist-sans), sans-serif;
-  font-size: 0.875em;
+  font-size: var(--creed-prose-sm);
   line-height: 1.75;
   padding-left: 1.45rem;
   color: var(--creed-text-primary);
 }
 
 .ProseMirror li > ul,
-.ProseMirror li > ol {
+.ProseMirror li > ol,
+.ProseMirror li > div > ul,
+.ProseMirror li > div > ol {
   font-size: inherit;
+}
+
+.creed-list .creed-list {
+  margin-top: 0.25rem;
 }
 
 .creed-list {
   margin: 0;
+  /* Shared text column so bullets, checks, and numbers line up. */
+  --creed-list-gutter: 1.55em;
+  --creed-list-bullet: 0.58em;
+  --creed-list-check: 0.95em;
 }
 
 /* The generic editor list rule above carries padding for unclassed HTML.
@@ -580,18 +593,19 @@
 
 .creed-list-bullet > li {
   position: relative;
-  padding-left: 1.3em;
+  padding-left: var(--creed-list-gutter);
 }
 
 .creed-list-bullet > li::before {
   content: "";
   position: absolute;
-  left: 0.1em;
-  top: 0.6em;
-  width: 0.42em;
-  height: 0.42em;
-  border-radius: 0.14em;
+  left: 0;
+  top: calc((1.75em - var(--creed-list-bullet)) / 2);
+  width: var(--creed-list-bullet);
+  height: var(--creed-list-bullet);
+  border-radius: calc(var(--creed-list-bullet) * 0.33);
   background: var(--section-accent-bar, var(--creed-text-secondary));
+  pointer-events: none;
 }
 
 .creed-list-ordered {
@@ -601,22 +615,148 @@
 }
 
 .creed-list-ordered > li {
-  display: grid;
-  grid-template-columns: 1.55em minmax(0, 1fr);
-  padding-left: 0;
+  position: relative;
+  padding-left: var(--creed-list-gutter);
   counter-increment: creed-ordered-list;
 }
 
 .creed-list-ordered > li::before {
   content: counter(creed-ordered-list) ".";
-  grid-column: 1;
+  position: absolute;
+  left: 0;
+  top: 0;
   color: var(--section-accent-bar, var(--creed-text-secondary));
   font-weight: 500;
   text-align: left;
+  pointer-events: none;
 }
 
-.creed-list-ordered > li > * {
-  grid-column: 2;
+/* Checklists reuse list type, spacing, and section accent. The box is a
+   slightly larger squircle than the bullet so it stays tappable. */
+.creed-list-task {
+  list-style: none;
+  padding-left: 0;
+}
+
+.creed-list-task > li {
+  position: relative;
+  padding-left: var(--creed-list-gutter);
+}
+
+.creed-list-task > li > label {
+  position: absolute;
+  left: 0;
+  top: calc((1.75em - var(--creed-list-check)) / 2);
+  width: var(--creed-list-check);
+  height: var(--creed-list-check);
+  user-select: none;
+}
+
+.creed-list-task input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.creed-list-task > li > label > span {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1.5px solid var(--section-accent-bar, var(--creed-text-secondary));
+  border-radius: 0.28em;
+  background: transparent;
+  transition:
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.creed-list-task > li > label > span::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 0.22em;
+  height: 0.4em;
+  border-right: 1.5px solid var(--creed-surface, #fff);
+  border-bottom: 1.5px solid var(--creed-surface, #fff);
+  opacity: 0;
+  transform: translate(-50%, -58%) rotate(45deg) scale(0.7);
+  transition:
+    opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.creed-list-task > li[data-checked="true"] > label > span {
+  border-color: transparent;
+  background: var(--section-accent-bar, var(--creed-text-secondary));
+}
+
+.creed-list-task > li[data-checked="true"] > label > span::after {
+  opacity: 1;
+  transform: translate(-50%, -58%) rotate(45deg) scale(1);
+}
+
+.creed-list-task > li[data-checked="true"] > div > p {
+  color: var(--creed-text-tertiary);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--creed-text-tertiary);
+}
+
+.creed-list-task label:has(input:focus-visible) > span {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-accent-bar, var(--creed-text-secondary)) 22%, transparent);
+}
+
+.ProseMirror[contenteditable="false"] .creed-list-task input[type="checkbox"] {
+  pointer-events: none;
+  cursor: default;
+}
+
+.creed-list-task > li > div {
+  min-width: 0;
+}
+
+/* Stored HTML keeps data-checked but sanitizer strips the checkbox
+   control. Paint the same squircle so previews still match the editor. */
+
+.creed-list-task > li:not(:has(> label))::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc((1.75em - var(--creed-list-check)) / 2);
+  width: var(--creed-list-check);
+  height: var(--creed-list-check);
+  border: 1.5px solid var(--section-accent-bar, var(--creed-text-secondary));
+  border-radius: 0.28em;
+  background: transparent;
+}
+
+.creed-list-task > li[data-checked="true"]:not(:has(> label)) > p {
+  color: var(--creed-text-tertiary);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--creed-text-tertiary);
+}
+
+.creed-list-task > li[data-checked="true"]:not(:has(> label))::before {
+  border-color: transparent;
+  background: var(--section-accent-bar, var(--creed-text-secondary));
+}
+
+.creed-list-task > li[data-checked="true"]:not(:has(> label))::after {
+  content: "";
+  position: absolute;
+  left: 0.475em;
+  top: 0.78em;
+  width: 0.22em;
+  height: 0.4em;
+  border-right: 1.5px solid var(--creed-surface, #fff);
+  border-bottom: 1.5px solid var(--creed-surface, #fff);
+  transform: translate(-50%, -58%) rotate(45deg);
 }
 
 /* Reusable squircle bullet list for plain JSX lists (docs, marketing, etc.).
@@ -640,18 +780,24 @@
      (leading-8), so the first line's optical centre is ~1em down; offset by
      half the marker height keeps it pinned to that first line even when the
      item wraps. */
-  margin-top: 0.8em;
-  width: 0.4em;
-  height: 0.4em;
-  border-radius: 0.13em;
+  margin-top: 0.72em;
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 0.18em;
   background: var(--creed-bullet, currentColor);
 }
 
-.creed-list-item > p {
+.creed-list-item > p,
+.creed-list-item > div > p {
   margin: 0;
   font-family: var(--font-geist-sans), sans-serif;
   font-size: inherit;
   line-height: 1.75;
+}
+
+.ProseMirror .creed-list-item > p,
+.ProseMirror .creed-list-item > div {
+  min-height: 1.75em;
 }
 
 .ProseMirror > :not(.creed-list) + .creed-list {
@@ -699,6 +845,10 @@
   line-height: 1.75;
 }
 
+.ProseMirror .creed-callout p {
+  font-size: var(--creed-prose-sm);
+}
+
 .ProseMirror code {
   border-radius: 0.45rem;
   background: var(--creed-surface-raised);
@@ -722,12 +872,111 @@
   box-shadow: none;
 }
 
+.ProseMirror .creed-code-block {
+  font-size: var(--creed-prose-code);
+}
+
 .creed-code-block code {
   background: transparent;
   padding: 0;
   color: inherit;
   font-family: inherit;
   font-size: inherit;
+}
+
+/* Editorial tables: hairline borders, equal column floor, wrap inside the
+   cell. Extra right padding keeps the caret off the grid. Wrapper exists so
+   wide tables scroll instead of stretching the file column. */
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 0;
+}
+
+.ProseMirror > :not(.tableWrapper):not(.creed-table) + .tableWrapper,
+.ProseMirror > :not(.tableWrapper):not(.creed-table) + .creed-table {
+  margin-top: 1.4rem;
+}
+
+.ProseMirror > .tableWrapper + :not(.tableWrapper):not(.creed-table),
+.ProseMirror > .creed-table + :not(.tableWrapper):not(.creed-table) {
+  margin-top: 1.2rem;
+}
+
+.creed-table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid var(--creed-border);
+  border-radius: 0.75rem;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 0.875em;
+  line-height: 1.75;
+  color: var(--creed-text-primary);
+}
+
+.ProseMirror .creed-table {
+  font-size: var(--creed-prose-sm);
+}
+
+.creed-table th,
+.creed-table td {
+  border-right: 1px solid var(--creed-border);
+  border-bottom: 1px solid var(--creed-border);
+  padding: 0.45rem 1rem 0.45rem 0.75rem;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  cursor: text;
+  user-select: text;
+}
+
+.creed-table th:last-child,
+.creed-table td:last-child {
+  border-right: none;
+}
+
+.creed-table tr:last-child th,
+.creed-table tr:last-child td {
+  border-bottom: none;
+}
+
+.creed-table th {
+  font-weight: inherit;
+  text-align: left;
+}
+
+.creed-table th p,
+.creed-table td p {
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.ProseMirror .creed-table .selectedCell {
+  background: var(--creed-surface-raised);
+  cursor: grab;
+  user-select: none;
+}
+
+.creed-table-drop-line {
+  position: fixed;
+  z-index: 80;
+  pointer-events: none;
+  display: none;
+  background: var(--creed-text-primary);
+  border-radius: 1px;
+}
+
+.ProseMirror .creed-table ::selection {
+  background: rgba(59, 130, 246, 0.42);
+  color: inherit;
+}
+
+.ProseMirror .creed-table .column-resize-handle {
+  display: none;
 }
 
 /* Syntax highlighting (lowlight / highlight.js classes). Same hues as the
@@ -838,13 +1087,31 @@
 }
 
 .ProseMirror > :not(.creed-code-block) + .creed-code-block,
-.ProseMirror > :not(.creed-callout) + .creed-callout {
+.ProseMirror > :not(.creed-callout) + .creed-callout,
+.ProseMirror > :not(hr) + hr {
   margin-top: 1.35rem;
 }
 
 .ProseMirror > .creed-code-block + *,
-.ProseMirror > .creed-callout + * {
+.ProseMirror > .creed-callout + *,
+.ProseMirror > hr + * {
   margin-top: 1.2rem;
+}
+
+.ProseMirror hr,
+.creed-hr {
+  border: none;
+  height: 0;
+  border-top: 1px solid var(--creed-border);
+  background: none;
+}
+
+.creed-hr {
+  margin: 1.35rem 0 1.2rem;
+}
+
+.ProseMirror hr {
+  margin: 0;
 }
 
 .ProseMirror a {
@@ -861,12 +1128,32 @@
   opacity: 0.82;
 }
 
+.ProseMirror u {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.18em;
+  text-decoration-color: var(--section-accent-bar, var(--creed-text-secondary));
+}
+
+.ProseMirror mark {
+  background: var(--section-accent-tint, rgba(210, 163, 91, 0.28));
+  color: inherit;
+  border-radius: 3px;
+  padding: 0.05em 0.18em;
+}
+
 [data-modifier-link-mode="true"] .ProseMirror a {
   cursor: pointer;
 }
 
+.ProseMirror p.is-editor-empty:first-child {
+  position: relative;
+}
+
 .ProseMirror p.is-editor-empty:first-child::before {
-  float: left;
+  position: absolute;
+  left: 0;
+  top: 0;
   height: 0;
   color: var(--creed-text-tertiary);
   content: attr(data-placeholder);
@@ -1003,16 +1290,16 @@
 
 .creed-diff-add {
   background: rgba(22, 163, 74, 0.12);
-  color: #15803d;
+  color: var(--creed-success);
   padding: 1px 2px;
   border-radius: 3px;
 }
 
 .creed-diff-remove {
   background: rgba(220, 38, 38, 0.10);
-  color: #b91c1c;
+  color: var(--creed-danger);
   text-decoration: line-through;
-  text-decoration-color: rgba(185, 28, 28, 0.5);
+  text-decoration-color: color-mix(in srgb, var(--creed-danger) 50%, transparent);
   padding: 1px 2px;
   border-radius: 3px;
 }

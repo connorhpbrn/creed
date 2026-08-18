@@ -22,11 +22,14 @@ export async function AuthedProviders({
   requestAuth,
   activeCreed,
   forceLocal = false,
+  persistFromDatabase = true,
 }: {
   children: ReactNode;
   requestAuth?: RequestAuth;
   activeCreed?: ActiveCreed | null;
   forceLocal?: boolean;
+  /** False on onboarding so an empty seed still POSTs /api/app/claim. A composed Creed keeps persistence. */
+  persistFromDatabase?: boolean;
 }) {
   let initialState = initialCreedState;
   let persistenceEnabled = false;
@@ -44,7 +47,9 @@ export async function AuthedProviders({
             : activeCreed;
         const result = await loadActiveCreedState(supabase, user, active);
         initialState = result.state;
-        persistenceEnabled = result.hasPersistedCreed;
+        persistenceEnabled =
+          result.hasPersistedCreed &&
+          (persistFromDatabase || result.state.sections.length > 0);
       } catch (error) {
         if (isSupabaseTableMissingError(error)) {
           missingSchemaMessage =

@@ -508,12 +508,14 @@ function SectionChangeRow({ change }: { change: SectionChange }) {
   if (kind === "added" || kind === "removed") {
     const added = kind === "added";
     const containerClass = added
-      ? "border-[#10b981]/35 bg-[#ECFDF5]/40 dark:border-[#22c55e]/35 dark:bg-[#052e1a]/40"
-      : "border-[#dc2626]/35 bg-[#FEF2F2]/40 dark:border-[#ef4444]/35 dark:bg-[#7f1d1d]/15";
+      ? "border-[var(--creed-success)]/35 bg-[var(--creed-success)]/10 dark:border-[#22c55e]/35 dark:bg-[#052e1a]/40"
+      : "border-[var(--creed-danger)]/35 bg-[var(--creed-danger)]/10 dark:border-[#ef4444]/35 dark:bg-[#7f1d1d]/15";
     const toneClass = added
-      ? "text-[#10b981] dark:text-[#4ade80]"
-      : "text-[#dc2626] dark:text-[#f87171]";
-    const dividerClass = added ? "border-[#10b981]/20" : "border-[#dc2626]/20";
+      ? "text-[var(--creed-success)]"
+      : "text-[var(--creed-danger)]";
+    const dividerClass = added
+      ? "border-[var(--creed-success)]/20 dark:border-[#22c55e]/20"
+      : "border-[var(--creed-danger)]/20 dark:border-[#ef4444]/20";
 
     return (
       <div
@@ -2724,10 +2726,13 @@ export function FileScreen({ active = true }: { active?: boolean }) {
                           // dialog's final confirm button (Push Creed / Pull
                           // Creed), so we keep the trigger here calm to
                           // avoid two competing CTAs on screen.
-                          "border-r-0 border-[var(--creed-border)] bg-[var(--creed-surface)] px-3 text-[12px] md:px-3.5 md:text-sm",
+                          "border-r-0 border-[var(--creed-border)] bg-[var(--creed-surface)] px-2.5 text-[12px] md:px-3.5 md:text-sm",
                           !githubConfigured &&
                             "text-[var(--creed-text-tertiary)]",
                         )}
+                        aria-label={
+                          selectedVersionAction === "pull" ? "Pull" : "Push"
+                        }
                         onMouseEnter={versionIcon.start}
                         onMouseLeave={versionIcon.settle}
                         onClick={() => {
@@ -2761,7 +2766,9 @@ export function FileScreen({ active = true }: { active?: boolean }) {
                             className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center leading-none"
                           />
                         )}
-                        {selectedVersionAction === "pull" ? "Pull" : "Push"}
+                        <span className="hidden md:inline">
+                          {selectedVersionAction === "pull" ? "Pull" : "Push"}
+                        </span>
                       </Button>
 
                       <DropdownMenu>
@@ -4733,7 +4740,7 @@ const ActivityRailContent = memo(function ActivityRailContent({
   );
 
   return (
-    <div className="flex h-full w-full flex-col p-5 lg:w-[356px]">
+    <div className="flex h-full w-full flex-col p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2.5">

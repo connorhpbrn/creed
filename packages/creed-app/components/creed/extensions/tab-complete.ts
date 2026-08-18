@@ -1,10 +1,10 @@
 // Tab autocomplete: explicit-invoke ghost text inside the section editor.
 //
-// Press Tab once at the caret and one suggestion streams in as inline ghost
+// Press Tab once after a letter and one suggestion streams in as inline ghost
 // text (a decoration, never document content). Tab again accepts it, Escape
 // dismisses it, and any other keystroke dismisses it while keeping the key.
-// Cmd/Ctrl+ArrowRight accepts one word at a time. Empty sections get a short
-// drafted opening instead of a mid-sentence continuation.
+// Cmd/Ctrl+ArrowRight accepts one word at a time. Tab at a blank, after a
+// space, or after punctuation is left alone.
 //
 // The ghost lives entirely in plugin state + decorations, so it can never
 // leak into getHTML(), autosave, presence diffs, or proposals. Accepting
@@ -108,6 +108,22 @@ function buildLoadingWidget() {
 function nextWordChunk(text: string) {
   const match = /^\s*\S+/.exec(text);
   return match ? match[0] : text;
+}
+
+// Tab completes the current word, not the next one. A caret at the start or
+// middle of a word has a letter to the right; leave Tab alone there.
+function canInvokeTabComplete(state: EditorState): boolean {
+  const { selection } = state;
+  if (!selection.empty) return false;
+  const $from = selection.$from;
+  if (!$from.parent.isTextblock) return false;
+  const offset = $from.parentOffset;
+  const size = $from.parent.content.size;
+  const before =
+    offset <= 0 ? "" : $from.parent.textBetween(offset - 1, offset, "", "");
+  const after =
+    offset >= size ? "" : $from.parent.textBetween(offset, offset + 1, "", "");
+  return /\p{L}/u.test(before) && !/\p{L}/u.test(after);
 }
 
 export const TabComplete = Extension.create<TabCompleteOptions>({
@@ -406,8 +422,10 @@ export const TabComplete = Extension.create<TabCompleteOptions>({
 
             if (event.key !== "Tab" || event.shiftKey) return false;
             if (!view.editable) return false;
-            // The slash menu and # picker own Tab while open.
+            // The slash menu and # picker own Tab while open. Tables own Tab
+            // so the caret can move between cells instead of completing.
             if (shouldDeferKey(view.state)) return false;
+            if (editor.isActive("table")) return false;
 
             if (ghost.status === "showing") {
               event.preventDefault();
@@ -429,14 +447,14 @@ export const TabComplete = Extension.create<TabCompleteOptions>({
             // outdents everywhere as usual.
             if (
               view.state.selection.$from.parentOffset === 0 &&
-              editor.can().sinkListItem("listItem")
+              (editor.can().sinkListItem("listItem") ||
+                editor.can().sinkListItem("taskItem"))
             ) {
               return false;
             }
-            // Composition and range selections are too ambiguous to complete.
             if (view.composing) return false;
+            if (!canInvokeTabComplete(view.state)) return false;
             event.preventDefault();
-            if (!view.state.selection.empty) return true;
             invoke(view);
             return true;
           },

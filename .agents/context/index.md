@@ -33,7 +33,7 @@ working on Creed. Code remains canonical when documentation drifts.
 - Creed is a personal-context curation product, not a notes app, journal, memory feed, or generic AI wrapper.
 - Keep the file sacred, portable, high-signal, and worth reading.
 - Marketing and product UI should feel calm, premium, editorial, and document-first.
-- Never put personal information in source. Use environment-backed branding values.
+- Never put personal email or legal names in source. Use environment-backed branding values. Public product links are constants in `lib/branding.ts`.
 - Protect authentication, token hashing, encryption, RLS, and the static marketing layout boundaries.
 - Do not use em dashes in product copy, prompts, comments, or context.
 - Update context only when a durable product, architecture, decision, roadmap, brand, or current-state truth changes.

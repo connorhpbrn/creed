@@ -9,10 +9,13 @@ import { isSupabaseTableMissingError } from "@/lib/creed-backend-errors";
 import { resolveActiveCreed } from "@/lib/creed-context";
 import { getRequestAuth } from "@/lib/request-auth";
 import { isSupabaseConfigured } from "@creed/persistence/supabase/env";
+import { getOpenDatabaseReadiness } from "@creed/open/lib/open-setup";
 
 export const dynamic = "force-dynamic";
 
 export default async function CreedAppLayout({ children }: { children: ReactNode }) {
+  if (!(await getOpenDatabaseReadiness()).ready) redirect("/claim");
+
   if (!isSupabaseConfigured()) {
     return (
       <AuthedProviders>

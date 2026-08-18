@@ -4,6 +4,7 @@ import sanitizeHtml from "sanitize-html";
 const RICH_TEXT_TAGS = [
   "p", "strong", "em", "u", "s", "mark", "code", "pre", "blockquote",
   "ul", "ol", "li", "a", "h2", "h3", "h4", "br", "span", "hr",
+  "table", "thead", "tbody", "tr", "th", "td",
 ];
 export function sanitizeRichTextHtml(html: string): string {
   return sanitizeHtml(html, {
@@ -12,6 +13,17 @@ export function sanitizeRichTextHtml(html: string): string {
       a: ["href"],
       span: ["class", "data-tag"],
       blockquote: ["class"],
+      ul: ["class", "data-type"],
+      ol: ["class"],
+      // data-type / data-checked are the only way a checklist survives
+      // sanitizer → editor parse. Strip them and `- [x]` becomes a bullet.
+      li: ["class", "data-type", "data-checked"],
+      table: ["class"],
+      thead: [],
+      tbody: [],
+      tr: [],
+      th: ["class"],
+      td: ["class"],
     },
     allowedSchemes: ["http", "https", "mailto"],
     allowedSchemesAppliedToAttributes: ["href"],
@@ -69,6 +81,40 @@ function withInlineCode(rawText: string, render: (rest: string) => string) {
   return out;
 }
 
+function stashAutolink(placeholders: string[], href: string, label: string) {
+  const token = `%%CREEDAUTOLINK${placeholders.length}%%`;
+  placeholders.push(
+    `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`,
+  );
+  return token;
+}
+
+// Angle-bracket and bare http(s) URLs. Stashed before escaping so
+// `<https://...>` is not turned into `&lt;https://...&gt;`, and so
+// `[label](https://...)` keeps its markdown link form (the URL sits
+// after `(` rather than whitespace).
+function withAutolinks(rawText: string, render: (rest: string) => string) {
+  const placeholders: string[] = [];
+  const withoutAngle = rawText.replace(
+    /<(https?:\/\/[^>\s]+)>/gi,
+    (_match, href: string) => stashAutolink(placeholders, href, href),
+  );
+  const stashed = withoutAngle.replace(
+    /(^|\s)(https?:\/\/[^\s<]+)/gi,
+    (_match, lead: string, url: string) => {
+      const trimmed = url.replace(/[.,;:!?)]+$/g, "");
+      const trail = url.slice(trimmed.length);
+      if (!/^https?:\/\//i.test(trimmed)) return `${lead}${url}`;
+      return `${lead}${stashAutolink(placeholders, trimmed, trimmed)}${trail}`;
+    },
+  );
+  let out = render(stashed);
+  placeholders.forEach((html, index) => {
+    out = out.replace(`%%CREEDAUTOLINK${index}%%`, html);
+  });
+  return out;
+}
+
 // Markdown links (`[text](url)`) - converted to anchor tags with the URL
 // HTML-escaped to keep this safe from injection through user-controlled
 // markdown. We deliberately restrict URLs to http(s) / mailto schemes and
@@ -94,12 +140,14 @@ function applyInlineExtras(escapedText: string) {
 }
 
 function inline(text: string) {
-  return withInlineCode(text, (stashed) => {
-    const escaped = escapeHtml(stashed);
-    return applyInlineExtras(
-      applyInlineEmphasis(applyInlineLinks(applyInlineTagMarks(escaped)))
-    );
-  });
+  return withInlineCode(text, (noCode) =>
+    withAutolinks(noCode, (stashed) => {
+      const escaped = escapeHtml(stashed);
+      return applyInlineExtras(
+        applyInlineEmphasis(applyInlineLinks(applyInlineTagMarks(escaped))),
+      );
+    }),
+  );
 }
 
 function paragraphize(lines: string[]) {
@@ -107,14 +155,137 @@ function paragraphize(lines: string[]) {
   return text ? `<p>${inline(text)}</p>` : "";
 }
 
+type MarkdownListKind = "ul" | "ol" | "task";
+type MarkdownListItem = {
+  indent: number;
+  kind: MarkdownListKind;
+  checked: boolean;
+  text: string;
+};
+
+function parseMarkdownListLine(line: string): MarkdownListItem | null {
+  const match = line.match(/^([ \t]*)([-*]|\d+\.)[ \t]+(.*)$/);
+  if (!match) return null;
+  const indent = match[1].replace(/\t/g, "  ").length;
+  const marker = match[2];
+  const rest = match[3];
+  if (marker === "-" || marker === "*") {
+    const task = rest.match(/^\[([ xX])\](?:[ \t]+(.*))?$/);
+    if (task) {
+      return {
+        indent,
+        kind: "task",
+        checked: task[1].toLowerCase() === "x",
+        text: task[2] ?? "",
+      };
+    }
+    return { indent, kind: "ul", checked: false, text: rest };
+  }
+  return { indent, kind: "ol", checked: false, text: rest };
+}
+
+function wrapMarkdownList(kind: MarkdownListKind, itemsHtml: string) {
+  if (kind === "task") {
+    return `<ul class="creed-list creed-list-task" data-type="taskList">${itemsHtml}</ul>`;
+  }
+  const tag = kind === "ol" ? "ol" : "ul";
+  const listClass =
+    kind === "ol" ? "creed-list creed-list-ordered" : "creed-list creed-list-bullet";
+  return `<${tag} class="${listClass}">${itemsHtml}</${tag}>`;
+}
+
+function wrapMarkdownListItem(item: MarkdownListItem, nestedHtml: string) {
+  if (item.kind === "task") {
+    return `<li class="creed-list-item" data-type="taskItem" data-checked="${item.checked}"><p>${inline(item.text)}</p>${nestedHtml}</li>`;
+  }
+  return `<li class="creed-list-item">${inline(item.text)}${nestedHtml}</li>`;
+}
+
+function renderMarkdownListForest(items: MarkdownListItem[]): string {
+  if (items.length === 0) return "";
+  const base = items[0].indent;
+  let html = "";
+  let index = 0;
+  while (index < items.length) {
+    const kind = items[index].kind;
+    const groupHtml: string[] = [];
+    while (
+      index < items.length &&
+      items[index].indent === base &&
+      items[index].kind === kind
+    ) {
+      const item = items[index];
+      index += 1;
+      const childStart = index;
+      while (index < items.length && items[index].indent > base) {
+        index += 1;
+      }
+      groupHtml.push(
+        wrapMarkdownListItem(
+          item,
+          renderMarkdownListForest(items.slice(childStart, index)),
+        ),
+      );
+    }
+    html += wrapMarkdownList(kind, groupHtml.join(""));
+  }
+  return html;
+}
+
+function isPipeRow(line: string) {
+  return /^\|.+\|$/.test(line);
+}
+
+function splitTableCells(line: string) {
+  const inner = line.replace(/^\|/, "").replace(/\|$/, "");
+  const cells: string[] = [];
+  let current = "";
+  for (let i = 0; i < inner.length; i += 1) {
+    if (inner[i] === "\\" && inner[i + 1] === "|") {
+      current += "|";
+      i += 1;
+      continue;
+    }
+    if (inner[i] === "|") {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += inner[i];
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function isSeparatorRow(line: string) {
+  if (!isPipeRow(line)) return false;
+  const cells = splitTableCells(line);
+  return (
+    cells.length > 0 &&
+    cells.every((cell) => /^:?-+:?$/.test(cell.replace(/\s+/g, "")))
+  );
+}
+
+function padTableRow(cells: string[], width: number) {
+  const next = cells.slice(0, width);
+  while (next.length < width) next.push("");
+  return next;
+}
+
+// GFM has no headerless table form. This markdown comment, then an empty
+// header row, keeps a td-only table from coming back as th on pull.
+// It must not be an HTML comment: richTextToMarkdown strips those.
+export const HEADERLESS_TABLE_MARK = "[//]: # (creed-table-headerless)";
+
 export function markdownToRichHtml(markdown: string) {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const blocks: string[] = [];
   let paragraphBuffer: string[] = [];
-  let listMode: "ul" | "ol" | null = null;
-  let listItems: string[] = [];
+  let listItems: MarkdownListItem[] = [];
   let quoteLines: string[] = [];
   let codeLines: string[] = [];
+  let tableRows: string[] | null = null;
+  let tableHeaderless = false;
   let inCodeBlock = false;
 
   function flushParagraph() {
@@ -125,16 +296,9 @@ export function markdownToRichHtml(markdown: string) {
   }
 
   function flushList() {
-    if (listMode && listItems.length > 0) {
-      const listClass =
-        listMode === "ul" ? "creed-list creed-list-bullet" : "creed-list creed-list-ordered";
-      blocks.push(
-        `<${listMode} class="${listClass}">${listItems
-          .map((item) => `<li class="creed-list-item">${inline(item)}</li>`)
-          .join("")}</${listMode}>`
-      );
+    if (listItems.length > 0) {
+      blocks.push(renderMarkdownListForest(listItems));
     }
-    listMode = null;
     listItems = [];
   }
 
@@ -156,6 +320,48 @@ export function markdownToRichHtml(markdown: string) {
     }
   }
 
+  function flushTable() {
+    const headerless = tableHeaderless;
+    tableHeaderless = false;
+    if (!tableRows || tableRows.length === 0) {
+      tableRows = null;
+      return;
+    }
+    const rows = tableRows;
+    tableRows = null;
+    if (rows.length >= 2 && isSeparatorRow(rows[1])) {
+      const headers = splitTableCells(rows[0]);
+      const width = headers.length;
+      if (width > 0) {
+        const bodyRows = rows
+          .slice(2)
+          .map((row) => {
+            const cells = padTableRow(splitTableCells(row), width)
+              .map((cell) => `<td><p>${inline(cell)}</p></td>`)
+              .join("");
+            return `<tr>${cells}</tr>`;
+          })
+          .join("");
+        if (headerless) {
+          blocks.push(
+            `<table class="creed-table"><tbody>${bodyRows}</tbody></table>`,
+          );
+          return;
+        }
+        const headerCells = padTableRow(headers, width)
+          .map((cell) => `<th><p>${inline(cell)}</p></th>`)
+          .join("");
+        blocks.push(
+          `<table class="creed-table"><tbody><tr>${headerCells}</tr>${bodyRows}</tbody></table>`,
+        );
+        return;
+      }
+    }
+    for (const row of rows) {
+      paragraphBuffer.push(row);
+    }
+  }
+
   for (const rawLine of lines) {
     const line = rawLine.trimEnd();
     const trimmed = line.trim();
@@ -164,6 +370,7 @@ export function markdownToRichHtml(markdown: string) {
       flushParagraph();
       flushList();
       flushQuote();
+      flushTable();
       if (inCodeBlock) {
         flushCode();
         inCodeBlock = false;
@@ -178,10 +385,33 @@ export function markdownToRichHtml(markdown: string) {
       continue;
     }
 
+    if (tableRows && !isPipeRow(trimmed)) {
+      flushTable();
+    }
+
     if (!trimmed) {
       flushParagraph();
       flushList();
       flushQuote();
+      flushTable();
+      continue;
+    }
+
+    if (trimmed === HEADERLESS_TABLE_MARK) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      flushTable();
+      tableHeaderless = true;
+      continue;
+    }
+
+    if (isPipeRow(trimmed)) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      if (!tableRows) tableRows = [];
+      tableRows.push(trimmed);
       continue;
     }
 
@@ -190,7 +420,8 @@ export function markdownToRichHtml(markdown: string) {
       flushParagraph();
       flushList();
       flushQuote();
-      blocks.push(`<hr />`);
+      flushTable();
+      blocks.push(`<hr class="creed-hr" />`);
       continue;
     }
 
@@ -221,27 +452,12 @@ export function markdownToRichHtml(markdown: string) {
       continue;
     }
 
-    const bullet = trimmed.match(/^[-*]\s+(.*)$/);
-    if (bullet) {
+    // Keep leading whitespace so nested markers can indent under a parent.
+    const listLine = parseMarkdownListLine(line);
+    if (listLine) {
       flushParagraph();
       flushQuote();
-      if (listMode && listMode !== "ul") {
-        flushList();
-      }
-      listMode = "ul";
-      listItems.push(bullet[1]);
-      continue;
-    }
-
-    const numbered = trimmed.match(/^\d+\.\s+(.*)$/);
-    if (numbered) {
-      flushParagraph();
-      flushQuote();
-      if (listMode && listMode !== "ol") {
-        flushList();
-      }
-      listMode = "ol";
-      listItems.push(numbered[1]);
+      listItems.push(listLine);
       continue;
     }
 
@@ -261,6 +477,7 @@ export function markdownToRichHtml(markdown: string) {
   flushParagraph();
   flushList();
   flushQuote();
+  flushTable();
   flushCode();
 
   return blocks.join("");
@@ -380,4 +597,39 @@ export function normalizeRichTextInput(input: { contentHtml?: string; contentMar
   }
 
   return "";
+}
+
+const MARKDOWN_BLOCK_LINE =
+  /^(?:#{2,4}\s+\S|```|>\s?\S|[-*]\s+\S|\d+\.\s+\S|\|.+\||([-*_])\1{2,})$/;
+
+export function looksLikeMarkdown(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (/^https?:\/\/\S+$/i.test(trimmed)) return false;
+
+  for (const raw of trimmed.split("\n")) {
+    const line = raw.trimEnd();
+    const t = line.trim();
+    if (MARKDOWN_BLOCK_LINE.test(t)) return true;
+    if (/^[ \t]+(?:[-*]\s+\S|\d+\.\s+\S)/.test(line)) return true;
+  }
+
+  if (/\[[^\]]+\]\((?:https?:|mailto:|\/|#)[^)\s]+\)/.test(trimmed)) return true;
+  return /(\*\*[^*\n]+?\*\*|==[^=\n]+?==|~~[^~\n]+?~~|__[^_\n]+?__)/.test(
+    trimmed,
+  );
+}
+
+// Prefer Tiptap's HTML paste when the clipboard already carries lists,
+// headings, or other blocks. Convert plain text only when it looks like
+// markdown the user copied from an agent or a .md file.
+export function clipboardPlainTextAsMarkdown(
+  plain: string,
+  html?: string | null,
+) {
+  if (!looksLikeMarkdown(plain)) return false;
+  if (html && /<(ul|ol|table|blockquote|pre|h[1-6])\b/i.test(html)) {
+    return false;
+  }
+  return true;
 }

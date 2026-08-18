@@ -112,7 +112,7 @@ export async function POST(request: Request) {
 
     const credential = sharedCreedId
       ? await resolveSharedAiCredential(sharedCreedId, "panel", auth.user.id)
-      : await resolveAiCredential(auth.supabase, auth.user.id, "panel");
+      : await resolveAiCredential(auth.supabase, auth.user.id, "panel", activeCreed?.creedId);
     let analysis: AgentAnalysisContext[] = [];
     if (agentRequestUsesAnalysis(query)) {
       try {

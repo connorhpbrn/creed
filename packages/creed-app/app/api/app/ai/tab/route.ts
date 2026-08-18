@@ -110,7 +110,7 @@ export async function POST(request: Request) {
 
     const credential = sharedCreedId
       ? await resolveSharedAiCredential(sharedCreedId, "tab", auth.user.id)
-      : await resolveAiCredential(auth.supabase, auth.user.id, "tab");
+      : await resolveAiCredential(auth.supabase, auth.user.id, "tab", activeCreed?.creedId);
 
     payload = {
       messages: [

@@ -28,18 +28,22 @@ export default async function ClaimPage({
 }: {
   searchParams: Promise<{ next?: string }>;
 }) {
+  const databaseReadiness =
+    isSupabaseAdminConfigured() && isSupabaseConfigured()
+      ? await getOpenDatabaseReadiness()
+      : { ready: false as const };
+
+  // A valid owner cookie must not skip this page while migrations are stale.
+  // The app and onboarding layouts send claimed owners back here so they see
+  // Database needs setup instead of a 500 on Personal claim.
   if (
+    databaseReadiness.ready &&
     isSupabaseConfigured() &&
     (await hasValidOpenOwnerSession()) &&
     (await getRequestAuth()).user
   ) {
     redirect("/");
   }
-
-  const databaseReadiness =
-    isSupabaseAdminConfigured() && isSupabaseConfigured()
-      ? await getOpenDatabaseReadiness()
-      : { ready: false as const };
   const technicalValues = [
     { name: "NEXT_PUBLIC_SITE_URL", ready: Boolean(process.env.NEXT_PUBLIC_SITE_URL?.trim()) },
     { name: "NEXT_PUBLIC_SUPABASE_URL", ready: Boolean(getSupabaseUrl()) },

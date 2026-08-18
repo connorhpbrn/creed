@@ -51,13 +51,13 @@ export default async function OnboardingPage({
     if (hasCreed) {
       try {
         const result = await loadCreedState(supabase, user);
-        const composed = result.state.sections.some(
-          (section) => section.lastEditedType === "agent"
-        );
-        if (composed) {
-          initialStage = "preview";
+        if (result.state.sections.length === 0) {
+          initialStage = undefined;
         } else {
-          initialStage = "prompt";
+          const composed = result.state.sections.some(
+            (section) => section.lastEditedType === "agent"
+          );
+          initialStage = composed ? "preview" : "prompt";
         }
       } catch (error) {
         if (!isSupabaseTableMissingError(error)) {

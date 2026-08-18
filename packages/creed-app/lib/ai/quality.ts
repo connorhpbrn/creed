@@ -1029,7 +1029,7 @@ export async function analyzeCreedQuality({
 
   const credential = sharedCreedId
     ? await resolveSharedAiCredential(sharedCreedId, "analysis", userId)
-    : await resolveAiCredential(client, userId, "analysis");
+    : await resolveAiCredential(client, userId, "analysis", creedId);
   const qualityScope: QualityScope = sharedCreedId ? "shared" : "personal";
   const qualitySubjectText = qualitySubject(qualityScope);
   let result: Awaited<ReturnType<typeof callOpenRouter>>;

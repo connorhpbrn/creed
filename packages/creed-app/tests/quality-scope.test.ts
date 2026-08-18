@@ -22,4 +22,5 @@ test("quality analysis passes shared scope into the prompt", () => {
   assert.match(quality, /const qualityScope: QualityScope = sharedCreedId \? "shared" : "personal"/);
   assert.match(quality, /qualitySubject\(qualityScope\)/);
   assert.match(quality, /buildQualityPrompt\(sections, targets, qualityScope\)/);
+  assert.match(quality, /resolveAiCredential\(client, userId, "analysis", creedId\)/);
 });

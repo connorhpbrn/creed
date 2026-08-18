@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
-import type { CreedSection } from "@creed/core/creed-data";
+import { isAccentKey, type CreedSection } from "@creed/core/creed-data";
 import { ensurePersonalCreedId } from "@/lib/creed-context";
+import { getPersonalCreedId } from "@/lib/creed-membership";
 import { requireApiAuth } from "@/lib/api-auth";
 import { recordAuditEvent } from "@/lib/audit-log";
+import { log } from "@/lib/observability";
 import { getSupabaseAdminClient } from "@creed/persistence/supabase/admin";
 import type { SupabaseLikeClient } from "@creed/persistence/supabase/types";
+
+// Personal onboarding seed persist. Open and Cloud both re-export this route;
+// it is not the Open installation-owner endpoint at `/api/open/claim`.
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const ALLOWED_KINDS = new Set([
   "rich-text",
@@ -12,24 +20,6 @@ const ALLOWED_KINDS = new Set([
   "rules",
   "decisions",
   "focus",
-]);
-
-const ALLOWED_ACCENTS = new Set([
-  "identity",
-  "stack",
-  "operating-principles",
-  "decisions",
-  "preferences",
-  "workflows",
-  "tools",
-  "boundaries",
-  "questions",
-  "skills",
-  "mini-skills",
-  "projects",
-  "output",
-  "rose",
-  "custom",
 ]);
 
 function isString(value: unknown, max = 5000): value is string {
@@ -47,7 +37,7 @@ function validateSections(value: unknown): CreedSection[] | null {
     if (!isString(section.id, 200)) return null;
     if (!isString(section.name, 500)) return null;
     if (typeof section.kind !== "string" || !ALLOWED_KINDS.has(section.kind)) return null;
-    if (typeof section.accent !== "string" || !ALLOWED_ACCENTS.has(section.accent)) return null;
+    if (!isAccentKey(section.accent)) return null;
   }
 
   return value as CreedSection[];
@@ -76,6 +66,7 @@ export async function POST(request: Request) {
     );
   }
 
+  const existingCreedId = await getPersonalCreedId(auth.supabase, auth.user.id);
   const creedId = await ensurePersonalCreedId(auth.supabase, auth.user);
   const sectionRows = sections.map((section, position) => ({
     section_id: section.id,
@@ -104,6 +95,27 @@ export async function POST(request: Request) {
     p_sections: sectionRows,
   });
   if (error) {
+    log.error(
+      "onboarding_claim_failed",
+      { userId: auth.user.id, creedId, provisioned: !existingCreedId },
+      error,
+    );
+    // The creed row is written before sections. Drop a brand-new empty row so
+    // a failed claim does not look like a finished Creed on the next load.
+    if (!existingCreedId) {
+      const { error: rollbackError } = await db
+        .from("creeds")
+        .delete()
+        .eq("id", creedId)
+        .eq("owner_user_id", auth.user.id);
+      if (rollbackError) {
+        log.error(
+          "onboarding_claim_rollback_failed",
+          { userId: auth.user.id, creedId },
+          rollbackError,
+        );
+      }
+    }
     return NextResponse.json({ error: "Could not save starter sections." }, { status: 500 });
   }
 

@@ -85,11 +85,16 @@ not bypass its permission, confirmation, or safety gates.
 - Before creating any Git commit, always read and apply
   `.agents/skills/tasks/commit/SKILL.md`, even when the current agent does not
   discover repository skills automatically.
-- Before an intentional Open, Cloud, CLI, or Status product release, always
+- Before opening or updating a GitHub pull request, always read and apply
+  `.agents/skills/tasks/pr/SKILL.md`. The PR title is the squash commit that
+  will land on the base branch. Product-release titles use `release open 1.0.0`.
+  The body is plain prose, not a template. Do not use Summary or Test plan
+  headings. The skill does not grant merge, tag, version, or publish authority.
+- Before an intentional Open, Cloud, CLI, or Bench product release, always
   read and apply `.agents/skills/tasks/semver/SKILL.md`. A commit targeting
   `main` is not automatically a product release. The skill owns SemVer,
   release metadata, and release copy; it does not grant commit, tag, push, or
-  publication authority.
+  publication authority. The status site is not a versioned product.
 - Read and apply `.agents/skills/tasks/comment/SKILL.md` whenever adding,
   rewriting, or auditing source-code comments. Comments must explain durable,
   non-obvious intent rather than narrate syntax or preserve implementation
@@ -133,8 +138,8 @@ These are non-negotiable. Don't cross them without asking.
 
 1. **`requireApiAuth()` on every `/api/app/*` route.**
 2. **Hashed-token verification on every `/api/creed/*` and `/mcp` route.**
-3. **No personal info in source.** Email / handles / names go through
-   `lib/branding.ts` env vars.
+3. **No personal info in source.** Email and legal operator name go through
+   `lib/branding.ts` env vars. Public product links are constants in that file.
 4. **Marketing routes never read user state.** The root layout skips
    `loadCreedState` based on the `x-pathname` header set by `proxy.ts`.
    Don't reintroduce a fan-out without that gate.

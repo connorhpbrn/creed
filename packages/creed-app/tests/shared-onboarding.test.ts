@@ -129,16 +129,41 @@ test("unknown setup actions are rejected before database mutation", async () => 
 });
 
 test("Personal claim and compose use the same transactional onboarding RPC", async () => {
-  const [claim, compose] = await Promise.all([
-    source("../creed-cloud/app/api/app/claim/route.ts"),
+  const [claim, compose, openClaim, cloudClaim] = await Promise.all([
+    source("app/api/app/claim/route.ts"),
     source("app/api/app/onboarding/compose/route.ts"),
+    source("../../apps/open/app/api/app/claim/route.ts"),
+    source("../../apps/cloud/app/api/app/claim/route.ts"),
   ]);
   assert.match(claim, /apply_creed_onboarding_action/);
   assert.match(claim, /p_action: "replace-placeholder"/);
+  assert.match(claim, /onboarding_claim_failed/);
+  assert.match(claim, /onboarding_claim_rollback_failed/);
+  assert.match(claim, /!existingCreedId/);
+  assert.match(claim, /\.from\("creeds"\)[\s\S]*\.delete\(\)/);
   assert.match(compose, /apply_creed_onboarding_action/);
   assert.match(compose, /p_action: "compose"/);
   assert.doesNotMatch(claim, /persistCreedState/);
   assert.doesNotMatch(compose, /persistCreedState/);
+  assert.match(openClaim, /@\/app\/api\/app\/claim\/route/);
+  assert.match(cloudClaim, /@\/app\/api\/app\/claim\/route/);
+  await assert.rejects(source("../creed-cloud/app/api/app/claim/route.ts"));
+});
+
+test("onboarding retries an empty seed without replacing a composed Creed", async () => {
+  const [providers, layout, openPage, cloudPage] = await Promise.all([
+    source("components/creed/authed-providers.tsx"),
+    source("app/onboarding/layout.tsx"),
+    source("../creed-open/app/onboarding/page.tsx"),
+    source("../creed-cloud/app/onboarding/page.tsx"),
+  ]);
+  assert.match(layout, /persistFromDatabase=\{false\}/);
+  assert.match(
+    providers,
+    /persistFromDatabase \|\| result\.state\.sections\.length > 0/,
+  );
+  assert.match(openPage, /result\.state\.sections\.length === 0/);
+  assert.match(cloudPage, /result\.state\.sections\.length === 0/);
 });
 
 test("legacy Company onboarding route is removed", async () => {

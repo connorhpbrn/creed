@@ -1,3 +1,5 @@
+import { HEADERLESS_TABLE_MARK } from "./rich-text.ts";
+
 // Single source of truth for the accent vocabulary. The literal union below
 // is derived from this array so the runtime list (used by validators and by
 // the agent contract docs) can never drift from the compile-time type.
@@ -1184,10 +1186,13 @@ export const collaborationRules: HiddenInstructionContract = {
 //   <h3>...</h3>                                → #### ...
 //   <h4>...</h4>                                → ##### ...
 //   <ul><li>...</li></ul>                       → - ...
+//   nested <ul>/<ol> inside <li>                → two-space indented list
+//   <ul data-type="taskList">...                → - [ ] / - [x]
 //   <ol><li>...</li></ol>                       → 1. ...
+//   <table>...</table>                          → GFM pipe table
 //   <blockquote class="creed-callout">...</...> → > ...   (rendered as callout)
 //   <pre><code>...</code></pre>                 → ```...```
-//   <hr />                                      → ---
+//   <hr /> / <hr class="creed-hr" />            → ---
 //   <span data-tag="slug">label</span>          → #slug   (inline tag mark)
 //
 // Anything else falls back to plain text after tag stripping.
@@ -1257,7 +1262,7 @@ export function richTextToMarkdown(content: string) {
   );
 
   // Horizontal rule.
-  text = text.replace(/<hr\s*\/?>/g, "\n\n---\n\n");
+  text = text.replace(/<hr\b[^>]*>/g, "\n\n---\n\n");
 
   // Blockquotes (rendered as callouts in the editor) → markdown `> `.
   text = text.replace(
@@ -1272,20 +1277,39 @@ export function richTextToMarkdown(content: string) {
     },
   );
 
-  // Numbered lists.
-  text = text.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/g, (_match, body: string) => {
-    const items = Array.from(body.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g))
-      .map((match, index) => `${index + 1}. ${stripTags(match[1]).trim()}`)
-      .filter((line) => line.replace(/^\d+\.\s*/, "").length > 0);
-    return items.length ? `\n${items.join("\n")}\n` : "";
-  });
+  // Lists, including nested bullets, numbers, and checklists.
+  text = convertHtmlLists(text);
 
-  // Bullet lists.
-  text = text.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/g, (_match, body: string) => {
-    const items = Array.from(body.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g))
-      .map((match) => `- ${stripTags(match[1]).trim()}`)
-      .filter((line) => line.length > 2);
-    return items.length ? `\n${items.join("\n")}\n` : "";
+  // GFM tables. Run before remaining tag stripping so cell markup can still
+  // use the inline conversions above. First-row `th` becomes a GFM header.
+  // First-row `td` stays body cells via HEADERLESS_TABLE_MARK, because GFM
+  // has no headerless table syntax.
+  text = text.replace(/<table\b[^>]*>([\s\S]*?)<\/table>/gi, (_match, body: string) => {
+    const rows = Array.from(body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi));
+    if (rows.length === 0) return "";
+    const parsed = rows.map((row) =>
+      Array.from(row[1].matchAll(/<(th|td)\b[^>]*>([\s\S]*?)<\/\1>/gi)).map((cell) => ({
+        tag: cell[1].toLowerCase(),
+        text: stripTags(cell[2]).trim().replace(/\|/g, "\\|").replace(/\n+/g, " "),
+      })),
+    );
+    const width = Math.max(0, ...parsed.map((row) => row.length));
+    if (width === 0) return "";
+    const pad = (row: (typeof parsed)[number]) => {
+      const next = row.slice(0, width);
+      while (next.length < width) next.push({ tag: "td", text: "" });
+      return next;
+    };
+    const format = (row: (typeof parsed)[number]) =>
+      `| ${pad(row).map((cell) => cell.text).join(" | ")} |`;
+    const separator = `| ${Array.from({ length: width }, () => "---").join(" | ")} |`;
+    const headerRow =
+      parsed[0].length > 0 && parsed[0].every((cell) => cell.tag === "th");
+    if (headerRow) {
+      return `\n${[format(parsed[0]), separator, ...parsed.slice(1).map(format)].join("\n")}\n`;
+    }
+    const emptyHeader = `| ${Array.from({ length: width }, () => "").join(" | ")} |`;
+    return `\n${HEADERLESS_TABLE_MARK}\n${[emptyHeader, separator, ...parsed.map(format)].join("\n")}\n`;
   });
 
   // Paragraphs - drop empty paragraphs entirely so we don't emit blank lines
@@ -1318,6 +1342,154 @@ export function sectionBodyMarkdown(section: CreedSection): string {
   return sectionToMarkdown(section)
     .replace(/^##\s.*(?:\n+|$)/, "")
     .trim();
+}
+
+function findHtmlOpenTag(
+  html: string,
+  from: number,
+  tag: string,
+): { index: number; attrs: string; contentStart: number } | null {
+  const pattern = new RegExp(`<${tag}\\b([^>]*)>`, "gi");
+  pattern.lastIndex = from;
+  const match = pattern.exec(html);
+  if (!match) return null;
+  return {
+    index: match.index,
+    attrs: match[1] ?? "",
+    contentStart: match.index + match[0].length,
+  };
+}
+
+function findMatchingCloseTag(html: string, tag: string, contentStart: number) {
+  const openPattern = new RegExp(`<${tag}\\b[^>]*>`, "gi");
+  const closePattern = new RegExp(`</${tag}\\s*>`, "gi");
+  let depth = 1;
+  let cursor = contentStart;
+  while (cursor < html.length && depth > 0) {
+    openPattern.lastIndex = cursor;
+    closePattern.lastIndex = cursor;
+    const open = openPattern.exec(html);
+    const close = closePattern.exec(html);
+    if (!close) return html.length;
+    if (open && open.index < close.index) {
+      depth += 1;
+      cursor = open.index + open[0].length;
+      continue;
+    }
+    depth -= 1;
+    if (depth === 0) return close.index;
+    cursor = close.index + close[0].length;
+  }
+  return html.length;
+}
+
+function findNextHtmlList(
+  html: string,
+  from: number,
+): { tag: "ul" | "ol"; index: number; attrs: string; contentStart: number } | null {
+  const ul = findHtmlOpenTag(html, from, "ul");
+  const ol = findHtmlOpenTag(html, from, "ol");
+  if (ul && (!ol || ul.index <= ol.index)) {
+    return { tag: "ul", ...ul };
+  }
+  if (ol) return { tag: "ol", ...ol };
+  return null;
+}
+
+function splitTopLevelListItems(body: string) {
+  const items: Array<{ attrs: string; inner: string }> = [];
+  let cursor = 0;
+  while (cursor < body.length) {
+    const open = findHtmlOpenTag(body, cursor, "li");
+    if (!open) break;
+    const close = findMatchingCloseTag(body, "li", open.contentStart);
+    items.push({
+      attrs: open.attrs,
+      inner: body.slice(open.contentStart, close),
+    });
+    const closeTag = body.slice(close).match(/^<\/li\s*>/i);
+    cursor = close + (closeTag ? closeTag[0].length : 0);
+    if (cursor <= open.index) break;
+  }
+  return items;
+}
+
+function isTaskListAttrs(attrs: string) {
+  return (
+    /data-type\s*=\s*(["'])taskList\1/i.test(attrs) ||
+    /\bcreed-list-task\b/.test(attrs)
+  );
+}
+
+function serializeHtmlList(
+  html: string,
+  open: { tag: "ul" | "ol"; index: number; attrs: string; contentStart: number },
+  indent: string,
+): { markdown: string; end: number } {
+  const close = findMatchingCloseTag(html, open.tag, open.contentStart);
+  const closeTag = html.slice(close).match(new RegExp(`^</${open.tag}\\s*>`, "i"));
+  const end = close + (closeTag ? closeTag[0].length : 0);
+  const isTask = open.tag === "ul" && isTaskListAttrs(open.attrs);
+  const items = splitTopLevelListItems(html.slice(open.contentStart, close));
+  const lines: string[] = [];
+  items.forEach((item, index) => {
+    const checkedMatch = item.attrs.match(
+      /data-checked\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i,
+    );
+    const raw = (
+      checkedMatch?.[1] ??
+      checkedMatch?.[2] ??
+      checkedMatch?.[3] ??
+      ""
+    ).toLowerCase();
+    const checked = raw === "true" || raw === "checked";
+    const marker = isTask
+      ? `- [${checked ? "x" : " "}] `
+      : open.tag === "ol"
+        ? `${index + 1}. `
+        : `- `;
+    lines.push(...serializeHtmlListItem(item.inner, indent, marker));
+  });
+  const markdown = lines.length ? `${lines.join("\n")}` : "";
+  return { markdown, end };
+}
+
+function serializeHtmlListItem(inner: string, indent: string, marker: string) {
+  const nested: string[] = [];
+  let rest = "";
+  let cursor = 0;
+  while (cursor < inner.length) {
+    const nestedList = findNextHtmlList(inner, cursor);
+    if (!nestedList) {
+      rest += inner.slice(cursor);
+      break;
+    }
+    rest += inner.slice(cursor, nestedList.index);
+    const serialized = serializeHtmlList(inner, nestedList, `${indent}  `);
+    if (serialized.markdown) nested.push(serialized.markdown);
+    cursor = serialized.end;
+  }
+  const text = stripTags(rest).trim().replace(/\n+/g, " ");
+  if (!text && nested.length === 0 && !marker.includes("[")) return [];
+  const head = `${indent}${marker}${text}`.trimEnd();
+  return nested.length > 0 ? [head, ...nested] : [head];
+}
+
+function convertHtmlLists(html: string) {
+  let result = "";
+  let cursor = 0;
+  while (cursor < html.length) {
+    const open = findNextHtmlList(html, cursor);
+    if (!open) {
+      result += html.slice(cursor);
+      break;
+    }
+    result += html.slice(cursor, open.index);
+    const serialized = serializeHtmlList(html, open, "");
+    result += serialized.markdown ? `\n${serialized.markdown}\n` : "";
+    cursor = serialized.end;
+  }
+  return result;
 }
 
 function stripTags(value: string) {
@@ -1698,12 +1870,25 @@ export function buildHiddenAgentGuidanceMarkdown(options?: {
       "  When: any section over a few short lines. Always group related rules under a heading instead of leaving them as a flat list.",
       "",
       "**Bullet lists** - unordered.",
-      "  Syntax: `- item` (or `* item`) on its own line, multiple items consecutive.",
+      "  Syntax: `- item` (or `* item`) on its own line, multiple items consecutive. Nest with two spaces before the marker.",
       "  When: short lists where order doesn't matter. Three items minimum or it should be a paragraph.",
       "",
       "**Numbered lists** - ordered or sequential.",
-      "  Syntax: `1. step` `2. step` `3. step` - Creed re-numbers automatically so you can use `1.` for every item if you prefer.",
+      "  Syntax: `1. step` `2. step` `3. step` - Creed re-numbers automatically so you can use `1.` for every item if you prefer. Nest with two spaces before the number.",
       "  When: order matters. Steps in a routine. Priorities ranked. Days of the week. Anything where 'first then second' is part of the meaning.",
+      "",
+      "**Checklists** - binary or completable items.",
+      "  Syntax: `- [ ] item` (open) or `- [x] item` (done) on its own line, multiple items consecutive. Nest with two spaces, same as other lists.",
+      "  When: a durable yes/no or done/not-done fact that belongs in the file. Standing commitments, recurring checks, or a small set of outcomes.",
+      "  Don't: turn the Creed into a daily todo list. If it would go stale in a week, it does not belong here.",
+      "",
+      "**Tables** - compact compared facts.",
+      "  Syntax: a GFM pipe table. Header row, separator, then body rows:",
+      "  `| Person | Role |`",
+      "  `| --- | --- |`",
+      "  `| Maya | co-founder |`",
+      "  When: a small set of aligned fields that would be clumsier as repeating bullets. People, constraints with the same shape, ranked options.",
+      "  Don't: dump a spreadsheet. Two or three columns, short cells.",
       "",
       "**Callouts** - warnings, hard rules, do/don't notes.",
       "  Syntax: `> text on the line` (markdown blockquote). Multi-line callouts use `> ` on each line.",
@@ -1797,7 +1982,7 @@ export function buildHiddenAgentGuidanceMarkdown(options?: {
         "- Use direct edits for clear section updates when no review step is required.",
         "- You may update any editable section listed above by its real section id and kind.",
         "- You may also create a new rich-text section when it helps the file.",
-        "- For rich-text content, send contentHtml directly or contentMarkdown and Creed will convert headings, bullet lists, numbered lists, callouts, and code blocks into supported editor content.",
+        "- For rich-text content, send contentHtml directly or contentMarkdown and Creed will convert headings, bullet lists, numbered lists, checklists, tables, callouts, and code blocks into supported editor content.",
         "",
         "Example JSON body for updating an existing section (note the rich `contentMarkdown` - submit something that genuinely uses the components, not a single paragraph or a flat bullet list):",
         "{",
