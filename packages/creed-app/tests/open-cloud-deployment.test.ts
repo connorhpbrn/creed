@@ -160,7 +160,7 @@ test("Open setup uses a versioned readiness RPC and deterministic owner record",
     "apps/open/supabase/migrations/20260817213100_personal_onboarding_replace_placeholder.sql",
   ).toLowerCase();
   assert.match(setup, /creed_schema_version/);
-  assert.match(setup, /REQUIRED_OPEN_SCHEMA_VERSION = "20260817213100"/);
+  assert.match(setup, /REQUIRED_OPEN_SCHEMA_VERSION = "20260818034113"/);
   assert.match(claim, /creed_installation/);
   assert.doesNotMatch(claim, /listUsers/);
   assert.match(migration, /create table if not exists public\.creed_installation/);
@@ -171,6 +171,22 @@ test("Open setup uses a versioned readiness RPC and deterministic owner record",
   assert.match(migration, /grant all on function public\.creed_schema_version\(\) to service_role/);
   assert.match(personalClaim, /p_action = 'replace-placeholder'/);
   assert.doesNotMatch(personalClaim, /seed-shared/);
+});
+
+test("Open members can read the content they update", () => {
+  const migration = read(
+    "apps/open/supabase/migrations/20260818034113_allow_member_content_reads.sql",
+  ).toLowerCase();
+
+  for (const table of ["creed_sections", "creed_proposals", "creed_activity"]) {
+    assert.match(
+      migration,
+      new RegExp(
+        `create policy "members read [^"]+"\\s+on public\\.${table}\\s+for select\\s+to authenticated\\s+using \\(private\\.creed_role\\(creed_id\\) is not null\\)`,
+      ),
+      `${table} needs a member SELECT policy so its UPDATE and UPSERT policies work`,
+    );
+  }
 });
 
 test("claimed Open owners stay on /claim until schema is ready", () => {
