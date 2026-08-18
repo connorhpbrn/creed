@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
 import type { StaticImageData } from "next/image";
 import Link from "next/link";
@@ -32,7 +32,14 @@ import { GaugeIcon } from "@creed/ui/gauge";
 import { TextCursorInputIcon } from "@creed/ui/text-cursor-input";
 import { useRoadmap } from "@/components/marketing/use-roadmap";
 import { ROADMAP_STATUS_STYLE } from "@/components/marketing/roadmap-status";
+import { RoadmapTaskDialog } from "@/components/marketing/roadmap-task-dialog";
 import type { RoadmapColumn, RoadmapTask } from "@/lib/marketing/roadmap";
+import {
+  SponsorMessageDialog,
+  SponsorWallCard,
+  usePublicSponsors,
+  type PublicSponsor,
+} from "@/components/marketing/sponsor-wall";
 import { homeFaqItems as faqItems } from "@/lib/marketing/faq";
 import { cn } from "@creed/ui/utils";
 import { useCreedEdition } from "@/components/creed/edition-provider";
@@ -159,6 +166,7 @@ export function BelowHeroSections({ configured }: { configured: boolean }) {
       <HowItWorksSection />
       <IntegrationsSection />
       <WhatsOnTheWaySection />
+      <CommunitySponsorsSection />
       <FaqSection />
       <ClosingCtaSection configured={configured} />
       <div
@@ -172,83 +180,45 @@ export function BelowHeroSections({ configured }: { configured: boolean }) {
 
 const WHY_USE_IT_STATS = [
   {
-    value: 1_200_000_000,
+    whole: "1",
+    fraction: "2",
     suffix: "B+",
     cadence: "/m",
-    divisor: 1_000_000_000,
-    decimals: 1,
     label: "people use standalone AI tools",
     body: "Each tool starts cold unless your context travels with you.",
     accent: "var(--plate-proposal)",
   },
   {
-    value: 420_000_000,
+    whole: "420",
+    fraction: undefined,
     suffix: "M",
     cadence: "/m",
-    divisor: 1_000_000,
-    decimals: 0,
     label: "estimated multi-tool AI users",
     body: "A simple 35 percent estimate across monthly AI users.",
     accent: "var(--plate-direct)",
   },
   {
-    value: 2_100_000_000_000,
+    whole: "2",
+    fraction: "1",
     suffix: "T",
     cadence: "/m",
-    divisor: 1_000_000_000_000,
-    decimals: 1,
     label: "context tokens left behind",
     body: "Multi-tool users leaving 5,000 useful context tokens behind.",
     accent: "var(--plate-create)",
   },
 ] as const;
 
-function useCountUp(target: number, durationMs = 1400) {
-  const [value, setValue] = useState(0);
-  const valueRef = useRef(0);
-
-  useEffect(() => {
-    let frameId = 0;
-    const from = valueRef.current;
-    const distance = target - from;
-    const start = performance.now();
-
-    function tick(now: number) {
-      const progress = Math.min((now - start) / durationMs, 1);
-      const eased = 1 - Math.pow(1 - progress, 4);
-      const nextValue = Math.round(from + distance * eased);
-      valueRef.current = nextValue;
-      setValue(nextValue);
-
-      if (progress < 1) {
-        frameId = requestAnimationFrame(tick);
-      }
-    }
-
-    frameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameId);
-  }, [durationMs, target]);
-
-  return value;
-}
-
-function AnimatedStatNumber({
-  value,
-  divisor,
-  decimals,
+function StatNumber({
+  whole,
+  fraction,
   suffix,
   cadence,
 }: {
-  value: number;
-  divisor: number;
-  decimals: number;
+  whole: string;
+  fraction?: string;
   suffix: string;
   cadence: string;
 }) {
-  const current = useCountUp(value);
-  const display = (current / divisor).toFixed(decimals);
-  const [whole, fraction] = display.split(".");
-
   return (
     <span className="inline-flex items-end tabular-nums">
       <span>
@@ -274,7 +244,7 @@ function WhyUseItSection() {
   return (
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading
-        headline="Why Use It?"
+        headline="Why use it?"
         className="max-w-[64rem]"
       />
 
@@ -288,10 +258,9 @@ function WhyUseItSection() {
               className="flex min-h-[120px] items-center rounded-lg px-5 text-[3.75rem] font-semibold leading-[0.9] tracking-[-0.045em] text-[var(--creed-background)] md:min-h-[130px] md:px-6 md:text-[4.5rem]"
               style={{ backgroundColor: stat.accent }}
             >
-              <AnimatedStatNumber
-                value={stat.value}
-                divisor={stat.divisor}
-                decimals={stat.decimals}
+              <StatNumber
+                whole={stat.whole}
+                fraction={stat.fraction}
                 suffix={stat.suffix}
                 cadence={stat.cadence}
               />
@@ -359,7 +328,7 @@ function WhyNotOtherToolsSection() {
   return (
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading
-        headline="Why Not Other Tools?"
+        headline="Why not other tools?"
         className="max-w-[64rem]"
       />
 
@@ -528,7 +497,7 @@ function HowCreedWorksSection() {
   return (
     <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
       <SectionHeading
-        headline="How It Works"
+        headline="How it works"
         className="max-w-[60rem]"
       />
 
@@ -926,7 +895,9 @@ function HowItWorksSection() {
         </PlateCard>
         <PlateCard
           plateColor="var(--plate-direct)"
-          plateClassName="min-h-[280px]"
+          // Tall enough for the paste phase on one column so the plate
+          // does not grow when ConnectDemo swaps cards.
+          plateClassName="min-h-[360px] lg:min-h-[280px]"
           number="2"
           numberColor="var(--plate-direct)"
           title="Extract your context"
@@ -1125,26 +1096,72 @@ function RoadmapTeaserCard({
 }) {
   const style = ROADMAP_STATUS_STYLE[column.id];
   return (
-    <Link
-      href={`/roadmap?item=${encodeURIComponent(task.id)}`}
-      className="group flex w-full cursor-pointer flex-col overflow-hidden rounded-xl bg-[var(--creed-surface)] shadow-sm transition-shadow duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--creed-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--creed-background)] sm:w-[340px]"
-    >
-      <div className={cn("px-5 py-2.5", style.fill)}>
-        <span className={cn("text-[14px] font-medium", style.text)}>
-          {column.label}
-        </span>
+    <RoadmapTaskDialog
+      task={task}
+      trigger={
+        <button
+          type="button"
+          className="group flex w-full cursor-pointer flex-col overflow-hidden rounded-xl bg-[var(--creed-surface)] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--creed-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--creed-background)] sm:w-[340px]"
+        >
+          <div className={cn("px-5 py-2.5", style.fill)}>
+            <span className={cn("text-[14px] font-medium", style.text)}>
+              {column.label}
+            </span>
+          </div>
+          <div className="flex flex-1 flex-col p-5 transition-colors duration-200 group-hover:bg-[var(--creed-surface-raised)]">
+            <h3 className="text-[16px] font-medium leading-snug tracking-[-0.01em] text-[var(--creed-text-primary)]">
+              {task.title}
+            </h3>
+            {task.description ? (
+              <p className="t-body mt-2 line-clamp-2 text-[var(--creed-text-secondary)]">
+                {task.description}
+              </p>
+            ) : null}
+          </div>
+        </button>
+      }
+    />
+  );
+}
+
+// Public wall teaser. Hidden until at least one sponsor loads so Open and
+// empty Cloud installs never show a vacant community section.
+function CommunitySponsorsSection() {
+  const sponsors = usePublicSponsors(6);
+  const [selectedSponsor, setSelectedSponsor] = useState<PublicSponsor | null>(null);
+  const [messageDialogOpen, setMessageDialogOpen] = useState(false);
+
+  if (!sponsors || sponsors.length === 0) return null;
+
+  function openSponsor(sponsor: PublicSponsor) {
+    setSelectedSponsor(sponsor);
+    setMessageDialogOpen(true);
+  }
+
+  return (
+    <section className="px-6 py-24 md:px-10 md:py-30 lg:px-12">
+      <SectionHeading
+        headline="Supported by our community"
+        className="max-w-[56rem]"
+      />
+
+      <div className="mx-auto mt-14 flex max-w-6xl flex-wrap justify-center gap-5">
+        {sponsors.map((sponsor) => (
+          <SponsorWallCard
+            key={sponsor.id}
+            sponsor={sponsor}
+            className="w-full sm:w-[340px]"
+            onOpen={openSponsor}
+          />
+        ))}
       </div>
-      <div className="flex flex-1 flex-col p-5 transition-colors duration-200 group-hover:bg-[var(--creed-surface-raised)]">
-        <h3 className="text-[16px] font-medium leading-snug tracking-[-0.01em] text-[var(--creed-text-primary)]">
-          {task.title}
-        </h3>
-        {task.description ? (
-          <p className="t-body mt-2 line-clamp-2 text-[var(--creed-text-secondary)]">
-            {task.description}
-          </p>
-        ) : null}
-      </div>
-    </Link>
+
+      <SponsorMessageDialog
+        open={messageDialogOpen}
+        sponsor={selectedSponsor}
+        onOpenChange={setMessageDialogOpen}
+      />
+    </section>
   );
 }
 

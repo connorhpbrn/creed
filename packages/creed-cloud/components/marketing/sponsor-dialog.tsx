@@ -2,12 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
-import {
-  Elements,
-  PaymentElement,
-  useElements,
-  useStripe,
-} from "@stripe/react-stripe-js";
+import { Elements, useElements, useStripe } from "@stripe/react-stripe-js";
+import type { StripeExpressCheckoutElementConfirmEvent } from "@stripe/stripe-js";
 import { LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@creed/ui/button";
@@ -27,6 +23,7 @@ import {
   MIN_SPONSOR_USD,
   PRESET_SPONSOR_USD,
 } from "@creed/cloud/lib/sponsor-config";
+import { StripeCheckoutFields } from "@creed/cloud/components/creed/stripe-checkout-fields";
 
 function formatUsd(value: number) {
   return `$${value.toFixed(2)}`;
@@ -279,8 +276,13 @@ function SponsorPaymentForm({
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
 
-  async function handlePay() {
-    if (!stripe || !elements) return;
+  async function handlePay(
+    expressEvent?: StripeExpressCheckoutElementConfirmEvent
+  ) {
+    if (!stripe || !elements) {
+      expressEvent?.paymentFailed({ reason: "fail" });
+      return;
+    }
     setSubmitting(true);
     try {
       const { error, paymentIntent } = await stripe.confirmPayment({
@@ -289,6 +291,10 @@ function SponsorPaymentForm({
         confirmParams: { return_url: `${window.location.origin}/sponsor` },
       });
       if (error) {
+        expressEvent?.paymentFailed({
+          reason: "fail",
+          message: error.message,
+        });
         toast.error(error.message || "Payment failed");
         return;
       }
@@ -317,6 +323,7 @@ function SponsorPaymentForm({
       toast.success("Payment submitted.");
       onPaid();
     } catch {
+      expressEvent?.paymentFailed({ reason: "fail" });
       toast.error("Payment failed");
     } finally {
       setSubmitting(false);
@@ -325,8 +332,12 @@ function SponsorPaymentForm({
 
   return (
     <>
-      <div className="space-y-4">
-        <PaymentElement />
+      <div className="pt-4">
+        <StripeCheckoutFields
+          applePayButtonType="contribute"
+          googlePayButtonType="donate"
+          onExpressConfirm={(event) => void handlePay(event)}
+        />
       </div>
       <DialogFooter className="flex-row items-center justify-between border-t-[var(--creed-border)] bg-[var(--creed-surface)] sm:justify-between">
         <Button

@@ -102,6 +102,8 @@ Open uses a sidebar theme button where Cloud uses the account menu. New Creed ke
 
 The CLI card remains visible but disabled in both editions. Its action is `View roadmap`. The reusable agent-card attribution and status UI remains in the shared application for the future CLI rebuild.
 
+`packages/creed-ui/dialog.tsx` keeps the original zoom and slide. The overlay centers the card with grid instead of a persistent CSS translate so Apple Pay can mount inside Stripe Elements. The card is capped at `max-h-[calc(100dvh-2rem)]` and scrolls. Overlay clicks still dismiss.
+
 ## Public surface
 
 The public marketing site is shared, but calls to action resolve through the edition adapter. Open uses `View on GitHub` and never exposes signup. Cloud can retain hosted account flows in development. Documentation is an independent static application at `docs.creed.md`; Open and Cloud link to it and do not own a `/docs` route.

@@ -12,46 +12,39 @@ import { useCreedEdition } from "@/components/creed/edition-provider";
 const stackRows = [
   {
     name: "Supabase",
-    purpose: "Backend, database, and authentication infrastructure",
-    mobilePurpose: "Backend",
+    purpose: "Database, authentication, and storage",
     website: "https://supabase.com",
   },
   {
     name: "Vercel",
-    purpose: "Hosting and deployment infrastructure",
-    mobilePurpose: "Deployment",
+    purpose: "Hosting and deployment",
     website: "https://vercel.com",
   },
   {
     name: "Stripe",
-    purpose: "Payment processing and billing",
-    mobilePurpose: "Billing",
+    purpose: "Billing, credits, and contributions",
     website: "https://stripe.com",
     capability: "managedBilling",
   },
   {
     name: "OpenRouter",
-    purpose: "AI model access for certain features",
-    mobilePurpose: "Model access",
+    purpose: "Model access for Analysis, Panel, and Tab",
     website: "https://openrouter.ai",
   },
   {
     name: "Resend",
-    purpose: "Transactional email delivery",
-    mobilePurpose: "Email delivery",
+    purpose: "Shared invitation email",
     website: "https://resend.com",
     capability: "sharedCreeds",
   },
   {
     name: "GitHub",
-    purpose: "Version control and optional Creed file sync",
-    mobilePurpose: "Version control",
+    purpose: "Version control for the Creed file",
     website: "https://github.com",
   },
   {
     name: "Median",
-    purpose: "Processes feedback submitted via the in-app modal",
-    mobilePurpose: "Feedback",
+    purpose: "In-app feedback",
     website: "https://median.sh",
     capability: "feedback",
   },
@@ -90,7 +83,7 @@ export function StackPageView() {
                 <th className="px-1 py-4 text-[15px] font-medium text-[var(--creed-text-tertiary)] md:px-2 md:text-[16px]">
                   Name
                 </th>
-                <th className="px-1 py-4 text-[15px] font-medium text-[var(--creed-text-tertiary)] md:px-2 md:text-[16px]">
+                <th className="hidden px-1 py-4 text-[15px] font-medium text-[var(--creed-text-tertiary)] md:table-cell md:px-2 md:text-[16px]">
                   Purpose
                 </th>
                 <th className="px-1 py-4 text-[15px] font-medium text-[var(--creed-text-tertiary)] md:px-2 md:text-[16px]">
@@ -107,9 +100,8 @@ export function StackPageView() {
                   <td className="px-1 py-5 text-[16px] font-medium text-[var(--creed-text-primary)] md:px-2 md:text-[17px]">
                     {row.name}
                   </td>
-                  <td className="px-1 py-5 text-[15px] leading-7 text-[var(--creed-text-secondary)] md:px-2 md:text-[16px]">
-                    <span className="md:hidden">{row.mobilePurpose}</span>
-                    <span className="hidden md:inline">{row.purpose}</span>
+                  <td className="hidden px-1 py-5 text-[15px] leading-7 text-[var(--creed-text-secondary)] md:table-cell md:px-2 md:text-[16px]">
+                    {row.purpose}
                   </td>
                   <td className="px-1 py-5 md:px-2">
                     <StackLink href={row.website} label={row.website.replace(/^https?:\/\//, "")} />

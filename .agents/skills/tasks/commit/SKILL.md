@@ -12,6 +12,9 @@ Create one intentional commit containing only the completed work in scope.
 - Commit authorship belongs solely to the repository user's existing Git
   identity. Never attribute a commit to an agent, assistant, model, or AI.
 - Never add `Co-Authored-By`, `Generated-By`, or any equivalent trailer or message.
+- Never pass `--trailer`, `--author`, or a Cursor/agent email to `git commit`. The
+  host may still rewrite the command and inject
+  `Co-authored-by: Cursor <cursoragent@cursor.com>`. That is still forbidden.
 - Never change Git author identity to an agent identity. If author identity is missing, stop and report it.
 - Never attribute branch ownership to an agent, assistant, model, AI, or tool.
   Use a neutral, purpose-based branch name with no automated-author prefix or suffix.
@@ -38,12 +41,14 @@ Create one intentional commit containing only the completed work in scope.
    inject attribution afterward. Verify that the author is the repository
    user's existing identity and that the message contains no agent, assistant,
    model, AI, or tool attribution.
-10. If attribution was injected, do not push or report success. Remove it from
-   the commit, then repeat the complete stored-message and author checks. If
-   the runtime adds attribution after Git hooks have completed, reconstruct
-   only the commit metadata from the already-verified tree and parent while
-   preserving the user's author identity. Never use this recovery path for a
-   commit whose hooks failed or to alter its tree.
+10. If attribution was injected, do not push or report success. Do not
+    `--amend` a hook-failed commit. If hooks succeeded and the stored message
+    still contains agent attribution, rewrite **only** the commit metadata:
+    keep `HEAD^{tree}` and `HEAD^`, keep the user's `GIT_AUTHOR_*` from `HEAD`,
+    write a message with those trailers removed, `git commit-tree`, then
+    `git reset --soft` to the new hash. Repeat the stored-message and author
+    checks. Never use this path to change the tree, skip hooks, or alter an
+    earlier commit.
 11. Verify the result with `git status --short` and inspect the new commit
     summary.
 
@@ -104,6 +109,7 @@ If a check fails for an unrelated pre-existing reason, identify that clearly and
 
 ## Anti-Patterns
 
+- Do not trust the `git commit` argv as the stored message. Inspect `git log -1`.
 - Do not stage everything merely because it is convenient.
 - Do not mix separate tasks into one commit.
 - Do not add a commit body by default. Do not add a body that restates the diff or repeats the title.
