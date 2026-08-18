@@ -14,8 +14,9 @@ export async function resolveAiCredential(
   client: unknown,
   userId: string,
   feature: AiFeature,
+  creedId?: string,
 ): Promise<ResolvedAiCredential> {
-  const row = await readAiSettings(client, userId);
+  const row = await readAiSettings(client, userId, creedId);
   if (!row?.encrypted_api_key || row.key_status !== "valid") {
     throw new Error("Add an OpenRouter key in Settings");
   }

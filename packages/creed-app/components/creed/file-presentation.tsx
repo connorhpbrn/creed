@@ -14,18 +14,18 @@ const FILE_NAV_PRESS_CLASS =
 
 const PENDING_NAV_TONE = {
   delete: {
-    text: "text-[#B91C1C] dark:text-[#F87171]",
+    text: "text-[var(--creed-danger)]",
     hover:
-      "hover:bg-[#FDE2E2]! hover:text-[#991B1B]! dark:hover:bg-[#3F1212]/55! dark:hover:text-[#F87171]!",
+      "hover:bg-[var(--creed-danger)]/12! hover:text-[var(--creed-danger)]! dark:hover:bg-[#3F1212]/55!",
     selected:
-      "bg-[#FDE2E2]! text-[#991B1B]! dark:bg-[#3F1212]/55! dark:text-[#F87171]!",
+      "bg-[var(--creed-danger)]/12! text-[var(--creed-danger)]! dark:bg-[#3F1212]/55!",
   },
   create: {
-    text: "text-[#047857] dark:text-[#4ade80]",
+    text: "text-[var(--creed-success)]",
     hover:
-      "hover:bg-[#D1FAE5]! hover:text-[#065F46]! dark:hover:bg-[#052e1a]/60! dark:hover:text-[#4ade80]!",
+      "hover:bg-[var(--creed-success)]/12! hover:text-[var(--creed-success)]! dark:hover:bg-[#052e1a]/60!",
     selected:
-      "bg-[#D1FAE5]! text-[#065F46]! dark:bg-[#052e1a]/60! dark:text-[#4ade80]!",
+      "bg-[var(--creed-success)]/12! text-[var(--creed-success)]! dark:bg-[#052e1a]/60!",
   },
 } as const;
 
@@ -298,27 +298,24 @@ export function FileActivityRailFrame({
   overlay?: boolean;
 }) {
   return (
-    <motion.aside
+    <motion.div
       initial={overlay ? { width: 0, opacity: 0 } : false}
       animate={{
         width: open ? 356 : 0,
         opacity: open ? 1 : 0,
-        x: open ? 0 : 18,
       }}
-      exit={
-        overlay
-          ? { width: 0, opacity: 0 }
-          : { width: 0, opacity: 0, x: 18 }
-      }
+      exit={{ width: 0, opacity: 0 }}
       transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
       style={{ maxWidth: "min(82vw, 356px)" }}
       className={cn(
-        "absolute inset-y-0 right-0 h-full overflow-hidden border-l border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[-18px_0_50px_rgba(28,28,26,0.12)] lg:static lg:h-full lg:shrink-0 lg:shadow-none",
+        "absolute inset-y-0 right-0 h-full overflow-hidden lg:static lg:h-full lg:shrink-0",
         overlay ? "z-[70] lg:z-auto" : "z-30",
         open ? "pointer-events-auto" : "pointer-events-none",
       )}
     >
-      {children}
-    </motion.aside>
+      <aside className="h-full w-[356px] max-w-[min(82vw,356px)] border-l border-[var(--creed-border)] bg-[var(--creed-surface)] shadow-[-18px_0_50px_rgba(28,28,26,0.12)] lg:shadow-none">
+        {children}
+      </aside>
+    </motion.div>
   );
 }

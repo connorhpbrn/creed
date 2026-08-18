@@ -48,7 +48,9 @@ yarn-error.log*
 # private workspace artifacts (Codex / Claude / Cursor / etc.)
 .codex/
 .claude/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/*.mdc
 .aider*
 
 # launch video workspace (Remotion) - local only, never pushed

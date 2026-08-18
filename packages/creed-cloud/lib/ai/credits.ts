@@ -297,9 +297,10 @@ async function resolveSpendCreedId(
 export async function resolveAiCredential(
   client: unknown,
   userId: string,
-  feature: AiFeature
+  feature: AiFeature,
+  creedId?: string,
 ): Promise<ResolvedAiCredential> {
-  const row = await readAiSettings(client, userId);
+  const row = await readAiSettings(client, userId, creedId);
   const mode: AiMode = row?.ai_mode === "byok" ? "byok" : "credits";
   const modelId = getAiFeatureModel(feature);
 
@@ -318,7 +319,7 @@ export async function resolveAiCredential(
   }
 
   const homeId = await homeCreedId(userId);
-  const spendCreedId = await resolveSpendCreedId(client, userId);
+  const spendCreedId = creedId ?? (await resolveSpendCreedId(client, userId));
   if (!spendCreedId) {
     throw new Error("Out of credits");
   }

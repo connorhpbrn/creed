@@ -183,6 +183,7 @@ export function CreedShell({
   const pathname = usePathname();
   const router = useRouter();
   const hasHostedAccounts = useCreedEdition().capabilities.hostedAccounts;
+  const hasManagedCredits = useCreedEdition().capabilities.managedCredits;
   const { signOut, exportMarkdown, reorderSections } = useCreedActions();
   const state = useCreedStateSelector(
     (snapshot) => snapshot,
@@ -385,6 +386,7 @@ export function CreedShell({
         githubConnected,
         repoOwner: state.settings.versionControl.repoOwner,
         repoName: state.settings.versionControl.repoName,
+        loadCredits: hasManagedCredits,
         // The markdown only feeds the GitHub version-status preload, so skip the
         // full export rebuild entirely when GitHub isn't connected.
         markdown: githubConnected && sections.length ? exportMarkdown() : undefined,
@@ -403,6 +405,7 @@ export function CreedShell({
     state.settings.integrations.github.status,
     state.settings.versionControl.repoName,
     state.settings.versionControl.repoOwner,
+    hasManagedCredits,
   ]);
 
   function setFileIntent(

@@ -14,8 +14,8 @@ const openRouter = source("../lib/ai/openrouter.ts");
 
 test("Panel pins one Luna model across Search, Ask, and Agent", () => {
   assert.match(featureModels, /panel: "openai\/gpt-5\.6-luna"/);
-  assert.match(panelRoute, /resolveAiCredential\([\s\S]*?"panel"\)/);
-  assert.match(agentRoute, /resolveAiCredential\([\s\S]*?"panel"\)/);
+  assert.match(panelRoute, /resolveAiCredential\([\s\S]*?"panel", active\?\.creedId\)/);
+  assert.match(agentRoute, /resolveAiCredential\([\s\S]*?"panel", activeCreed\?\.creedId\)/);
 });
 
 test("Panel configures Luna for fast, stable structured responses", () => {
@@ -34,7 +34,7 @@ test("Panel configures Luna for fast, stable structured responses", () => {
 
 test("Tab configures Luna for low-latency deterministic streaming", () => {
   assert.match(featureModels, /tab: "openai\/gpt-5\.6-luna"/);
-  assert.match(tabRoute, /resolveAiCredential\([\s\S]*?"tab"\)/);
+  assert.match(tabRoute, /resolveAiCredential\([\s\S]*?"tab", activeCreed\?\.creedId\)/);
   assert.match(tabRoute, /reasoning: \{ effort: "none", exclude: true \}/);
   assert.match(tabRoute, /seed: 0/);
   assert.match(tabRoute, /maxTokens: mode === "draft" \? 240 : 160/);

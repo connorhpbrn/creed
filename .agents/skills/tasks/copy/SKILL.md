@@ -69,6 +69,11 @@ Write like a quiet design publication or a well-set book, not a generic SaaS lan
 - Separate user-facing explanation from literal technical text.
 - Treat agent-contract wording as a public behavioral interface. Do not casually rewrite it for style.
 
+### GitHub git vs GitHub release
+
+- Commit and PR titles follow the `commit` skill. They are git history, not marketing copy. A product release is `release open 1.0.0`.
+- Changelog entries and GitHub Release name/notes are product copy. Use `Creed Open vX.Y.Z` and the calm sentence. Do not paste a git title into the release notes, and do not paste release prose into a commit title.
+
 ## Review
 
 Before finishing:

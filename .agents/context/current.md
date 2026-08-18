@@ -1,10 +1,10 @@
 # Current State
 
-Last updated: 2026-08-15.
+Last updated: 2026-08-16.
 
 ## Release focus
 
-Creed is preparing its first stable Open release, v1.0.0. Open is the only public product for this release. It must be free, MIT licensed, single-owner, Personal-only, straightforward to self-host, and enjoyable without any Creed-managed service.
+Creed Open v1.0.0 is the public product. It is free, MIT licensed, single-owner, Personal-only, straightforward to self-host, and usable without any Creed-managed service. The public Git history is a single root commit tagged `open-v1.0.0`.
 
 Creed Cloud continues in `apps/cloud/` for private development and testing. Hosted accounts, payments, managed credits, Shared Creeds, and feedback are not part of Open v1. The standalone CLI has been removed for a clean rebuild.
 
@@ -39,6 +39,4 @@ The hosted Cloud deployment can be kept private with `CREED_CLOUD_ACCESS=private
 
 Email delivery, public account registration, Stripe, and Creed-managed credits are not required.
 
-## Release boundary
-
-Do not rewrite Git history, delete GitHub deployments, create the clean initial commit, push, tag, or deploy until the user explicitly approves that final release operation. A verified pre-release Git bundle exists outside the repository as a recovery point.
+A pre-release Git bundle of the former history is kept outside the repository as a recovery point.

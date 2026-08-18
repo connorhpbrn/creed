@@ -39,9 +39,9 @@ A request to prepare a release does not authorize publishing. A direct request t
 
 Perform only the authorized release actions in a traceable order:
 
-1. Create any required commit using the `commit` skill.
+1. Create any required commit using the `commit` skill. A product-release title is `release open 1.0.0`, not a press sentence.
 2. Push the intended branch without force.
-3. Create the exact required tag or release record.
+3. Create the exact required tag from `semver` (`open-v1.0.0`) and, when publishing a GitHub Release, use the changelog title (`Creed Open v1.0.0`) and notes.
 4. Publish the intended package or deploy the intended environment.
 5. Apply authorized migrations at the correct compatibility point.
 6. Verify the resulting version, deployment, health, public behavior, and release metadata from the destination.
@@ -54,7 +54,7 @@ Before consequential publication, identify the practical recovery path: rollback
 
 ## Stop Conditions
 
-Stop and request direction when the target or version is ambiguous, the tree contains inseparable unrelated changes, required checks fail, credentials or permissions are missing, migration ordering is unsafe, the destination differs from the requested environment, or recovery from the next step is not understood.
+Stop and request direction when the target or version is ambiguous, the CLI package is missing, the tree contains inseparable unrelated changes, required checks fail, credentials or permissions are missing, migration ordering is unsafe, the destination differs from the requested environment, or recovery from the next step is not understood.
 
 ## Report
 

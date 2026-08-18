@@ -28,6 +28,32 @@ test("rich text preserves the editor allow-list", () => {
   assert.match(html, /href="https:\/\/example.com"/);
 });
 
+test("rich text preserves checklist state through sanitizer", () => {
+  const html = normalizeRichTextInput({
+    contentHtml:
+      '<ul class="creed-list creed-list-task" data-type="taskList">' +
+      '<li class="creed-list-item" data-type="taskItem" data-checked="true">' +
+      '<label><input type="checkbox" checked="checked"><span></span></label>' +
+      "<div><p>Done item</p></div></li></ul>",
+  });
+  assert.match(html, /data-type="taskList"/);
+  assert.match(html, /data-checked="true"/);
+  assert.doesNotMatch(html, /<input/);
+  assert.match(html, /Done item/);
+});
+
+test("rich text preserves tables through sanitizer", () => {
+  const html = normalizeRichTextInput({
+    contentHtml:
+      '<table class="creed-table"><tbody><tr><th><p>A</p></th></tr>' +
+      "<tr><td><p>1</p></td></tr></tbody></table>",
+  });
+  assert.match(html, /<table class="creed-table">/);
+  assert.match(html, /<th>/);
+  assert.match(html, /<td>/);
+  assert.match(html, />A</);
+});
+
 test("next redirects remain same-origin paths", () => {
   assert.equal(sanitizeNextPath("/settings?tab=ai#key"), "/settings?tab=ai#key");
   assert.equal(sanitizeNextPath("//evil.example"), "/");

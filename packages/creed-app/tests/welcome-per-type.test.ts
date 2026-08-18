@@ -39,6 +39,8 @@ test("welcome is tracked once per Creed type", async () => {
   assert.match(shell, /sharedRole === "owner"/);
   assert.match(dialog, /welcomeStorageKey\(variant\)/);
   assert.match(dialog, /JSON\.stringify\(\{ variant \}\)/);
+  assert.match(dialog, /hostedAccounts/);
+  assert.match(dialog, /if \(!persistWelcomeOnServer\) return/);
   assert.match(seen, /parseVariant/);
   assert.match(seen, /markEntitlementWelcomed\(user\.id, variant\)/);
 });

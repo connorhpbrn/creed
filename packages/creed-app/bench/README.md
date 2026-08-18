@@ -5,6 +5,11 @@ effectively. Each trial runs against a fresh synthetic Creed. Grading checks
 the resulting state, policy compliance, restraint, recovery, and final answer.
 No real user profile is used.
 
+The suite version is `BENCHMARK_VERSION` in `types.ts`. Official results are
+only comparable within that version. Bump it with the repository `semver`
+skill when tasks or grading would make older scores misleading. Git tags use
+`bench-vX.Y.Z`.
+
 ## Commands
 
 ```bash

@@ -18,6 +18,9 @@ import {
 
 const expandTransition = { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const };
 
+const DIFF_BODY_CLASS =
+  "creed-scrollbar creed-diff-block max-h-[min(40vh,20rem)] overflow-y-auto py-3";
+
 // The 20px attribution glyph on a proposal card: a member's real profile
 // picture (squircle, same footprint as the agent glyph) when they typed the
 // edit by hand, or the connected agent's glyph when an agent proposed it.
@@ -301,7 +304,7 @@ export function InlineProposalDiff({
 
       <ExpandRegion open={expanded}>
         <div className="border-t border-[var(--creed-border)]" />
-        <div className="creed-diff-block py-3">
+        <div className={DIFF_BODY_CLASS}>
           <CreedDiffView diff={diff} />
         </div>
         {proposal.reason ? (
@@ -342,7 +345,7 @@ export function InlineNewSectionProposal({
     // Mirror the delete-meta proposal card but tinted green so additions
     // and removals read as opposites with the same chrome. Border, surface,
     // dividers, and the Accept button all share a single green hue.
-    <div className="rounded-xl border border-dashed border-[#10b981]/35 bg-[#ECFDF5]/40 dark:border-[#22c55e]/35 dark:bg-[#052e1a]/40">
+    <div className="rounded-xl border border-dashed border-[var(--creed-success)]/35 bg-[var(--creed-success)]/10 dark:border-[#22c55e]/35 dark:bg-[#052e1a]/40">
       <div className="flex items-center justify-between gap-3 px-3 py-2">
         <button
           type="button"
@@ -358,25 +361,25 @@ export function InlineNewSectionProposal({
           <span className="hidden truncate font-medium text-[var(--creed-text-primary)] sm:inline">
             {agentName}
           </span>
-          <span className="text-[#10b981] dark:text-[#4ade80]">
+          <span className="text-[var(--creed-success)]">
             proposed
           </span>
-          <span className="text-[var(--creed-text-tertiary)]">·</span>
           <span className="inline-flex items-center gap-1 text-sm">
             <DiffBadge tone="added" count={diff.added} size="md" />
-            <span className="hidden text-[var(--creed-text-primary)] sm:inline">
-              {sectionName}
-            </span>
           </span>
-          <span className="hidden sm:inline-flex">
-            <AnimatedChevronDown
-              size={14}
-              className={cn(
-                "shrink-0 -rotate-90 text-[#10b981] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] dark:text-[#4ade80]",
-                expanded && "rotate-0",
-              )}
-            />
+          <span className="hidden text-[var(--creed-text-tertiary)] sm:inline">
+            ·
           </span>
+          <span className="hidden truncate text-[var(--creed-text-primary)] sm:inline">
+            {sectionName}
+          </span>
+          <AnimatedChevronDown
+            size={14}
+            className={cn(
+              "shrink-0 -rotate-90 text-[var(--creed-success)]/70 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/diff:text-[var(--creed-success)]",
+              expanded && "rotate-0 text-[var(--creed-success)]",
+            )}
+          />
         </button>
         {canReview ? (
           <div className="-mr-1 flex items-center gap-1">
@@ -387,7 +390,7 @@ export function InlineNewSectionProposal({
               // Weaker green tint by default, full green on hover. Hover
               // background is a soft green wash so the reject affordance
               // stays inside the proposal's colour family.
-              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[#10b981]/65 transition-colors hover:bg-[#10b981]/10 hover:text-[#10b981] dark:text-[#4ade80]/65 dark:hover:bg-[#22c55e]/15 dark:hover:text-[#4ade80]"
+              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--creed-success)]/65 transition-colors hover:bg-[var(--creed-success)]/10 hover:text-[var(--creed-success)] dark:hover:bg-[#22c55e]/15"
             >
               <X className="h-3.5 w-3.5 sm:hidden" />
               <span className="hidden sm:inline">Reject</span>
@@ -403,20 +406,20 @@ export function InlineNewSectionProposal({
             </button>
           </div>
         ) : (
-          <span className="shrink-0 whitespace-nowrap text-[13px] text-[#10b981]/80 dark:text-[#4ade80]/80">
+          <span className="shrink-0 whitespace-nowrap text-[13px] text-[var(--creed-success)]/80">
             Awaiting review
           </span>
         )}
       </div>
       <ExpandRegion open={expanded}>
-        <div className="border-t border-[#10b981]/20" />
-        <div className="creed-diff-block py-3 text-[14px] leading-7 text-[var(--creed-text-primary)]">
+        <div className="border-t border-[var(--creed-success)]/20 dark:border-[#22c55e]/20" />
+        <div className={cn(DIFF_BODY_CLASS, "text-[14px] leading-7 text-[var(--creed-text-primary)]")}>
           <CreedDiffView diff={diff} />
         </div>
         {proposal.reason ? (
           // Reason text tinted green to match the rest of the card's
           // colour signalling. Same hue as the chevron / `+` / headline.
-          <div className="border-t border-[#10b981]/20 px-4 py-2.5 text-sm leading-5 text-[#10b981] dark:text-[#4ade80]">
+          <div className="border-t border-[var(--creed-success)]/20 px-4 py-2.5 text-sm leading-5 text-[var(--creed-success)] dark:border-[#22c55e]/20">
             {proposal.reason}
           </div>
         ) : null}
@@ -461,17 +464,17 @@ export function InlineMetaProposal({
     : null;
 
   const headline = isDelete
-    ? "proposed to delete"
+    ? "proposed"
     : isRename
       ? "proposed to rename"
       : "proposed to recolour";
 
   const containerClass = isDelete
-    ? "rounded-xl border border-dashed border-[#dc2626]/35 bg-[#FEF2F2]/40 dark:border-[#ef4444]/35 dark:bg-[#7f1d1d]/15"
+    ? "rounded-xl border border-dashed border-[var(--creed-danger)]/35 bg-[var(--creed-danger)]/10 dark:border-[#ef4444]/35 dark:bg-[#7f1d1d]/15"
     : "rounded-xl border border-dashed border-[var(--creed-border)] bg-[var(--creed-surface)]";
 
   const dividerClass = isDelete
-    ? "border-t border-[#dc2626]/20"
+    ? "border-t border-[var(--creed-danger)]/20 dark:border-[#ef4444]/20"
     : "border-t border-[var(--creed-border)]";
 
   return (
@@ -494,41 +497,47 @@ export function InlineMetaProposal({
           <span
             className={cn(
               isDelete
-                ? "text-[#dc2626] dark:text-[#f87171]"
+                ? "text-[var(--creed-danger)]"
                 : "text-[var(--creed-text-tertiary)]",
             )}
           >
             <span className="sm:hidden">proposed</span>
             <span className="hidden sm:inline">{headline}</span>
           </span>
-          <span className="text-[var(--creed-text-tertiary)]">·</span>
           {isDelete ? (
-            <span className="inline-flex items-center gap-1 text-sm">
-              <DiffBadge tone="removed" count={deleteDiff?.removed ?? 0} size="md" />
+            <>
+              <span className="inline-flex items-center gap-1 text-sm">
+                <DiffBadge tone="removed" count={deleteDiff?.removed ?? 0} size="md" />
+              </span>
+              <span className="hidden text-[var(--creed-text-tertiary)] sm:inline">
+                ·
+              </span>
               <span className="hidden truncate text-[var(--creed-text-primary)] sm:inline">
                 {existingName}
               </span>
-            </span>
+            </>
           ) : (
-            <span className="truncate text-[var(--creed-text-primary)]">
-              {existingName}
-            </span>
+            <>
+              <span className="text-[var(--creed-text-tertiary)]">·</span>
+              <span className="truncate text-[var(--creed-text-primary)]">
+                {existingName}
+              </span>
+            </>
           )}
-          <span className={cn(isDelete && "hidden sm:inline-flex")}>
-            <AnimatedChevronDown
-              size={14}
-              className={cn(
-                "shrink-0 -rotate-90 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                isDelete
-                  ? "text-[#dc2626] dark:text-[#f87171]"
-                  : "text-[var(--creed-text-tertiary)] group-hover/diff:text-[var(--creed-text-primary)]",
-                expanded && "rotate-0",
-                expanded &&
-                  !isDelete &&
-                  "text-[var(--creed-text-primary)]",
-              )}
-            />
-          </span>
+          <AnimatedChevronDown
+            size={14}
+            className={cn(
+              "shrink-0 -rotate-90 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              isDelete
+                ? "text-[var(--creed-danger)]/70 group-hover/diff:text-[var(--creed-danger)]"
+                : "text-[var(--creed-text-tertiary)] group-hover/diff:text-[var(--creed-text-primary)]",
+              expanded && "rotate-0",
+              expanded &&
+                (isDelete
+                  ? "text-[var(--creed-danger)]"
+                  : "text-[var(--creed-text-primary)]"),
+            )}
+          />
         </button>
         {canReview ? (
           <div className="-mr-1 flex items-center gap-1">
@@ -542,7 +551,7 @@ export function InlineMetaProposal({
                 // with a soft red wash backdrop. Rename / recolor keep the
                 // neutral secondary→primary text behaviour.
                 isDelete
-                  ? "text-[#dc2626]/65 hover:bg-[#dc2626]/10 hover:text-[#dc2626] dark:text-[#f87171]/65 dark:hover:bg-[#ef4444]/15 dark:hover:text-[#f87171]"
+                  ? "text-[var(--creed-danger)]/65 hover:bg-[var(--creed-danger)]/10 hover:text-[var(--creed-danger)] dark:hover:bg-[#ef4444]/15"
                   : "text-[var(--creed-text-secondary)] hover:bg-[var(--creed-surface-raised)] hover:text-[var(--creed-text-primary)]",
               )}
             >
@@ -575,7 +584,7 @@ export function InlineMetaProposal({
         {/* Typography matched to the new-section card: 14px / leading-7
             so the two card bodies read at the same visual weight. */}
         {isDelete ? (
-          <div className="creed-diff-block py-3 text-[14px] leading-7 text-[var(--creed-text-primary)]">
+          <div className={cn(DIFF_BODY_CLASS, "text-[14px] leading-7 text-[var(--creed-text-primary)]")}>
             <CreedDiffView diff={deleteDiff!} />
           </div>
         ) : (
@@ -626,7 +635,7 @@ export function InlineMetaProposal({
               "px-4 py-2.5 text-sm leading-5",
               dividerClass,
               isDelete
-                ? "text-[#dc2626] dark:text-[#f87171]"
+                ? "text-[var(--creed-danger)]"
                 : "text-[var(--creed-text-secondary)]",
             )}
           >

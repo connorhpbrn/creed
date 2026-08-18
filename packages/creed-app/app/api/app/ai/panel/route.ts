@@ -134,7 +134,7 @@ export async function POST(request: Request) {
 
     const credential = sharedCreedId
       ? await resolveSharedAiCredential(sharedCreedId, "panel", auth.user.id)
-      : await resolveAiCredential(auth.supabase, auth.user.id, "panel");
+      : await resolveAiCredential(auth.supabase, auth.user.id, "panel", active?.creedId);
     reservationId = credential.reservationId;
     const result = await callOpenRouter({
       apiKey: credential.apiKey,

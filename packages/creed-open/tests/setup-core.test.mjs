@@ -91,10 +91,10 @@ test("remote readiness verifies the exact schema version without exposing keys",
     requests.push({ url, options });
     return url.endsWith("/auth/v1/settings")
       ? new Response("{}", { status: 200 })
-      : new Response(JSON.stringify("20260815162526"), { status: 200 });
+      : new Response(JSON.stringify("20260817213100"), { status: 200 });
   });
 
-  assert.deepEqual(readiness, { ready: true, schemaVersion: "20260815162526" });
+  assert.deepEqual(readiness, { ready: true, schemaVersion: "20260817213100" });
   assert.equal(requests[0].url.endsWith("/auth/v1/settings"), true);
   assert.equal(requests[0].options.headers.apikey, values.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
   assert.equal(requests[1].url.endsWith("/rest/v1/rpc/creed_schema_version"), true);

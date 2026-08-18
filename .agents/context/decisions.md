@@ -49,9 +49,9 @@ Durable decisions future agents should not reopen casually.
 ## Release process
 
 - `apps/open/package.json` is the canonical Open application version.
-- Commits record work independently of releases. Open, Cloud, CLI, and Status advance SemVer only for deliberate product releases; landing on `main` does not itself trigger a version bump or Git tag.
-- The clean public-history root is v1.0.0.
-- Do not rewrite history, clear deployments, push, tag, or deploy without explicit authority for that final operation.
+- Commits record work independently of releases. Open, Cloud, CLI, and Bench advance SemVer only for deliberate product releases; landing on `main` does not itself trigger a version bump or Git tag. The status site is not a versioned product.
+- The clean public-history root is Open 1.0.0. Open git tags use `open-vX.Y.Z`, matching Cloud, CLI, and Bench.
+- Later history rewrites, deployment wipes, force-pushes, tags, and production deploys still need explicit authority.
 - One-off plans and audits belong in gitignored `disposable/`; durable truth belongs in this context pack.
 
 ## Design

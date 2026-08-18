@@ -12,7 +12,11 @@ import {
 import { createPortal } from "react-dom";
 import { Extension, type Editor, type Range } from "@tiptap/core";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import Highlight from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
+import TaskItem from "@tiptap/extension-task-item";
+import TaskList from "@tiptap/extension-task-list";
+import { TableKit } from "@tiptap/extension-table";
 import StarterKit from "@tiptap/starter-kit";
 import Suggestion, {
   exitSuggestion,
@@ -22,6 +26,7 @@ import Suggestion, {
 } from "@tiptap/suggestion";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { NodeSelection, PluginKey } from "@tiptap/pm/state";
+import { CellSelection } from "@tiptap/pm/tables";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bold,
@@ -29,22 +34,34 @@ import {
   Heading2,
   Heading3,
   Heading4,
+  Highlighter,
   Italic,
   Link2,
   List,
   ListOrdered,
+  ListTodo,
+  Columns3,
+  Rows3,
+  Table,
   MessageSquareQuote,
   Minus,
   Pilcrow,
   PlusSquare,
   Strikethrough,
+  Underline,
 } from "lucide-react";
 import {
   InlineTagMark,
   type SectionTagTarget,
 } from "@/components/creed/extensions/inline-tag";
+import { CreedTable } from "@/components/creed/extensions/creed-table";
+import { CreedUnderline } from "@/components/creed/extensions/underline";
 import { TabComplete } from "@/components/creed/extensions/tab-complete";
-import { markdownToRichHtml } from "@creed/core/rich-text";
+import {
+  clipboardPlainTextAsMarkdown,
+  markdownToRichHtml,
+  sanitizeRichTextHtml,
+} from "@creed/core/rich-text";
 import {
   SECTION_REFERENCE_PICKER_GAP,
   SECTION_REFERENCE_PICKER_MAX_ROWS,
@@ -109,7 +126,33 @@ type SelectionToolbarState = {
   y: number;
   /** When true, the toolbar sits below the selection (selection hugs viewport top). */
   placeBelow: boolean;
+  /** Phone + software keyboard: pin to the top of the visual viewport. */
+  pinToKeyboard?: boolean;
+  /** Text is selected inside a table: append add-column / add-row. */
+  showTableActions?: boolean;
 };
+
+const SELECTION_TOOLBAR_HEIGHT = 36;
+const KEYBOARD_VIEWPORT_SHRINK = 120;
+
+function shouldPinSelectionToolbar() {
+  if (typeof window === "undefined") return false;
+  const touch = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+  if (!touch) return false;
+  const visualViewport = window.visualViewport;
+  if (!visualViewport) return false;
+  return window.innerHeight - visualViewport.height > KEYBOARD_VIEWPORT_SHRINK;
+}
+
+function keyboardToolbarTop() {
+  const visualViewport = window.visualViewport;
+  if (!visualViewport) {
+    return window.innerHeight - SELECTION_TOOLBAR_HEIGHT - 8;
+  }
+  return Math.round(
+    visualViewport.offsetTop + visualViewport.height - SELECTION_TOOLBAR_HEIGHT - 4,
+  );
+}
 
 type RichTextEditorProps = {
   sectionId: string;
@@ -476,6 +519,27 @@ function RichTextEditorImpl({
         keywords: ["ordered", "list", "numbers", "numbered"],
         run: (editor, range) =>
           editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
+      },
+      {
+        title: "Checklist",
+        description: "Checkbox list",
+        icon: ListTodo,
+        keywords: ["todo", "task", "checkbox", "check", "done"],
+        run: (editor, range) =>
+          editor.chain().focus().deleteRange(range).toggleTaskList().run(),
+      },
+      {
+        title: "Table",
+        description: "Rows and columns",
+        icon: Table,
+        keywords: ["grid", "spreadsheet", "cells", "columns"],
+        run: (editor, range) =>
+          editor
+            .chain()
+            .focus()
+            .deleteRange(range)
+            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            .run(),
       },
       {
         title: "Code block",
@@ -998,11 +1062,46 @@ function RichTextEditorImpl({
             class: "creed-callout",
           },
         },
+        horizontalRule: {
+          HTMLAttributes: {
+            class: "creed-hr",
+          },
+        },
         codeBlock: false,
         link: {
           openOnClick: false,
+          autolink: true,
+          linkOnPaste: true,
+          protocols: ["http", "https", "mailto"],
         },
       }),
+      Highlight.configure({
+        multicolor: false,
+      }),
+      CreedUnderline,
+      TaskList.configure({
+        HTMLAttributes: {
+          class: "creed-list creed-list-task",
+        },
+      }),
+      TaskItem.configure({
+        nested: true,
+        HTMLAttributes: {
+          class: "creed-list-item",
+        },
+      }),
+      TableKit.configure({
+        table: {
+          resizable: false,
+          renderWrapper: true,
+          // Skip TableView colgroup so CreedTable can keep equal column widths.
+          View: null,
+          HTMLAttributes: {
+            class: "creed-table",
+          },
+        },
+      }),
+      CreedTable,
       CodeBlockLowlight.configure({
         lowlight: creedLowlight,
         // `null` here defers to lowlight.highlightAuto when the node has no
@@ -1054,6 +1153,21 @@ function RichTextEditorImpl({
         window.open(link.href, "_blank", "noopener,noreferrer");
         return true;
       },
+      handlePaste: (view, event) => {
+        if (!view.editable) return false;
+        const editor = editorRef.current;
+        if (!editor) return false;
+        const clipboard = event.clipboardData;
+        if (!clipboard) return false;
+        const plain = clipboard.getData("text/plain");
+        const html = clipboard.getData("text/html");
+        if (!clipboardPlainTextAsMarkdown(plain, html)) return false;
+        const converted = sanitizeRichTextHtml(markdownToRichHtml(plain));
+        if (!converted) return false;
+        event.preventDefault();
+        editor.chain().focus().insertContent(converted).run();
+        return true;
+      },
       handleKeyDown: (view, event) => {
         if (event.key !== "Backspace") {
           return false;
@@ -1094,8 +1208,11 @@ function RichTextEditorImpl({
 
         const parentNode = $from.node(parentDepth);
         const previousNode = parentNode.child(siblingIndex - 1);
+        const previousName = previousNode.type.name;
 
-        if (previousNode.type.name !== "horizontalRule") {
+        // Dividers and tables sit between blocks. Backspace at the start of
+        // the following paragraph deletes them, matching a selected divider.
+        if (previousName !== "horizontalRule" && previousName !== "table") {
           return false;
         }
 
@@ -1324,76 +1441,87 @@ function RichTextEditorImpl({
     const { state } = currentEditor;
     const { selection } = state;
 
-    // Bail for empty selections, NodeSelections (drag handles), and any
-    // selection where the editor isn't focused - Notion only shows the
-    // bubble menu while a *user* selection is live.
-    if (selection.empty || !currentEditor.isFocused) {
+    const inTable = currentEditor.isActive("table");
+    const cellGrid = selection instanceof CellSelection;
+    const showTableActions = inTable && !selection.empty && !cellGrid;
+
+    if (selection.empty || !currentEditor.isFocused || cellGrid) {
       setSelectionToolbar(null);
       return;
     }
 
+    const pinToKeyboard = shouldPinSelectionToolbar();
     const SELECTION_GAP = 8;
-    const TOOLBAR_HEIGHT = 36;
     const VIEWPORT_PADDING = 8;
     const VIEWPORT_WIDTH = window.innerWidth;
     const VIEWPORT_HEIGHT = window.innerHeight;
 
-    // Use ProseMirror's selection coordinates as the source of truth. Browser
-    // DOM Range rectangles can include odd line boxes inside list items, which
-    // makes the toolbar jump far away from the highlighted text.
-    let rect: DOMRect | null = null;
-    try {
-      const start = currentEditor.view.coordsAtPos(selection.from);
-      const end = currentEditor.view.coordsAtPos(selection.to);
-      const left = Math.min(start.left, end.left);
-      const right = Math.max(start.right, end.right);
-      const top = Math.min(start.top, end.top);
-      const bottom = Math.max(start.bottom, end.bottom);
-      rect = new DOMRect(left, top, right - left, bottom - top);
-    } catch {
-      const domSelection = window.getSelection();
-      if (domSelection && domSelection.rangeCount > 0) {
-        const domRects = Array.from(
-          domSelection.getRangeAt(0).getClientRects(),
-        ).filter((item) => item.width > 0 || item.height > 0);
-        rect = domRects[0] ?? null;
+    let x = 0;
+    let y = 0;
+    let placeBelow = false;
+
+    if (pinToKeyboard) {
+      y = keyboardToolbarTop();
+    } else {
+      // Use ProseMirror's selection coordinates as the source of truth. Browser
+      // DOM Range rectangles can include odd line boxes inside list items, which
+      // makes the toolbar jump far away from the highlighted text.
+      let rect: DOMRect | null = null;
+      try {
+        const start = currentEditor.view.coordsAtPos(selection.from);
+        const end = currentEditor.view.coordsAtPos(selection.to);
+        const left = Math.min(start.left, end.left);
+        const right = Math.max(start.right, end.right);
+        const top = Math.min(start.top, end.top);
+        const bottom = Math.max(start.bottom, end.bottom);
+        rect = new DOMRect(left, top, right - left, bottom - top);
+      } catch {
+        const domSelection = window.getSelection();
+        if (domSelection && domSelection.rangeCount > 0) {
+          const domRects = Array.from(
+            domSelection.getRangeAt(0).getClientRects(),
+          ).filter((item) => item.width > 0 || item.height > 0);
+          rect = domRects[0] ?? null;
+        }
       }
+
+      if (!rect) return;
+
+      // Centre horizontally on the selection's bounding rect, then clamp so the
+      // toolbar never crosses the viewport edge - the rendered element uses a
+      // -50% translateX, so x is the centre point.
+      const centreX = rect.left + rect.width / 2;
+      placeBelow =
+        rect.top - SELECTION_TOOLBAR_HEIGHT - SELECTION_GAP < VIEWPORT_PADDING;
+      y = placeBelow
+        ? Math.min(
+            rect.bottom + SELECTION_GAP,
+            VIEWPORT_HEIGHT - SELECTION_TOOLBAR_HEIGHT - VIEWPORT_PADDING,
+          )
+        : Math.max(
+            rect.top - SELECTION_GAP,
+            VIEWPORT_PADDING + SELECTION_TOOLBAR_HEIGHT,
+          );
+
+      const HALF_WIDTH = 200;
+      x = Math.max(
+        VIEWPORT_PADDING + HALF_WIDTH,
+        Math.min(centreX, VIEWPORT_WIDTH - VIEWPORT_PADDING - HALF_WIDTH),
+      );
     }
-
-    if (!rect) return;
-
-    // Centre horizontally on the selection's bounding rect, then clamp so the
-    // toolbar never crosses the viewport edge - the rendered element uses a
-    // -50% translateX, so x is the centre point.
-    const centreX = rect.left + rect.width / 2;
-    const placeBelow =
-      rect.top - TOOLBAR_HEIGHT - SELECTION_GAP < VIEWPORT_PADDING;
-    const y = placeBelow
-      ? Math.min(
-          rect.bottom + SELECTION_GAP,
-          VIEWPORT_HEIGHT - TOOLBAR_HEIGHT - VIEWPORT_PADDING,
-        )
-      : Math.max(rect.top - SELECTION_GAP, VIEWPORT_PADDING + TOOLBAR_HEIGHT);
-
-    // Clamp X so the toolbar stays fully on-screen even when the selection
-    // hugs the left/right edge of the viewport. We assume a 320px max width;
-    // the actual element is shorter but this gives a safe margin.
-    const HALF_WIDTH = 160;
-    const x = Math.max(
-      VIEWPORT_PADDING + HALF_WIDTH,
-      Math.min(centreX, VIEWPORT_WIDTH - VIEWPORT_PADDING - HALF_WIDTH),
-    );
 
     setSelectionToolbar((prev) => {
       if (
         prev &&
         prev.x === x &&
         prev.y === y &&
-        prev.placeBelow === placeBelow
+        prev.placeBelow === placeBelow &&
+        prev.pinToKeyboard === pinToKeyboard &&
+        prev.showTableActions === showTableActions
       ) {
         return prev;
       }
-      return { x, y, placeBelow };
+      return { x, y, placeBelow, pinToKeyboard, showTableActions };
     });
   }
 
@@ -1448,12 +1576,17 @@ function RichTextEditorImpl({
       passive: true,
     });
     window.addEventListener("resize", reposition);
+    const visualViewport = window.visualViewport;
+    visualViewport?.addEventListener("resize", reposition);
+    visualViewport?.addEventListener("scroll", reposition);
     return () => {
       if (frameId !== null) {
         window.cancelAnimationFrame(frameId);
       }
       window.removeEventListener("scroll", reposition, true);
       window.removeEventListener("resize", reposition);
+      visualViewport?.removeEventListener("resize", reposition);
+      visualViewport?.removeEventListener("scroll", reposition);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, selectionToolbarVisible]);
@@ -1531,30 +1664,44 @@ function RichTextEditorImpl({
                 <motion.div
                   initial={{
                     opacity: 0,
-                    y: selectionToolbar.placeBelow ? -4 : 4,
+                    y: selectionToolbar.pinToKeyboard
+                      ? 8
+                      : selectionToolbar.placeBelow
+                        ? -4
+                        : 4,
                     scale: 0.98,
                   }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{
                     opacity: 0,
-                    y: selectionToolbar.placeBelow ? -4 : 4,
+                    y: selectionToolbar.pinToKeyboard
+                      ? 8
+                      : selectionToolbar.placeBelow
+                        ? -4
+                        : 4,
                     scale: 0.98,
                   }}
                   transition={{ duration: 0.12, ease: [0.22, 1, 0.36, 1] }}
                   className={cn(
-                    "fixed z-50 flex -translate-x-1/2 items-center gap-0.5 rounded-lg border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1 text-[var(--creed-text-primary)] shadow-[0_6px_20px_rgba(28,28,26,0.10)]",
-                    selectionToolbar.placeBelow
-                      ? "translate-y-0"
-                      : "-translate-y-full",
+                    "fixed z-50 flex items-center gap-0.5 border border-[var(--creed-border)] bg-[var(--creed-surface)] p-1 text-[var(--creed-text-primary)] shadow-[0_6px_20px_rgba(28,28,26,0.10)]",
+                    selectionToolbar.pinToKeyboard
+                      ? "inset-x-2 justify-center overflow-x-auto rounded-lg [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                      : cn(
+                          "-translate-x-1/2 rounded-lg",
+                          selectionToolbar.placeBelow
+                            ? "translate-y-0"
+                            : "-translate-y-full",
+                        ),
                   )}
                   style={{
                     ...editorThemeStyle,
-                    left: selectionToolbar.x,
+                    left: selectionToolbar.pinToKeyboard
+                      ? undefined
+                      : selectionToolbar.x,
                     top: selectionToolbar.y,
                   }}
-                  onMouseDown={(event) => {
-                    // Prevent the editor from blurring when a toolbar button is
-                    // clicked - keeps the selection alive so the command applies.
+                  onPointerDown={(event) => {
+                    // Keep the selection alive on touch so format commands apply.
                     event.preventDefault();
                   }}
                 >
@@ -1618,6 +1765,19 @@ function RichTextEditorImpl({
                     <Italic className="h-3.5 w-3.5" />
                   </ToolbarButton>
                   <ToolbarButton
+                    active={editor.isActive("underline")}
+                    disabled={
+                      editor.isActive("code") ||
+                      !editor.can().chain().focus().toggleUnderline().run()
+                    }
+                    onClick={() =>
+                      editor.chain().focus().toggleUnderline().run()
+                    }
+                    label="Underline"
+                  >
+                    <Underline className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton
                     active={editor.isActive("strike")}
                     disabled={
                       editor.isActive("code") ||
@@ -1627,6 +1787,19 @@ function RichTextEditorImpl({
                     label="Strikethrough"
                   >
                     <Strikethrough className="h-3.5 w-3.5" />
+                  </ToolbarButton>
+                  <ToolbarButton
+                    active={editor.isActive("highlight")}
+                    disabled={
+                      editor.isActive("code") ||
+                      !editor.can().chain().focus().toggleHighlight().run()
+                    }
+                    onClick={() =>
+                      editor.chain().focus().toggleHighlight().run()
+                    }
+                    label="Highlight"
+                  >
+                    <Highlighter className="h-3.5 w-3.5" />
                   </ToolbarButton>
                   <ToolbarButton
                     active={editor.isActive("code")}
@@ -1647,6 +1820,27 @@ function RichTextEditorImpl({
                   >
                     <Link2 className="h-3.5 w-3.5" />
                   </ToolbarButton>
+                  {selectionToolbar.showTableActions ? (
+                    <>
+                      <ToolbarDivider />
+                      <ToolbarButton
+                        onClick={() =>
+                          editor.chain().focus().addColumnAfter().run()
+                        }
+                        label="Add column"
+                      >
+                        <Columns3 className="h-3.5 w-3.5" />
+                      </ToolbarButton>
+                      <ToolbarButton
+                        onClick={() =>
+                          editor.chain().focus().addRowAfter().run()
+                        }
+                        label="Add row"
+                      >
+                        <Rows3 className="h-3.5 w-3.5" />
+                      </ToolbarButton>
+                    </>
+                  ) : null}
                 </motion.div>
               ) : null}
             </AnimatePresence>,

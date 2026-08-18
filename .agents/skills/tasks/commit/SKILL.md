@@ -26,7 +26,7 @@ Create one intentional commit containing only the completed work in scope.
    identity, unstaged and staged diffs, and recent commit titles.
 3. Determine the exact files belonging to the completed task. Preserve every unrelated user change.
 4. Classify the commit before staging:
-   - **ordinary commit:** records completed work but does not release Open, Cloud, CLI, or Status; do not bump a product version or create a release tag;
+   - **ordinary commit:** records completed work but does not release Open, Cloud, CLI, or Bench; do not bump a product version or create a release tag;
    - **product release commit:** the user explicitly requested a release/version or explicitly designated this commit as a product release; apply the `semver` skill first.
    Do not treat `main`, user-facing work, shared-package changes, homepage work, documentation, or deployment capability as automatic evidence of a product release. Ask when the user's release intent is genuinely ambiguous.
 5. Confirm the relevant verification has passed. Run missing checks when repository instructions require them and their cost is proportionate to the change.
@@ -49,23 +49,44 @@ Create one intentional commit containing only the completed work in scope.
 
 ## Commit Message
 
+This is the canonical GitHub git-title contract. PR titles match it because they become the squash commit.
+
 Use a concise, imperative title that:
 
 - is entirely lowercase, including acronyms
 - describes one coherent change
-- is preferably 72 characters or fewer
+- is preferably 3–8 words and 72 characters or fewer
 - has no trailing period
+- is a verb plus an object, not a press sentence
 - avoids vague titles such as `updates`, `fixes`, or `changes`
+- avoids marketing adjectives such as `first`, `stable`, `self-hosted`, `clean`, `simple`, or `official`
 - follows an established repository prefix only when the repository requires one
-- normally omits the version number, which belongs in release metadata and the Git tag
 
-Add a body only when it communicates useful behavior, reasoning, or tradeoffs that the title cannot. Separate it from the title with a blank line. Use clean `-` bullets for multiple points. Do not write a file-by-file inventory.
+Ordinary commits omit the version. Version belongs in a product-release title, the Git tag, and release metadata.
+
+Product-release commits use this exact shape, with the version `semver` already chose:
+
+```text
+release open 1.0.0
+release cloud 0.4.0
+release cli 1.2.0
+release bench 2.0.0
+```
+
+Do not invent a version. Do not write a slogan instead of this shape.
+
+Default to a title only. Do not add a body. The diff already shows what changed.
+
+Add a body only when the code cannot say it: why this over the obvious alternative, a compatibility or migration constraint, or something not to revert. Separate it from the title with a blank line. Use clean `-` bullets for multiple points. Do not restate the diff or write a file-by-file inventory.
 
 ```text
 add commit workflow
+```
 
-- enforce lowercase, focused commit titles
-- prevent agent attribution and unrelated staging
+Not:
+
+```text
+publish the first stable self-hosted creed open release
 ```
 
 ## Stop Conditions
@@ -85,10 +106,11 @@ If a check fails for an unrelated pre-existing reason, identify that clearly and
 
 - Do not stage everything merely because it is convenient.
 - Do not mix separate tasks into one commit.
-- Do not add a body that repeats the title.
+- Do not add a commit body by default. Do not add a body that restates the diff or repeats the title.
 - Do not claim checks passed unless they were actually run.
 - Do not expose unrelated working-tree details in the final response.
-- Do not bump Open or Cloud merely because a commit lands on `main`.
+- Do not bump Open, Cloud, CLI, or Bench merely because a commit lands on `main`.
+- Do not write a marketing sentence as a commit title. Put that prose in the changelog or GitHub release notes.
 - Do not create category tags such as `open`, `docs`, `home`, or `fix`; release tags are created only through explicit release work.
 
 ## Report

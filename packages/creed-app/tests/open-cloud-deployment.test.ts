@@ -156,7 +156,11 @@ test("Open setup uses a versioned readiness RPC and deterministic owner record",
   const migration = read(
     "apps/open/supabase/migrations/20260815162526_open_baseline.sql",
   ).replaceAll('"', "").toLowerCase();
+  const personalClaim = read(
+    "apps/open/supabase/migrations/20260817213100_personal_onboarding_replace_placeholder.sql",
+  ).toLowerCase();
   assert.match(setup, /creed_schema_version/);
+  assert.match(setup, /REQUIRED_OPEN_SCHEMA_VERSION = "20260817213100"/);
   assert.match(claim, /creed_installation/);
   assert.doesNotMatch(claim, /listUsers/);
   assert.match(migration, /create table if not exists public\.creed_installation/);
@@ -165,6 +169,32 @@ test("Open setup uses a versioned readiness RPC and deterministic owner record",
   assert.doesNotMatch(migration, /owner@creed\.open\.invalid/);
   assert.match(migration, /revoke all on function public\.creed_schema_version\(\) from public/);
   assert.match(migration, /grant all on function public\.creed_schema_version\(\) to service_role/);
+  assert.match(personalClaim, /p_action = 'replace-placeholder'/);
+  assert.doesNotMatch(personalClaim, /seed-shared/);
+});
+
+test("claimed Open owners stay on /claim until schema is ready", () => {
+  const claimPage = read("packages/creed-open/app/claim/page.tsx");
+  const appLayout = read("packages/creed-open/app/(creed-app)/layout.tsx");
+  const onboarding = read("packages/creed-open/app/onboarding/page.tsx");
+  assert.match(claimPage, /databaseReadiness\.ready &&/);
+  assert.match(claimPage, /redirect\("\/"\)/);
+  assert.match(appLayout, /getOpenDatabaseReadiness\(\)/);
+  assert.match(appLayout, /redirect\("\/claim"\)/);
+  assert.match(onboarding, /getOpenDatabaseReadiness\(\)/);
+  assert.match(onboarding, /redirect\("\/claim\?next=\/onboarding"\)/);
+  assert.match(onboarding, /result\.state\.sections\.length === 0/);
+});
+
+test("Open skips Cloud-only credits preload and welcome persistence", () => {
+  const preload = read("packages/creed-app/components/creed/settings-preload.ts");
+  const shell = read("packages/creed-app/components/creed/shell.tsx");
+  const welcome = read("packages/creed-app/components/creed/welcome-dialog.tsx");
+  assert.match(preload, /loadCredits = true/);
+  assert.match(preload, /if \(loadCredits\)/);
+  assert.match(shell, /loadCredits: hasManagedCredits/);
+  assert.match(welcome, /hostedAccounts/);
+  assert.match(welcome, /if \(!persistWelcomeOnServer\) return/);
 });
 
 test("Cloud retains managed billing and Shared without leaking them into Open", () => {

@@ -559,7 +559,7 @@ function ActivityDrawer({ activity, onClose }: { activity: DemoActivity[]; onClo
 
   return (
     <FileActivityRailFrame overlay>
-      <div className="flex h-full w-full flex-col p-5 lg:w-[356px]">
+      <div className="flex h-full w-full flex-col p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-[15px] font-medium text-[var(--creed-text-primary)]">Activity</div>

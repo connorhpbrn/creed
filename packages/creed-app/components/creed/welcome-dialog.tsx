@@ -15,8 +15,8 @@
 //
 // Closing (X, Esc, overlay click, or the final Done button) marks that type's
 // tour seen; clicking an inline link (roadmap, Discord) marks it seen too.
-// Seen is persisted two ways: a POST to /api/welcome/seen with the variant
-// (server truth) and a localStorage mirror keyed to paid_at + variant.
+// Cloud persists seen with POST /api/welcome/seen and a localStorage mirror.
+// Open has no such route, so localStorage alone is enough on a single-owner install.
 //
 // Dev preview: press ⌘/Ctrl+P (outside any text field) in development, or pick
 // it from the Cmd/Ctrl+D panel, to open the tour on demand. It reads the active
@@ -64,6 +64,7 @@ import {
   type WelcomeVariant,
 } from "@/lib/welcome-preview";
 import { cn } from "@creed/ui/utils";
+import { useCreedEdition } from "@/components/creed/edition-provider";
 
 const STORAGE_KEY_PREFIX = "creed:welcomed";
 const OPEN_DELAY_MS = 450;
@@ -362,6 +363,7 @@ export function WelcomeDialog({
   // The live variant: the prop for a real open, or the active space's variant
   // (read from the store) when opened via the dev ⌘P shortcut.
   const [variant, setVariant] = useState<WelcomeVariant>(variantProp);
+  const persistWelcomeOnServer = useCreedEdition().capabilities.hostedAccounts;
   const reduce = useReducedMotion();
 
   const indexRef = useRef(0);
@@ -456,13 +458,14 @@ export function WelcomeDialog({
     } catch {
       // ignore
     }
+    if (!persistWelcomeOnServer) return;
     void fetch("/api/welcome/seen", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ variant }),
       keepalive: true,
     }).catch(() => {});
-  }, [paidAt, variant]);
+  }, [paidAt, persistWelcomeOnServer, variant]);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {

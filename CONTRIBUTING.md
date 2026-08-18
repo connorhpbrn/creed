@@ -31,6 +31,18 @@ before you make changes.
    say why in the PR description. We'd rather write a small helper than
    pull in a 200KB transitive dependency tree.
 
+## Pull requests and releases
+
+PRs squash-merge onto `main`. Write a lowercase, imperative title for the
+one change that should land. Write the description as plain prose: what
+changed, and anything a reviewer cannot see from the title. Do not use
+Summary or Test plan headings.
+
+Version Open, Cloud, CLI, and Bench only for a deliberate product release.
+Git tags are `open-vX.Y.Z`, `cloud-vX.Y.Z`, `cli-vX.Y.Z`, and `bench-vX.Y.Z`.
+The status site, docs site, and marketing pages are not versioned products.
+The CLI cannot be versioned until `packages/creed-cli` exists again.
+
 ## What to verify before sending the PR
 
 ```bash

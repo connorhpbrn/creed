@@ -7,5 +7,5 @@ import { AuthedProviders } from "@/components/creed/authed-providers";
 export const dynamic = "force-dynamic";
 
 export default function OnboardingLayout({ children }: { children: ReactNode }) {
-  return <AuthedProviders>{children}</AuthedProviders>;
+  return <AuthedProviders persistFromDatabase={false}>{children}</AuthedProviders>;
 }

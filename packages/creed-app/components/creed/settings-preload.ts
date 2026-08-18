@@ -327,12 +327,14 @@ export function preloadSettingsData({
   repoOwner,
   repoName,
   markdown,
+  loadCredits = true,
 }: {
   scope?: string;
   githubConnected: boolean;
   repoOwner?: string;
   repoName?: string;
   markdown?: string;
+  loadCredits?: boolean;
 }) {
   if (scope) {
     setSettingsCacheScope(scope);
@@ -340,7 +342,9 @@ export function preloadSettingsData({
 
   void loadSettingsAiSettings().catch(() => null);
   void loadSettingsUsage("90d", "credits").catch(() => null);
-  void loadSettingsCredits().catch(() => null);
+  if (loadCredits) {
+    void loadSettingsCredits().catch(() => null);
+  }
   // The OpenRouter balance is only shown for a valid BYOK key (the minority
   // path), so the settings screen fetches it lazily on demand rather than
   // eagerly here where it would be a wasted call for every credits-mode user.
