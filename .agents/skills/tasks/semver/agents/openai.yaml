@@ -1,0 +1,4 @@
+interface:
+  display_name: "SemVer"
+  short_description: "Prepare an intentional product release"
+  default_prompt: "Prepare this explicitly requested Creed product release with the correct independent Semantic Version, release record, verification, and tag plan."

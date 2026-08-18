@@ -1,0 +1,24 @@
+@import "../../../packages/creed-app/app/globals.css";
+
+@source "../**/*.{js,jsx,ts,tsx,mdx}";
+
+.docs-app {
+  --creed-accent: #7c3aed;
+  --creed-accent-hover: #6d28d9;
+}
+
+.docs-prose {
+  min-height: 0;
+}
+
+.docs-prose > * + * {
+  margin-top: 1rem;
+}
+
+.docs-prose > h3 {
+  margin-top: 2rem;
+}
+
+.docs-prose strong {
+  font-weight: 600;
+}

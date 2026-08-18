@@ -1,0 +1,34 @@
+{
+  "name": "creed-open",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "setup": "node ../../packages/creed-open/scripts/setup.mjs",
+    "doctor": "node ../../packages/creed-open/scripts/doctor.mjs",
+    "dev": "node --max-http-header-size=65536 ../../node_modules/next/dist/bin/next dev -p 3001",
+    "build": "next build",
+    "start": "node --max-http-header-size=65536 ../../node_modules/next/dist/bin/next start -p 3001",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset --no-seed",
+    "db:migrations": "supabase migration list --local",
+    "db:advisors": "supabase db advisors --local --type all --fail-on error",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@creed/app": "*",
+    "@creed/open": "*",
+    "next": "16.3.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "typescript": "^5"
+  }
+}

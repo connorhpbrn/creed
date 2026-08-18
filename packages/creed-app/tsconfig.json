@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./*"],
+      "@creed/open/*": ["../creed-open/*"],
+      "@creed/integrations/*": ["../integrations/*"],
+      "@creed/persistence/supabase/*": ["../persistence/supabase-client/*"],
+      "@creed/core/*": ["../creed-core/*"],
+      "@creed/ui/*": ["../creed-ui/*"],
+      "@creed/edition/*": ["../../apps/open/edition/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "tests"]
+}
